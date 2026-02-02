@@ -54,6 +54,14 @@ def _answer_response(a: InterviewAnswer) -> InterviewAnswerResponse:
 
 
 def _session_response(s: InterviewSession, include_answers: bool = True) -> InterviewSessionResponse:
+    # For recruiter-driven sessions, get name from application
+    if hasattr(s, 'application') and s.application:
+        candidate_name = s.application.applicant_name
+    elif s.candidate:
+        candidate_name = s.candidate.full_name or s.candidate.username
+    else:
+        candidate_name = None
+
     return InterviewSessionResponse(
         id=s.id,
         job_id=s.job_id,
@@ -66,7 +74,7 @@ def _session_response(s: InterviewSession, include_answers: bool = True) -> Inte
         started_at=s.started_at,
         completed_at=s.completed_at,
         job_title=s.job.title if s.job else None,
-        candidate_name=s.candidate.full_name or s.candidate.username if s.candidate else None,
+        candidate_name=candidate_name,
         answers=[_answer_response(a) for a in s.answers] if include_answers else [],
     )
 

@@ -119,7 +119,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
       }
       
       // Call the job application API
-      const response = await fetch('http://localhost:8000/api/job/apply', {
+      const response = await fetch('/api/job/apply', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,7 +198,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
       formDataUpload.append('job_id', jobId.toString())
       
       // Upload resume
-      const uploadResponse = await fetch(`http://localhost:8000/resume-upload/api/candidates/${candidateId}/resume/upload`, {
+      const uploadResponse = await fetch(`/resume-upload/api/candidates/${candidateId}/resume/upload`, {
         method: 'POST',
         body: formDataUpload
       })
@@ -209,7 +209,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
         
         // Parse resume
         console.log('🔍 Parsing resume...')
-        const parseResponse = await fetch(`http://localhost:8000/resume-parse/api/candidates/${candidateId}/resume/parse`, {
+        const parseResponse = await fetch(`/resume-parse/api/candidates/${candidateId}/resume/parse`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

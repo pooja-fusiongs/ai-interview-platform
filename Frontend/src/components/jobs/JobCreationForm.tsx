@@ -83,11 +83,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
       }
 
       // Call API to create job
-      const response = await fetch('http://localhost:8000/api/createJob', {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/createJob', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
-          // Removed Authorization header since our new API doesn't require auth for now
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(jobPayload)
       })

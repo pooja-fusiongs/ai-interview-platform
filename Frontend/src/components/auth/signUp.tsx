@@ -8,7 +8,10 @@ import {
   TextField,
   Button,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  Select,
+  MenuItem,
+  FormControl
 } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 
@@ -19,7 +22,8 @@ const SignUp = () => {
     username: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    role: 'candidate' as string
   })
   const [loading, setLoading] = useState(false)
 
@@ -81,7 +85,8 @@ const SignUp = () => {
       const result = await signup({
         username: formData.username,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        role: formData.role as any
       })
 
       if (result.success) {
@@ -293,6 +298,64 @@ const SignUp = () => {
                   }
                 }}
               />
+            </Box>
+
+            {/* Role Selector */}
+            <Box sx={{
+              position: 'relative',
+              marginBottom: '25px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '15px'
+            }}>
+              <Box sx={{
+                width: 50,
+                height: 50,
+                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: '18px',
+                flexShrink: 0
+              }}>
+                <i className="fas fa-user-tag"></i>
+              </Box>
+              <FormControl fullWidth>
+                <Select
+                  name="role"
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  disabled={loading}
+                  displayEmpty
+                  sx={{
+                    borderRadius: '25px',
+                    fontSize: '16px',
+                    background: 'white',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#e9ecef',
+                      borderWidth: '2px'
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#ff9a56'
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#ff9a56',
+                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                    },
+                    '& .MuiSelect-select': {
+                      padding: '15px 20px',
+                      color: '#2c3e50'
+                    }
+                  }}
+                >
+                  <MenuItem value="candidate">Candidate</MenuItem>
+                  <MenuItem value="recruiter">Recruiter</MenuItem>
+                  <MenuItem value="domain_expert">Domain Expert</MenuItem>
+                  <MenuItem value="admin">Administrator</MenuItem>
+                </Select>
+              </FormControl>
             </Box>
 
             {/* Password Field */}

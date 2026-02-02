@@ -144,17 +144,35 @@ class AIQuestionGenerator:
         return questions
     
     def _generate_live_questions(
-        self, 
-        job: Job, 
-        candidate: JobApplication, 
-        resume: CandidateResume, 
+        self,
+        job: Job,
+        candidate: JobApplication,
+        resume: CandidateResume,
         total_questions: int
     ) -> List[Dict[str, Any]]:
         """
-        Generate questions using OpenAI/Azure OpenAI API (to be implemented)
+        Generate questions using Google Gemini LLM.
+        Falls back to preview mode if Gemini is unavailable.
         """
-        # TODO: Implement OpenAI integration
-        # For now, fallback to preview mode
+        from services.gemini_service import generate_questions_with_gemini
+
+        job_skills = self._parse_skills(job.skills_required or "")
+        resume_text = resume.parsed_text if resume else ""
+        experience_years = resume.experience_years if resume else (candidate.experience_years if candidate else 0)
+
+        gemini_questions = generate_questions_with_gemini(
+            job_description=job.description or "",
+            skills_required=job_skills,
+            resume_text=resume_text,
+            experience_years=experience_years or 0,
+            total_questions=total_questions
+        )
+
+        if gemini_questions:
+            return gemini_questions
+
+        # Fallback to preview mode if Gemini fails
+        print("Gemini unavailable, falling back to preview question generation")
         return self._generate_preview_questions(job, candidate, resume, total_questions)
     
     def _parse_skills(self, skills_text: str) -> List[str]:

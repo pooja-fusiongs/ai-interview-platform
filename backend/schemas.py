@@ -349,3 +349,32 @@ class InterviewSessionListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Recruiter Flow Schemas
+class TranscriptSubmit(BaseModel):
+    transcript_text: str
+
+class RecruiterCandidateResponse(BaseModel):
+    id: int
+    applicant_name: str
+    applicant_email: str
+    applicant_phone: Optional[str] = None
+    experience_years: Optional[int] = None
+    current_position: Optional[str] = None
+    status: str
+    applied_at: datetime
+    has_resume: bool = False
+    resume_parsed: bool = False
+    parsed_skills: List[str] = []
+    has_questions: bool = False
+    questions_status: str = "none"
+    question_session_id: Optional[int] = None
+    has_transcript: bool = False
+    has_scores: bool = False
+    overall_score: Optional[float] = None
+    recommendation: Optional[str] = None
+    session_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True

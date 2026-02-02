@@ -98,6 +98,14 @@ try:
 except Exception as e:
     print(f"⚠️ Could not load interview session endpoints: {e}")
 
+# Import and mount recruiter flow endpoints
+try:
+    from api.recruiter.candidate_management import router as recruiter_router
+    app.include_router(recruiter_router, tags=["Recruiter Flow"])
+    print("✅ Recruiter Flow endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load recruiter flow endpoints: {e}")
+
 print("✅ Auth Router included")
 print("🌐 CORS enabled for frontend")
 print("📡 API ready - ONLY YOUR DATABASE DATA")

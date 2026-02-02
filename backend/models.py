@@ -233,9 +233,15 @@ class InterviewSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Recruiter-driven flow fields
+    application_id = Column(Integer, ForeignKey("job_applications.id"), nullable=True)
+    transcript_text = Column(Text, nullable=True)
+    interview_mode = Column(String, default="self_service")  # "self_service" or "recruiter_driven"
+
     # Relationships
     job = relationship("Job")
     candidate = relationship("User")
+    application = relationship("JobApplication")
     answers = relationship("InterviewAnswer", back_populates="session")
 
 

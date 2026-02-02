@@ -17,6 +17,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_interview.db")
 # OpenAI (optional, for live question generation)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# Google Gemini (for LLM question generation and transcript scoring)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
 # Scoring thresholds
 SCORE_SELECT_THRESHOLD = float(os.getenv("SCORE_SELECT_THRESHOLD", "7.5"))
 SCORE_NEXT_ROUND_THRESHOLD = float(os.getenv("SCORE_NEXT_ROUND_THRESHOLD", "5.0"))

@@ -17,6 +17,7 @@ import Candidates from './components/candidates/Candidates'
 import CandidateMatching from './components/candidates/CandidateMatching'
 import CandidateProfile from './components/candidates/CandidateProfile'
 import Profile from './components/layout/profile'
+import RecruiterCandidates from './components/recruiter/RecruiterCandidates'
 import RoleProtectedRoute from './components/common/RoleProtectedRoute'
 
 interface ProtectedRouteProps {
@@ -185,11 +186,20 @@ function App(): JSX.Element {
             
           
             
-            {/* Interview Outline - Domain Expert, Admin */}
+            {/* Interview Outline - Domain Expert, Admin, Recruiter */}
             <Route path="/interview-outline/:setId" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['domain_expert', 'admin']}>
+                <RoleProtectedRoute allowedRoles={['domain_expert', 'admin', 'recruiter']}>
                   <InterviewOutline />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* Recruiter Candidates - Recruiter, Admin */}
+            <Route path="/recruiter-candidates" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <RecruiterCandidates />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
@@ -203,10 +213,10 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
             
-            {/* Results - Recruiter, Domain Expert, Admin */}
+            {/* Results - All authenticated roles */}
             <Route path="/results" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
                   <Results />
                 </RoleProtectedRoute>
               </ProtectedRoute>

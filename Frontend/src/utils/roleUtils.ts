@@ -91,12 +91,29 @@ export const getRouteAccess = (): RouteAccess[] => [
     icon: 'fas fa-users'
   },
   {
+    path: '/job-creation',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Post a Job',
+    icon: 'fas fa-plus-circle'
+  },
+  {
     path: '/ai-questions',
     allowedRoles: ['domain_expert', 'admin'],
     label: 'AI Questions',
     icon: 'fas fa-robot'
   },
-  
+  {
+    path: '/interview',
+    allowedRoles: ['candidate'],
+    label: 'Interview',
+    icon: 'fas fa-video'
+  },
+  {
+    path: '/results',
+    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
+    label: 'Results',
+    icon: 'fas fa-chart-bar'
+  },
   {
     path: '/candidate-profile',
     allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],

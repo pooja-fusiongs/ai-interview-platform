@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  IconButton, 
-  Typography, 
-  Box, 
-  Button, 
-  Chip 
+import { useNavigate } from 'react-router-dom'
+import {
+  IconButton,
+  Typography,
+  Box,
+  Button,
+  Chip
 } from '@mui/material'
 import axios from 'axios'
 import { CanApplyJobs, CanViewCandidates } from '../common/RoleBasedComponent'
@@ -54,6 +55,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   const [jobsLoading, setJobsLoading] = useState(true)
   const [hasApplied, setHasApplied] = useState(false)
   
+  const navigate = useNavigate()
   const { user } = useAuth()
 
   // Fetch application statistics for this job
@@ -480,6 +482,27 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               >
                 <i className="fas fa-users" style={{ marginRight: '8px' }}></i>
                 View Candidates
+              </Button>
+            )}
+            {(user?.role === 'recruiter' || user?.role === 'admin') && (
+              <Button
+                onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
+                sx={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  color: '#d97706',
+                  padding: '12px 32px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  marginRight: '12px',
+                  '&:hover': {
+                    background: 'rgba(245, 158, 11, 0.2)'
+                  }
+                }}
+              >
+                <i className="fas fa-user-plus" style={{ marginRight: '8px' }}></i>
+                Manage Candidates
               </Button>
             )}
           </CanViewCandidates>

@@ -34,6 +34,11 @@ const Navigation: React.FC<NavigationProps> = ({ children }) => {
     if (route === '/jobs' && location.pathname === '/candidate-matching') {
       return true
     }
+
+    // Special case: recruiter-candidates should show Jobs as active
+    if (route === '/jobs' && location.pathname === '/recruiter-candidates') {
+      return true
+    }
     
     return location.pathname.startsWith(route)
   }
