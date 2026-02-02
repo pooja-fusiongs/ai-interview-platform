@@ -14,7 +14,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from database import engine, get_db
-from models import Base, User, Job, JobApplication, CandidateResume, UserRole
+from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer
 from schemas import (
     JobCreate, JobResponse,
     CandidateProfileResponse
@@ -89,6 +89,14 @@ try:
     print("✅ Question Generation endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load question generation endpoints: {e}")
+
+# Import and mount interview session endpoints
+try:
+    from api.interview.sessions.app import router as interview_session_router
+    app.include_router(interview_session_router, tags=["Interview Sessions"])
+    print("✅ Interview Session endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load interview session endpoints: {e}")
 
 print("✅ Auth Router included")
 print("🌐 CORS enabled for frontend")

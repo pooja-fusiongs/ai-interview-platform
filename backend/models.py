@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
@@ -203,3 +203,58 @@ class QuestionGenerationSession(Base):
     job = relationship("Job")
     candidate = relationship("JobApplication")
     generator = relationship("User")
+
+
+class InterviewSessionStatus(str, enum.Enum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    SCORED = "scored"
+
+
+class Recommendation(str, enum.Enum):
+    SELECT = "select"
+    NEXT_ROUND = "next_round"
+    REJECT = "reject"
+
+
+class InterviewSession(Base):
+    __tablename__ = "interview_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
+    candidate_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(Enum(InterviewSessionStatus), default=InterviewSessionStatus.IN_PROGRESS)
+    overall_score = Column(Float, nullable=True)
+    recommendation = Column(Enum(Recommendation), nullable=True)
+    strengths = Column(Text, nullable=True)
+    weaknesses = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    job = relationship("Job")
+    candidate = relationship("User")
+    answers = relationship("InterviewAnswer", back_populates="session")
+
+
+class InterviewAnswer(Base):
+    __tablename__ = "interview_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("interview_sessions.id"), nullable=False)
+    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False)
+    answer_text = Column(Text, nullable=False)
+    score = Column(Float, nullable=True)
+    relevance_score = Column(Float, nullable=True)
+    completeness_score = Column(Float, nullable=True)
+    accuracy_score = Column(Float, nullable=True)
+    clarity_score = Column(Float, nullable=True)
+    feedback = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    session = relationship("InterviewSession", back_populates="answers")
+    question = relationship("InterviewQuestion")

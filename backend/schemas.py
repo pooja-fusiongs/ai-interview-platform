@@ -227,7 +227,7 @@ class ResumeDetailsResponse(BaseModel):
 class QuestionGenerateRequest(BaseModel):
     job_id: int
     candidate_id: int
-    generation_mode: str = "preview"  # preview or live
+    generation_mode: str = "preview"
     total_questions: int = 10
 
 class InterviewQuestionBase(BaseModel):
@@ -289,93 +289,63 @@ class ExpertReviewRequest(BaseModel):
     updated_question: Optional[str] = None
     updated_answer: Optional[str] = None
 
-# Question Generation Schemas
-class QuestionGenerateRequest(BaseModel):
+# Interview Session Schemas
+class InterviewSessionCreate(BaseModel):
     job_id: int
-    candidate_id: int
-    generation_mode: str = "preview"
-    total_questions: int = 10
 
-class InterviewQuestionResponse(BaseModel):
-    id: int
-    question_text: str
-    sample_answer: str
-    question_type: str
-    difficulty: str
-    skill_focus: Optional[str] = None
-    job_id: int
-    candidate_id: int
-    generation_mode: str
-    is_approved: bool
-    expert_reviewed: bool
-    expert_notes: Optional[str] = None
-    reviewed_by: Optional[int] = None
-    reviewed_at: Optional[datetime] = None
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-class QuestionGenerationSessionResponse(BaseModel):
-    id: int
-    job_id: int
-    candidate_id: int
-    generation_mode: str
-    total_questions: int
-    approved_questions: int
-    status: str
-    expert_review_status: str
-    generated_at: Optional[datetime] = None
-    created_at: datetime
-    questions: List[InterviewQuestionResponse] = []
-
-    class Config:
-        from_attributes = True
-
-class ExpertReviewRequest(BaseModel):
+class InterviewAnswerSubmit(BaseModel):
     question_id: int
-    is_approved: bool
-    expert_notes: Optional[str] = None
-    updated_question: Optional[str] = None
-    updated_answer: Optional[str] = None
+    answer_text: str
 
-class InterviewQuestionUpdate(BaseModel):
+class InterviewAnswerResponse(BaseModel):
+    id: int
+    session_id: int
+    question_id: int
+    answer_text: str
+    score: Optional[float] = None
+    relevance_score: Optional[float] = None
+    completeness_score: Optional[float] = None
+    accuracy_score: Optional[float] = None
+    clarity_score: Optional[float] = None
+    feedback: Optional[str] = None
     question_text: Optional[str] = None
     sample_answer: Optional[str] = None
-    question_type: Optional[str] = None
-    difficulty: Optional[str] = None
-    skill_focus: Optional[str] = None
-    is_approved: Optional[bool] = None
-    expert_notes: Optional[str] = None
-# Job Application Schemas
-class JobApplicationCreate(BaseModel):
-    job_id: int
-    applicant_name: str
-    applicant_email: str
-    applicant_phone: Optional[str] = None
-    resume_url: Optional[str] = None
-    cover_letter: Optional[str] = None
-    experience_years: Optional[int] = None
-    current_company: Optional[str] = None
-    current_position: Optional[str] = None
-    expected_salary: Optional[str] = None
-    availability: Optional[str] = None
+    created_at: datetime
 
-class JobApplicationResponse(BaseModel):
+    class Config:
+        from_attributes = True
+
+class InterviewSessionResponse(BaseModel):
     id: int
     job_id: int
-    applicant_name: str
-    applicant_email: str
-    applicant_phone: Optional[str] = None
-    resume_url: Optional[str] = None
-    cover_letter: Optional[str] = None
-    experience_years: Optional[int] = None
-    current_company: Optional[str] = None
-    current_position: Optional[str] = None
-    expected_salary: Optional[str] = None
-    availability: Optional[str] = None
+    candidate_id: int
     status: str
-    applied_at: datetime
+    overall_score: Optional[float] = None
+    recommendation: Optional[str] = None
+    strengths: Optional[str] = None
+    weaknesses: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    job_title: Optional[str] = None
+    candidate_name: Optional[str] = None
+    answers: List[InterviewAnswerResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class InterviewSessionListResponse(BaseModel):
+    id: int
+    job_id: int
+    candidate_id: int
+    status: str
+    overall_score: Optional[float] = None
+    recommendation: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    job_title: Optional[str] = None
+    candidate_name: Optional[str] = None
+    total_questions: int = 0
+    answered_questions: int = 0
 
     class Config:
         from_attributes = True
