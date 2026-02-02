@@ -1,0 +1,794 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import Navigation from '../layout/sidebar';
+import {
+    Box,
+    Typography,
+    Card,
+    CardContent,
+    Chip,
+    IconButton,
+    CircularProgress,
+    Button,
+    Tabs,
+    Tab,
+    TextField
+} from '@mui/material';
+import {
+    Edit as EditIcon,
+    ArrowBack as ArrowBackIcon,
+    Lock as LockIcon,
+    CheckCircle as CheckCircleIcon,
+    Schedule as ScheduleIcon,
+} from '@mui/icons-material';
+import { toast } from 'react-hot-toast';
+import questionGenerationService from '../../services/questionGenerationService';
+
+interface Question {
+    id: string;
+    question: string;
+    sample_answer: string;
+    difficulty: string;
+    category: string;
+    skills_tested: string[];
+    status?: 'pending' | 'approved';
+    is_golden?: boolean;
+    expert_notes?: string;
+}
+
+interface QuestionSet {
+    id: string;
+    job_id: number;
+    application_id: number;
+    job_title?: string;
+    candidate_name?: string;
+    candidate_email?: string;
+    questions: Question[];
+    status: string;
+    generated_at: string;
+    mode: 'preview' | 'live';
+    main_topics?: string[];
+    total_questions: number;
+    experience?: string;
+}
+
+const InterviewOutline: React.FC = () => {
+    const { setId } = useParams<{ setId: string }>();
+    const navigate = useNavigate();
+    const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState(0); // 0: All, 1: Pending, 2: Approved
+  const [showAllTopics, setShowAllTopics] = useState(false);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editedAnswer, setEditedAnswer] = useState<string>('');
+
+    useEffect(() => {
+        if (setId) {
+            fetchQuestionSet();
+        }
+    }, [setId]);
+
+    const fetchQuestionSet = async () => {
+        try {
+            setLoading(true);
+            const response = await questionGenerationService.getQuestionSets();
+            const sets = response.data;
+            const currentSet = sets.find((set: QuestionSet) => set.id === setId);
+
+            if (currentSet) {
+                // Fetch detailed questions for this candidate
+                try {
+                    const questions = await questionGenerationService.getCandidateQuestions(
+                        currentSet.job_id,
+                        currentSet.application_id
+                    );
+
+                    // Transform questions to match our interface
+                    const transformedQuestions = questions.map(q => ({
+                        id: q.id.toString(),
+                        question: q.question_text,
+                        sample_answer: q.sample_answer,
+                        difficulty: q.difficulty,
+                        category: q.question_type,
+                        skills_tested: q.skill_focus ? [q.skill_focus] : [],
+                        status: q.is_approved ? 'approved' : 'pending',
+                        is_golden: q.is_approved,
+                        expert_notes: q.expert_notes || ''
+                    }));
+
+                    console.log('Transformed questions:', transformedQuestions);
+                    console.log('Approved count:', transformedQuestions.filter(q => q.status === 'approved').length);
+                    console.log('Pending count:', transformedQuestions.filter(q => q.status === 'pending').length);
+
+                    setQuestionSet({
+                        ...currentSet,
+                        questions: transformedQuestions
+                    });
+                } catch (error) {
+                    // If detailed fetch fails, use the basic data
+                    console.log('Detailed fetch failed, using basic data:', error);
+                    console.log('Current set questions:', currentSet.questions);
+                    
+                    // Transform basic questions to ensure proper status
+                    const basicQuestions = currentSet.questions.map((q: any) => ({
+                        ...q,
+                        status: q.status || 'pending', // Ensure status is set
+                        is_golden: q.is_golden || false
+                    }));
+                    
+                    setQuestionSet({
+                        ...currentSet,
+                        questions: basicQuestions
+                    });
+                }
+            } else {
+                toast.error('Question set not found');
+                navigate('/ai-questions');
+            }
+        } catch (error) {
+            console.error('Error fetching question set:', error);
+            toast.error('Failed to load question set');
+            navigate('/ai-questions');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoBack = () => {
+        navigate('/ai-questions');
+    };
+
+    const handleApproveQuestion = async (questionId: string) => {
+        if (!questionSet) return;
+
+        try {
+            await questionGenerationService.expertReviewQuestion({
+                question_id: parseInt(questionId),
+                is_approved: true,
+                expert_notes: 'Approved as golden standard'
+            });
+
+            // Update local state
+            setQuestionSet(prev => prev ? {
+                ...prev,
+                questions: prev.questions.map(q =>
+                    q.id === questionId
+                        ? { ...q, status: 'approved', is_golden: true, expert_notes: 'Approved as golden standard' }
+                        : q
+                )
+            } : null);
+
+            toast.success('Question approved as golden standard!');
+        } catch (error) {
+            console.error('Error approving question:', error);
+            toast.error('Failed to approve question');
+        }
+    };
+
+
+    const getApprovedCount = () => {
+        if (!questionSet) return 0;
+        return questionSet.questions.filter(q => q.status === 'approved').length;
+    };
+
+    const getPendingCount = () => {
+        if (!questionSet) return 0;
+        return questionSet.questions.filter(q => q.status === 'pending').length;
+    };
+
+    const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+        setActiveTab(newValue);
+    };
+
+    const getFilteredQuestions = () => {
+        if (!questionSet) return [];
+
+        switch (activeTab) {
+            case 1: // Pending
+                return questionSet.questions.filter(q => q.status === 'pending');
+            case 2: // Approved
+                return questionSet.questions.filter(q => q.status === 'approved');
+            default: // All
+                return questionSet.questions;
+        }
+    };
+
+    const handleEditAnswer = (questionId: string, currentAnswer: string) => {
+        setEditingQuestionId(questionId);
+        setEditedAnswer(currentAnswer);
+    };
+
+    const handleSaveAnswer = async (questionId: string) => {
+        if (!questionSet || !editedAnswer.trim()) return;
+
+        try {
+            // Update the answer and approve it as golden standard
+            await questionGenerationService.updateQuestion(parseInt(questionId), {
+                sample_answer: editedAnswer,
+                is_approved: true // Automatically approve when edited
+            });
+
+            // Also call expert review to mark as approved
+            await questionGenerationService.expertReviewQuestion({
+                question_id: parseInt(questionId),
+                is_approved: true,
+                expert_notes: 'Approved as golden standard'
+            });
+
+            // Update local state
+            setQuestionSet(prev => prev ? {
+                ...prev,
+                questions: prev.questions.map(q =>
+                    q.id === questionId
+                        ? { 
+                            ...q, 
+                            sample_answer: editedAnswer, 
+                            status: 'approved', 
+                            is_golden: true,
+                            expert_notes: 'Approved as golden standard'
+                        }
+                        : q
+                )
+            } : null);
+
+            setEditingQuestionId(null);
+            setEditedAnswer('');
+            toast.success('Answer updated and approved as golden standard!');
+        } catch (error) {
+            console.error('Error updating answer:', error);
+            toast.error('Failed to update answer');
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingQuestionId(null);
+        setEditedAnswer('');
+    };
+
+    if (loading) {
+        return (
+            <Navigation>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+                    <CircularProgress size={40} />
+                </Box>
+            </Navigation>
+        );
+    }
+
+    if (!questionSet) {
+        return (
+            <Navigation>
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        Question set not found
+                    </Typography>
+                    <Button onClick={handleGoBack} sx={{ mt: 2 }}>
+                        Go Back
+                    </Button>
+                </Box>
+            </Navigation>
+        );
+    }
+
+    return (
+        <Navigation>
+            <Box sx={{
+                display: 'flex', backgroundColor: 'white', minHeight: '100vh', m: "20px", borderRadius: "10px", boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+            }}>
+                {/* Main Content */}
+                <Box sx={{ flex: 1, p: 3, pr: { xs: 3, lg: 1 } }}>
+                    {/* Clean Header */}
+                    <Box sx={{ mb: 3 }}>
+
+                        <Box sx={{ display: "flex", justifyContent: "space-between", }}>
+                            <Box>
+                                <Typography variant="h1" sx={{ color: 'black', fontSize: '1.1rem' }}>
+                                    {questionSet?.job_title} • {questionSet?.candidate_name}
+                                </Typography>
+                            </Box>
+                            <Box
+                                onClick={handleGoBack}
+                                sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    width: 'fit-content',
+                                    // mb: 3,
+                                    p:"2px 10px",
+                                    ml: "auto",
+                                    border: '1px solid #F59E0B',
+                                    color: '#F59E0B',
+                                    cursor: 'pointer',
+                                    borderRadius: 1,
+                                    '&:hover': {
+                                        backgroundColor: '#F59E0B1A',
+                                    },
+                                }}
+                            >
+                                <ArrowBackIcon fontSize="small" />
+                                <Typography>
+                                    Back
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Box sx={{ mb: 2 }}>
+
+
+                            <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>
+                                {questionSet?.candidate_email}
+                            </Typography>
+
+                        </Box>
+
+                        {/* Skills/Topics Tags */}
+                        {questionSet?.main_topics && questionSet.main_topics.length > 0 && (
+                            <Box sx={{ mb:"10px" }}>
+                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    {(showAllTopics ? questionSet.main_topics : questionSet.main_topics.slice(0, 3)).map((topic, index) => (
+                                        <Chip
+                                            key={index}
+                                            label={topic}
+                                            sx={{
+                                                backgroundColor: '#f3f4f6',
+                                                color: '#374151',
+                                                fontWeight: 500,
+                                                border: '1px solid #e5e7eb',
+                                                '&:hover': {
+                                                    backgroundColor: '#e5e7eb'
+                                                }
+                                            }}
+                                        />
+                                    ))}
+                                    {questionSet.main_topics.length > 3 && (
+                                        <Button
+                                            variant="text"
+                                            size="small"
+                                            onClick={() => setShowAllTopics(!showAllTopics)}
+                                            sx={{
+                                                color: '#6b7280',
+                                                textTransform: 'none',
+                                                fontSize: '0.875rem',
+                                                minWidth: 'auto',
+                                                p: 0.5
+                                            }}
+                                        >
+                                            {showAllTopics ? 'See less' : `See more (${questionSet.main_topics.length - 3})`}
+                                        </Button>
+                                    )}
+                                </Box>
+                            </Box>
+                        )}
+
+                        {/* Skills Analytics - New Addition */}
+                        {questionSet?.main_topics && questionSet.main_topics.length > 0 && (
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="body2" sx={{ color: '#374151', fontWeight: 600,mb:"10px" }}>
+                                               Created:- {questionSet?.generated_at ? (() => {
+                                                    const now = new Date();
+                                                    const generatedDate = new Date(questionSet.generated_at);
+                                                    const diffInMs = now.getTime() - generatedDate.getTime();
+                                                    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+                                                    const diffInDays = Math.floor(diffInHours / 24);
+                                                    
+                                                    if (diffInDays > 0) {
+                                                        return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+                                                    } else if (diffInHours > 0) {
+                                                        return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+                                                    } else {
+                                                        return 'Just now';
+                                                    }
+                                                })() : 'N/A'}
+                                            </Typography>
+                                <Box sx={{ display: 'flex',  flexWrap: 'wrap' }}>
+                                    {/* Skill Match Accuracy with Circular Progress */}
+                                    <Box sx={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        minWidth: 120,
+                                        pr:"20px"
+                                    }}>
+                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
+                                            Skill Match Accuracy
+                                        </Typography>
+                                        <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {/* Background Circle */}
+                                            <Box sx={{
+                                                width: 60,
+                                                height: 60,
+                                                borderRadius: '50%',
+                                                background: `conic-gradient(#f97316 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}>
+                                                <Box sx={{
+                                                    width: 44,
+                                                    height: 44,
+                                                    borderRadius: '50%',
+                                                    backgroundColor: '#fff',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}>
+                                                    <Typography variant="h6" sx={{ color: '#374151', fontWeight: 700, fontSize: '1rem' }}>
+                                                        {Math.round((getApprovedCount() / (questionSet?.questions.length || 1)) * 100)}%
+                                                    </Typography>
+                                                </Box>
+                                            </Box>
+                                        </Box>
+                                    </Box>
+
+                                    {/* Completed Questions with Circular Progress */}
+                                    <Box sx={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        borderLeft:"1px solid #80808038",
+                                        pl:"20px",
+                                        minWidth: 120
+                                    }}>
+                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
+                                            Completed Questions
+                                        </Typography>
+                                        <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {/* Background Circle */}
+                                            <Box sx={{
+                                                width: 60,
+                                                height: 60,
+                                                borderRadius: '50%',
+                                                background: `conic-gradient(#10b981 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}>
+                                                <Box sx={{
+                                                    width: 44,
+                                                    height: 44,
+                                                    borderRadius: '50%',
+                                                    backgroundColor: '#fff',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}>
+                                                    <Typography variant="h6" sx={{ color: '#374151', fontWeight: 700, fontSize: '1rem' }}>
+                                                        {getApprovedCount()}
+                                                    </Typography>
+                                                </Box>
+                                            </Box>
+                                        </Box>
+                                    </Box>
+                                    
+                                </Box>
+                            </Box>
+                        )}
+                    </Box>
+
+                    {/* Tabs for Filtering */}
+                    <Box sx={{ borderBottom: 1, borderColor: '#e5e7eb', mb: 4 }}>
+                        <Tabs
+                            value={activeTab}
+                            onChange={handleTabChange}
+                            sx={{
+                                '& .MuiTab-root': {
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    color: '#6b7280',
+                                    '&.Mui-selected': {
+                                        color: '#374151'
+                                    }
+                                },
+                                '& .MuiTabs-indicator': {
+                                    backgroundColor: '#374151'
+                                }
+                            }}
+                        >
+                            <Tab
+                                label={`All (${questionSet?.questions.length || 0})`}
+                                sx={{ minWidth: 'auto', px: 3 }}
+                            />
+                            <Tab
+                                label={`Pending (${getPendingCount()})`}
+                                sx={{ minWidth: 'auto', px: 3 }}
+                            />
+                            <Tab
+                                label={`Approved (${getApprovedCount()})`}
+                                sx={{ minWidth: 'auto', px: 3 }}
+                            />
+                        </Tabs>
+                    </Box>
+
+                    {/* Questions */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {getFilteredQuestions().map((question) => (
+                            <Card
+                                key={question.id}
+                                sx={{
+                                    borderRadius: 3,
+                                    border: question.status === 'approved' ? '1px solid #d1fae5' : '1px solid #e5e7eb',
+                                    boxShadow: question.status === 'approved'
+                                        ? '0 1px 3px rgba(0, 0, 0, 0.05)'
+                                        : '0 1px 3px rgba(0, 0, 0, 0.05)',
+                                    '&:hover': {
+                                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)'
+                                    },
+                                    transition: 'all 0.2s ease-in-out'
+                                }}
+                            >
+                                <CardContent sx={{ p: 3 }}>
+                                    {/* Question Header */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+                                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
+                                            Question {questionSet?.questions.findIndex(q => q.id === question.id) + 1}
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Chip
+                                                label={question.status === 'approved' ? 'Approved' : 'Pending'}
+                                                size="small"
+                                                icon={question.status === 'approved' ? <CheckCircleIcon /> : <ScheduleIcon />}
+                                                sx={{
+                                                    backgroundColor: question.status === 'approved' ? '#f0fdf4' : '#fef3c7',
+                                                    color: question.status === 'approved' ? '#166534' : '#92400e',
+                                                    fontWeight: 500,
+                                                    border: question.status === 'approved' ? '1px solid #bbf7d0' : '1px solid #fde68a',
+                                                    mr: 1,
+                                                    '& .MuiChip-icon': {
+                                                        color: question.status === 'approved' ? '#166534' : '#92400e'
+                                                    }
+                                                }}
+                                            />
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleEditAnswer(question.id, question.sample_answer)}
+                                                sx={{
+                                                    color: '#6b7280',
+                                                    cursor: 'pointer'
+                                                }}
+                                                title="Edit answer"
+                                            >
+                                                <EditIcon fontSize="small" />
+                                            </IconButton>
+                                            {/* Approve Button */}
+                                            {question.status === 'pending' && (
+                                                <Button
+                                                    variant="contained"
+                                                    size="small"
+                                                    onClick={() => handleApproveQuestion(question.id)}
+                                                    sx={{
+                                                        backgroundColor: '#F59E0B1A',
+                                                        color: '#F59E0B',
+                                                        border:"1px solid #F59E0B",
+                                                        fontWeight: 600,
+                                                        textTransform: 'none',
+                                                        px: 2,
+                                                        py: 0.5,
+                                                        fontSize: '0.875rem',
+                                                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+                                                        '&:hover': {
+                                                            backgroundColor: '#F59E0B1A',
+                                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                                                        }
+                                                    }}
+                                                >
+                                                    Approve
+                                                </Button>
+                                            )}
+                                        </Box>
+                                    </Box>
+
+                                    {/* Question Text */}
+                                    <Box sx={{ position: 'relative' }}>
+                                        <Typography
+                                            variant="body1"
+                                            sx={{
+                                                color: '#333',
+                                                lineHeight: 1.6,
+                                                mb: 3,
+                                                fontSize: '1.1rem',
+                                                opacity: question.status === 'approved' ? 0.9 : 1
+                                            }}
+                                        >
+                                            {question.question}
+                                        </Typography>
+
+                                        {/* Read-only indicator for approved questions */}
+                                        {question.status === 'approved' && (
+                                            <Box sx={{
+                                                position: 'absolute',
+                                                top: -8,
+                                                right: -8,
+                                                backgroundColor: '#f0fdf4',
+                                                border: '1px solid #bbf7d0',
+                                                borderRadius: '50%',
+                                                width: 24,
+                                                height: 24,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}>
+                                                <LockIcon sx={{ fontSize: 12, color: '#166534' }} />
+                                            </Box>
+                                        )}
+                                    </Box>
+
+                                    {/* Tags Section */}
+                                    <Box sx={{ mb: 3 }}>
+                                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                                            {/* Skills */}
+                                            {question.skills_tested.length > 0 && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+                                                        Skills:
+                                                    </Typography>
+                                                    {question.skills_tested.map((skill, skillIndex) => (
+                                                        <Chip
+                                                            key={skillIndex}
+                                                            label={skill}
+                                                            size="small"
+                                                            sx={{
+                                                                backgroundColor: '#f9fafb',
+                                                                color: '#374151',
+                                                                fontSize: '0.75rem',
+                                                                height: 24,
+                                                                border: '1px solid #e5e7eb'
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </Box>
+                                            )}
+
+                                            {/* Type */}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+                                                    Type:
+                                                </Typography>
+                                                <Chip
+                                                    label={question.category}
+                                                    size="small"
+                                                    sx={{
+                                                        backgroundColor: '#f9fafb',
+                                                        color: '#374151',
+                                                        fontSize: '0.75rem',
+                                                        height: 24,
+                                                        border: '1px solid #e5e7eb'
+                                                    }}
+                                                />
+                                            </Box>
+
+                                            {/* Difficulty */}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+                                                    Difficulty:
+                                                </Typography>
+                                                <Chip
+                                                    label={question.difficulty}
+                                                    size="small"
+                                                    sx={{
+                                                        backgroundColor: '#f9fafb',
+                                                        color: '#374151',
+                                                        fontSize: '0.75rem',
+                                                        height: 24,
+                                                        border: '1px solid #e5e7eb'
+                                                    }}
+                                                />
+                                            </Box>
+                                        </Box>
+                                    </Box>
+
+                                    {/* Golden Standard Answer */}
+                                    <Box sx={{
+                                        backgroundColor: question.is_golden ? '#f8fffe' : '#f9fafb',
+                                        border: question.is_golden ? '1px solid #d1fae5' : '1px solid #e5e7eb',
+                                        borderLeft: question.is_golden ? '3px solid #10b981' : '3px solid #6b7280',
+                                        borderRadius: 2,
+                                        p: 2,
+                                        mb: 3
+                                    }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>
+                                                    AI Answer
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+
+                                        {editingQuestionId === question.id ? (
+                                            // Edit Mode
+                                            <Box>
+                                                <TextField
+                                                    fullWidth
+                                                    multiline
+                                                    rows={4}
+                                                    value={editedAnswer}
+                                                    onChange={(e) => setEditedAnswer(e.target.value)}
+                                                    sx={{ mb: 2 }}
+                                                />
+                                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        onClick={() => handleSaveAnswer(question.id)}
+                                                        sx={{
+                                                            backgroundColor: '#10b981',
+                                                            color: 'white',
+                                                            '&:hover': {
+                                                                backgroundColor: '#059669'
+                                                            }
+                                                        }}
+                                                    >
+                                                        Save
+                                                    </Button>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        onClick={handleCancelEdit}
+                                                        sx={{
+                                                            borderColor: '#6b7280',
+                                                            color: '#6b7280'
+                                                        }}
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                </Box>
+                                            </Box>
+                                        ) : (
+                                            // View Mode
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    color: question.is_golden ? '#065f46' : '#4b5563',
+                                                    lineHeight: 1.6,
+                                                    mb: question.is_golden ? 1 : 0
+                                                }}
+                                            >
+                                                {question.sample_answer}
+                                            </Typography>
+                                        )}
+
+
+                                    </Box>
+
+
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </Box>
+
+                    {/* Empty State */}
+                    {getFilteredQuestions().length === 0 && questionSet?.questions.length > 0 && (
+                        <Box sx={{ textAlign: 'center', py: 8 }}>
+                            <Typography variant="h6" color="textSecondary" sx={{ mb: 2 }}>
+                                No {activeTab === 1 ? 'pending' : activeTab === 2 ? 'approved' : ''} questions
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                {activeTab === 1
+                                    ? 'All questions have been approved.'
+                                    : activeTab === 2
+                                        ? 'No questions have been approved yet.'
+                                        : 'No questions available.'
+                                }
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {questionSet?.questions.length === 0 && (
+                        <Box sx={{ textAlign: 'center', py: 8 }}>
+                            <Typography variant="h6" color="textSecondary" sx={{ mb: 2 }}>
+                                No questions available
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Questions for this candidate haven't been generated yet.
+                            </Typography>
+                        </Box>
+                    )}
+                </Box>
+
+
+            </Box>
+        </Navigation>
+    );
+};
+
+export default InterviewOutline;

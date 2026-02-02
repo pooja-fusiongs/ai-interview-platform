@@ -1,0 +1,5 @@
+# Ignore test folder
+Test/
+.vscode/
+
+.env
