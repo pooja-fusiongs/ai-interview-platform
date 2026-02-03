@@ -407,6 +407,9 @@ def submit_transcript_and_score(
 
     db.commit()
     db.refresh(session)
+    
+    # Update nested transcript data in candidate object
+    _update_candidate_nested_transcripts(db, application_id, job_id)
 
     # Build response
     answers_data = []
@@ -472,3 +475,44 @@ def get_job_results(
         })
 
     return results
+
+
+def _update_candidate_nested_transcripts(db: Session, application_id: int, job_id: int):
+    """Update nested transcripts in candidate object"""
+    # Get candidate user via job application
+    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    if not application:
+        return
+        
+    candidate_user = db.query(User).filter(User.email == application.applicant_email).first()
+    if not candidate_user:
+        return
+    
+    # Get all interview sessions with transcripts for this candidate
+    sessions = db.query(InterviewSession).filter(
+        InterviewSession.application_id == application_id,
+        InterviewSession.job_id == job_id,
+        InterviewSession.transcript_text.isnot(None)
+    ).all()
+    
+    # Convert to nested format
+    nested_transcripts = []
+    for session in sessions:
+        nested_transcripts.append({
+            "id": session.id,
+            "job_id": session.job_id,
+            "session_id": session.id,
+            "transcript_text": session.transcript_text,
+            "score": session.overall_score,
+            "interview_mode": session.interview_mode,
+            "status": session.status.value if hasattr(session.status, 'value') else str(session.status),
+            "created_at": session.created_at.isoformat() if session.created_at else None
+        })
+    
+    # Update candidate's nested transcripts
+    candidate_user.interview_transcripts = json.dumps(nested_transcripts)
+    candidate_user.has_transcript = len(nested_transcripts) > 0
+    if nested_transcripts:
+        # Update overall score with latest transcript score
+        candidate_user.score = nested_transcripts[-1]["score"]
+    db.commit()

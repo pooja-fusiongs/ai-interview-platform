@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Box, Typography, Grid, Card, CardContent, Chip, CircularProgress, Alert, Divider
 } from '@mui/material';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 const getScoreColor = (score: number): string => {
@@ -34,18 +34,16 @@ const FraudAnalysisPanel: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', height: '100vh' }}>
-        <Sidebar />
+      <Naivgation>
         <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5' }}>
           <CircularProgress />
         </Box>
-      </Box>
+      </Naivgation>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" gutterBottom>Fraud Analysis — Interview #{videoInterviewId}</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -111,7 +109,7 @@ const FraudAnalysisPanel: React.FC = () => {
           </>
         )}
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, TextField, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Chip, Button, CircularProgress, Alert, Grid
+  TableHead, TableRow, Paper, Chip, Button, CircularProgress, Alert, 
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy'
 import { Visibility } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface Feedback {
@@ -51,8 +52,7 @@ const FeedbackList: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3 }}>Hire Feedback Records</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -113,7 +113,7 @@ const FeedbackList: React.FC = () => {
           </TableContainer>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

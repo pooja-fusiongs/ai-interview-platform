@@ -3,7 +3,7 @@ import {
   Box, Typography, TextField, Button, Select, MenuItem, FormControl,
   InputLabel, Paper, Alert, CircularProgress, Link
 } from '@mui/material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 
 const VideoInterviewScheduler: React.FC = () => {
@@ -40,8 +40,7 @@ const VideoInterviewScheduler: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" gutterBottom>Schedule Video Interview</Typography>
         <Paper sx={{ p: 4, maxWidth: 600 }}>
@@ -79,7 +78,7 @@ const VideoInterviewScheduler: React.FC = () => {
           </form>
         </Paper>
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

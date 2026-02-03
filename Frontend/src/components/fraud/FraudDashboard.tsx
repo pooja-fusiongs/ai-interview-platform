@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Typography, Grid, Card, CardContent, Table, TableBody, TableCell,
+  Box, Typography, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Button, CircularProgress, Alert
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy'
 import { Security, Flag, CheckCircle, Warning } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 const FraudDashboard: React.FC = () => {
@@ -21,7 +22,7 @@ const FraudDashboard: React.FC = () => {
           fraudDetectionService.getFlaggedInterviews(),
         ]);
         setStats(statsData);
-        setFlagged(flaggedData);
+        setFlagged(flaggedData.flagged_interviews || []);
       } catch (err: any) {
         setError(err.message || 'Failed to load dashboard data.');
       } finally {
@@ -32,15 +33,14 @@ const FraudDashboard: React.FC = () => {
   }, []);
 
   const statCards = stats ? [
-    { label: 'Total Analyzed', value: stats.total_analyzed, icon: <Security fontSize="large" color="primary" /> },
+    { label: 'Total Analyzed', value: stats.analyzed_count, icon: <Security fontSize="large" color="primary" /> },
     { label: 'Flagged', value: stats.flagged_count, icon: <Flag fontSize="large" color="error" /> },
     { label: 'Cleared', value: stats.cleared_count, icon: <CheckCircle fontSize="large" color="success" /> },
-    { label: 'Avg Trust Score', value: `${stats.avg_trust_score}%`, icon: <Warning fontSize="large" color="warning" /> },
+    { label: 'Avg Trust Score', value: `${stats.average_trust_score}%`, icon: <Warning fontSize="large" color="warning" /> },
   ] : [];
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" gutterBottom>Fraud Detection Dashboard</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -78,14 +78,14 @@ const FraudDashboard: React.FC = () => {
                 </TableHead>
                 <TableBody>
                   {flagged.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.id}</TableCell>
+                    <TableRow key={row.fraud_analysis_id}>
+                      <TableCell>{row.fraud_analysis_id}</TableCell>
                       <TableCell>{row.candidate_name || 'N/A'}</TableCell>
-                      <TableCell>{row.trust_score}%</TableCell>
+                      <TableCell>{row.overall_trust_score}%</TableCell>
                       <TableCell>{row.flag_count}</TableCell>
-                      <TableCell>{new Date(row.analyzed_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{row.analyzed_at ? new Date(row.analyzed_at).toLocaleDateString() : 'N/A'}</TableCell>
                       <TableCell>
-                        <Button variant="outlined" size="small" href={`/fraud-analysis/${row.id}`}>Analyze</Button>
+                        <Button variant="outlined" size="small" href={`/fraud-analysis/${row.video_interview_id}`}>Analyze</Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -95,7 +95,7 @@ const FraudDashboard: React.FC = () => {
           </>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

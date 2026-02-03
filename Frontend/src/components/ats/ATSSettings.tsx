@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Typography, Grid, Card, CardContent, CardActions, Button,
+  Box, Typography, Card, CardContent, CardActions, Button,
   Chip, IconButton, CircularProgress, Alert
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy'
 import { Add, Sync, Delete, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import atsService from '../../services/atsService';
 import ATSConnectionForm from './ATSConnectionForm';
 
@@ -66,8 +67,7 @@ const ATSSettings: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
           <Typography variant="h4">ATS Integrations</Typography>
@@ -126,7 +126,7 @@ const ATSSettings: React.FC = () => {
           onSaved={() => { setDialogOpen(false); fetchConnections(); }}
         />
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

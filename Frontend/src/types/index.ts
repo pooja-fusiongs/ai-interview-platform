@@ -102,6 +102,32 @@ export interface JobCreate {
   skills_required?: string;
 }
 
+// Nested objects for candidate data
+export interface InterviewQuestion {
+  id: number;
+  job_id: number;
+  question_text: string;
+  sample_answer: string;
+  question_type: string;
+  difficulty: string;
+  skill_focus?: string;
+  is_approved: boolean;
+  expert_reviewed: boolean;
+  expert_notes?: string;
+  created_at?: string;
+}
+
+export interface InterviewTranscript {
+  id: number;
+  job_id: number;
+  session_id: number;
+  transcript_text: string;
+  score?: number;
+  interview_mode: string;
+  status: string;
+  created_at?: string;
+}
+
 export interface Candidate {
   id: number;
   name: string;
@@ -117,6 +143,10 @@ export interface Candidate {
   onlineStatus?: 'Active' | 'Inactive';
   isOnline?: boolean;
   lastActivity?: string;
+  hasTranscript?: boolean;
+  // Nested objects
+  interview_questions?: InterviewQuestion[];
+  interview_transcripts?: InterviewTranscript[];
 }
 
 export interface JobFormData {
@@ -222,6 +252,9 @@ export interface CandidateProfileData {
   resume_url?: string;
   professional_experience?: ProfessionalExperience[];
   certifications?: Certification[];
+  // Nested objects
+  interview_questions?: InterviewQuestion[];
+  interview_transcripts?: InterviewTranscript[];
 }
 
 // ===== GDPR Types =====

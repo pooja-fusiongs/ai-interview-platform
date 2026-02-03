@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, TextField, MenuItem, Button } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 
@@ -50,8 +50,7 @@ const AdminAuditLog: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3, fontWeight: 600 }}>GDPR Audit Log</Typography>
         <Paper sx={{ p: 2, mb: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -96,7 +95,7 @@ const AdminAuditLog: React.FC = () => {
           </TableContainer>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

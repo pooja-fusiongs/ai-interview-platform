@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 
@@ -54,8 +54,7 @@ const DataExportPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>Data Export</Typography>
         <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
@@ -102,7 +101,7 @@ const DataExportPage: React.FC = () => {
           </TableContainer>
         )}
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

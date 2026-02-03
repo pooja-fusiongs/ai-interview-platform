@@ -142,6 +142,30 @@ class CandidateProfileUpdate(BaseModel):
     professional_experience: Optional[List[ProfessionalExperience]] = None
     certifications: Optional[List[Certification]] = None
 
+# Nested objects for candidate data
+class InterviewQuestionNested(BaseModel):
+    id: int
+    job_id: int
+    question_text: str
+    sample_answer: str
+    question_type: str
+    difficulty: str
+    skill_focus: Optional[str] = None
+    is_approved: bool = False
+    expert_reviewed: bool = False
+    expert_notes: Optional[str] = None
+    created_at: datetime
+
+class InterviewTranscriptNested(BaseModel):
+    id: int
+    job_id: int
+    session_id: int
+    transcript_text: str
+    score: Optional[float] = None
+    interview_mode: str
+    status: str
+    created_at: datetime
+
 class CandidateProfileResponse(BaseModel):
     id: int
     email: str
@@ -165,6 +189,11 @@ class CandidateProfileResponse(BaseModel):
     resume_url: Optional[str] = None
     professional_experience: List[ProfessionalExperience] = []
     certifications: List[Certification] = []
+    # Nested objects
+    interview_questions: List[InterviewQuestionNested] = []
+    interview_transcripts: List[InterviewTranscriptNested] = []
+    score: Optional[float] = None
+    has_transcript: bool = False
 
     class Config:
         from_attributes = True
@@ -610,6 +639,7 @@ class FraudDashboardStats(BaseModel):
     total_interviews: int
     analyzed_count: int
     flagged_count: int
+    cleared_count: int
     average_trust_score: float
     flag_breakdown: dict
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Paper, CircularProgress, Divider, Chip } from '@mui/material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 
@@ -32,8 +32,7 @@ const PrivacyNotice: React.FC = () => {
   }, []);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>Privacy Notice</Typography>
         <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
@@ -64,7 +63,7 @@ const PrivacyNotice: React.FC = () => {
           </Paper>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Chip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 
@@ -54,8 +54,7 @@ const AdminRetentionPolicies: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" sx={{ fontWeight: 600 }}>Retention Policies</Typography>
@@ -108,7 +107,7 @@ const AdminRetentionPolicies: React.FC = () => {
           </DialogActions>
         </Dialog>
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

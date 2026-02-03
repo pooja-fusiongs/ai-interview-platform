@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './api';
-import { JobCreate, Job } from '../types';
+import { JobCreate,  } from '../types';
 
 export const jobService = {
   // Get all jobs

@@ -4,7 +4,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton
 } from '@mui/material';
 import { Warning, CheckCircle, Error, Refresh, FiberManualRecord } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 interface LiveFlag {
@@ -129,8 +129,7 @@ const RealTimeFlagMonitor: React.FC = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4">Real-Time Flag Monitor</Typography>
@@ -217,7 +216,7 @@ const RealTimeFlagMonitor: React.FC = () => {
           </>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

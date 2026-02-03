@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Typography, Grid, Card, CardContent, Button, CircularProgress,
+  Box, Typography, Card, CardContent, Button, CircularProgress,
   Alert, Paper
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy'
 import { Assessment, TrendingUp, People, CheckCircle } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface DashboardData {
@@ -65,18 +66,16 @@ const QualityDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', height: '100vh' }}>
-        <Sidebar />
+      <Navigation >
         <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5' }}>
           <CircularProgress />
         </Box>
-      </Box>
+      </Navigation>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Navigation >
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
           <Typography variant="h4">Hiring Quality Dashboard</Typography>
@@ -120,7 +119,7 @@ const QualityDashboard: React.FC = () => {
           </>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 

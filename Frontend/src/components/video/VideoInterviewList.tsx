@@ -4,7 +4,7 @@ import {
   TableRow, Paper, Chip, IconButton, Tooltip, CircularProgress, Alert
 } from '@mui/material';
 import { Visibility, PlayArrow, Cancel } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 
 const statusColorMap: Record<string, 'primary' | 'warning' | 'success' | 'error'> = {
@@ -56,9 +56,8 @@ const VideoInterviewList: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
-      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
+    <Navigation>
+      <Box sx={{ padding: '20px', background: '#f8fafc', height: '100%' }}>
         <Typography variant="h4" gutterBottom>Video Interviews</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {loading ? (
@@ -104,7 +103,7 @@ const VideoInterviewList: React.FC = () => {
           </TableContainer>
         )}
       </Box>
-    </Box>
+    </Navigation>
   );
 };
 
