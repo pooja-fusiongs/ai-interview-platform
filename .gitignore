@@ -3,3 +3,16 @@ Test/
 .vscode/
 
 .env
+
+# Python
+__pycache__/
+*.pyc
+
+# SQLite database
+*.db
+
+# Uploaded files
+backend/uploads/
+
+# Claude Code
+.claude/
