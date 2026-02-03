@@ -17,7 +17,7 @@ from models import (
 from schemas import ATSSyncTrigger
 from api.auth.jwt_handler import get_current_active_user
 from services.audit_service import log_action
-from services.ats.sync_service import sync_jobs, sync_candidates, sync_full
+from services.ats.sync_service import sync_jobs, sync_candidates, full_sync
 
 router = APIRouter(tags=["ATS"])
 
@@ -80,7 +80,7 @@ def trigger_sync(
     sync_dispatch = {
         "jobs": sync_jobs,
         "candidates": sync_candidates,
-        "full": sync_full,
+        "full": full_sync,
     }
 
     sync_fn = sync_dispatch.get(payload.sync_type)
@@ -92,7 +92,7 @@ def trigger_sync(
         )
 
     try:
-        sync_log = sync_fn(db=db, connection=connection)
+        sync_log = sync_fn(db=db, connection_id=connection.id)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
