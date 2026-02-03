@@ -30,6 +30,18 @@ WEIGHT_COMPLETENESS = float(os.getenv("WEIGHT_COMPLETENESS", "0.25"))
 WEIGHT_ACCURACY = float(os.getenv("WEIGHT_ACCURACY", "0.30"))
 WEIGHT_CLARITY = float(os.getenv("WEIGHT_CLARITY", "0.15"))
 
+# GDPR / Encryption
+PII_ENCRYPTION_KEY = os.getenv("PII_ENCRYPTION_KEY", "")
+DATA_RETENTION_DEFAULT_DAYS = int(os.getenv("DATA_RETENTION_DEFAULT_DAYS", "365"))
+DATA_EXPORT_EXPIRY_HOURS = int(os.getenv("DATA_EXPORT_EXPIRY_HOURS", "48"))
+
+# Zoom Integration
+ZOOM_ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID", "")
+ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID", "")
+ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET", "")
+ZOOM_SDK_KEY = os.getenv("ZOOM_SDK_KEY", "")
+ZOOM_SDK_SECRET = os.getenv("ZOOM_SDK_SECRET", "")
+
 # CORS
 CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",

@@ -1,0 +1,133 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box, Typography, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Divider
+} from '@mui/material';
+import Sidebar from '../layout/sidebar';
+import atsService from '../../services/atsService';
+
+interface JobMapping {
+  id: number;
+  ats_job_id: string;
+  local_job_id: number;
+  last_synced_at: string;
+}
+
+interface CandidateMapping {
+  id: number;
+  ats_candidate_id: string;
+  local_application_id: number;
+  resume_synced: boolean;
+}
+
+const ATSJobMappings: React.FC = () => {
+  const [connectionId] = useState(1);
+  const [jobMappings, setJobMappings] = useState<JobMapping[]>([]);
+  const [candidateMappings, setCandidateMappings] = useState<CandidateMapping[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchMappings = async () => {
+      setLoading(true);
+      try {
+        const [jobs, candidates] = await Promise.all([
+          atsService.getJobMappings(connectionId),
+          atsService.getCandidateMappings(connectionId),
+        ]);
+        setJobMappings(jobs);
+        setCandidateMappings(candidates);
+      } catch {
+        setError('Failed to load mappings');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMappings();
+  }, [connectionId]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', height: '100vh' }}>
+        <Sidebar />
+        <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5' }}>
+          <CircularProgress />
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh' }}>
+      <Sidebar />
+      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
+        <Typography variant="h4" sx={{ mb: 3 }}>ATS Field Mappings</Typography>
+        {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+
+        <Typography variant="h6" sx={{ mb: 1 }}>Job Mappings</Typography>
+        <TableContainer component={Paper} sx={{ mb: 4 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ATS Job ID</TableCell>
+                <TableCell>Local Job ID</TableCell>
+                <TableCell>Last Synced</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {jobMappings.map(m => (
+                <TableRow key={m.id}>
+                  <TableCell>{m.ats_job_id}</TableCell>
+                  <TableCell>{m.local_job_id}</TableCell>
+                  <TableCell>{new Date(m.last_synced_at).toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+              {jobMappings.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={3} align="center">No job mappings found</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Typography variant="h6" sx={{ mb: 1 }}>Candidate Mappings</Typography>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ATS Candidate ID</TableCell>
+                <TableCell>Local Application ID</TableCell>
+                <TableCell>Resume Synced</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {candidateMappings.map(m => (
+                <TableRow key={m.id}>
+                  <TableCell>{m.ats_candidate_id}</TableCell>
+                  <TableCell>{m.local_application_id}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={m.resume_synced ? 'Yes' : 'No'}
+                      color={m.resume_synced ? 'success' : 'default'}
+                      size="small"
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {candidateMappings.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={3} align="center">No candidate mappings found</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+    </Box>
+  );
+};
+
+export default ATSJobMappings;

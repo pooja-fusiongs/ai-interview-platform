@@ -378,3 +378,318 @@ class RecruiterCandidateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ==================== GDPR Schemas ====================
+
+class ConsentCreate(BaseModel):
+    consent_type: str
+    consent_text: str
+
+class ConsentResponse(BaseModel):
+    id: int
+    user_id: int
+    consent_type: str
+    status: str
+    consent_text: str
+    granted_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ConsentStatusCheck(BaseModel):
+    consent_type: str
+    is_granted: bool
+    granted_at: Optional[datetime] = None
+
+class DeletionRequestCreate(BaseModel):
+    request_type: str = "full_erasure"
+    data_categories: Optional[List[str]] = None
+    reason: Optional[str] = None
+
+class DeletionRequestResponse(BaseModel):
+    id: int
+    user_id: int
+    request_type: str
+    status: str
+    reason: Optional[str] = None
+    requested_at: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
+    completion_summary: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class DataRetentionPolicyCreate(BaseModel):
+    data_category: str
+    retention_days: int
+    auto_delete: bool = True
+    description: Optional[str] = None
+
+class DataRetentionPolicyResponse(BaseModel):
+    id: int
+    data_category: str
+    retention_days: int
+    auto_delete: bool
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    action: str
+    resource_type: str
+    resource_id: Optional[int] = None
+    details: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class DataExportRequestCreate(BaseModel):
+    export_format: str = "json"
+
+class DataExportRequestResponse(BaseModel):
+    id: int
+    user_id: int
+    status: str
+    export_format: str
+    requested_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class PrivacyNoticeResponse(BaseModel):
+    version: str
+    effective_date: str
+    content: str
+    data_categories: List[str]
+    retention_summary: dict
+
+
+# ==================== ATS Schemas ====================
+
+class ATSConnectionCreate(BaseModel):
+    provider: str
+    api_key: str
+    api_base_url: Optional[str] = None
+
+class ATSConnectionResponse(BaseModel):
+    id: int
+    provider: str
+    is_active: bool
+    last_sync_at: Optional[datetime] = None
+    sync_status: str
+    sync_error: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ATSConnectionUpdate(BaseModel):
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ATSSyncTrigger(BaseModel):
+    sync_type: str = "full"
+
+class ATSSyncLogResponse(BaseModel):
+    id: int
+    connection_id: int
+    sync_type: str
+    status: str
+    records_synced: int
+    records_failed: int
+    error_details: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ATSJobMappingResponse(BaseModel):
+    id: int
+    ats_job_id: str
+    local_job_id: int
+    last_synced_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ATSCandidateMappingResponse(BaseModel):
+    id: int
+    ats_candidate_id: str
+    local_application_id: int
+    resume_synced: bool
+    last_synced_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ==================== Video Interview Schemas ====================
+
+class VideoInterviewCreate(BaseModel):
+    session_id: Optional[int] = None
+    job_id: int
+    candidate_id: int
+    interviewer_id: Optional[int] = None
+    scheduled_at: datetime
+    duration_minutes: int = 60
+
+class VideoInterviewResponse(BaseModel):
+    id: int
+    session_id: Optional[int] = None
+    job_id: int
+    candidate_id: int
+    interviewer_id: Optional[int] = None
+    zoom_meeting_url: Optional[str] = None
+    zoom_passcode: Optional[str] = None
+    status: str
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: int = 60
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    recording_consent: bool = False
+    candidate_name: Optional[str] = None
+    interviewer_name: Optional[str] = None
+    job_title: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class VideoInterviewUpdate(BaseModel):
+    status: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    notes: Optional[str] = None
+
+class VideoInterviewListResponse(BaseModel):
+    id: int
+    job_title: str
+    candidate_name: str
+    status: str
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: int = 60
+    has_fraud_analysis: bool = False
+    flag_count: int = 0
+    overall_trust_score: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class FraudAnalysisResponse(BaseModel):
+    id: int
+    video_interview_id: int
+    voice_consistency_score: Optional[float] = None
+    voice_consistency_details: Optional[str] = None
+    lip_sync_score: Optional[float] = None
+    lip_sync_details: Optional[str] = None
+    body_movement_score: Optional[float] = None
+    body_movement_details: Optional[str] = None
+    overall_trust_score: Optional[float] = None
+    flags: Optional[str] = None
+    flag_count: int = 0
+    analysis_status: str = "pending"
+    consent_granted: bool = False
+    analyzed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class FraudDashboardStats(BaseModel):
+    total_interviews: int
+    analyzed_count: int
+    flagged_count: int
+    average_trust_score: float
+    flag_breakdown: dict
+
+
+# ==================== Post-Hire Feedback Schemas ====================
+
+class PostHireFeedbackCreate(BaseModel):
+    candidate_id: int
+    job_id: int
+    session_id: Optional[int] = None
+    hire_date: datetime
+    overall_performance_score: float
+    technical_competence_score: Optional[float] = None
+    cultural_fit_score: Optional[float] = None
+    communication_score: Optional[float] = None
+    initiative_score: Optional[float] = None
+    strengths_observed: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
+    comments: Optional[str] = None
+    still_employed: bool = True
+    left_reason: Optional[str] = None
+    would_rehire: Optional[bool] = None
+
+class PostHireFeedbackResponse(BaseModel):
+    id: int
+    candidate_id: int
+    job_id: int
+    session_id: Optional[int] = None
+    submitted_by: int
+    hire_date: Optional[datetime] = None
+    feedback_date: Optional[datetime] = None
+    overall_performance_score: float
+    technical_competence_score: Optional[float] = None
+    cultural_fit_score: Optional[float] = None
+    communication_score: Optional[float] = None
+    initiative_score: Optional[float] = None
+    strengths_observed: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
+    comments: Optional[str] = None
+    still_employed: bool = True
+    left_reason: Optional[str] = None
+    would_rehire: Optional[bool] = None
+    candidate_name: Optional[str] = None
+    job_title: Optional[str] = None
+    submitter_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class PostHireFeedbackUpdate(BaseModel):
+    overall_performance_score: Optional[float] = None
+    technical_competence_score: Optional[float] = None
+    cultural_fit_score: Optional[float] = None
+    communication_score: Optional[float] = None
+    initiative_score: Optional[float] = None
+    strengths_observed: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
+    comments: Optional[str] = None
+    still_employed: Optional[bool] = None
+    left_reason: Optional[str] = None
+    would_rehire: Optional[bool] = None
+
+class QualityMetricResponse(BaseModel):
+    id: int
+    job_id: Optional[int] = None
+    metric_type: str
+    metric_value: float
+    sample_size: int
+    time_period_start: Optional[datetime] = None
+    time_period_end: Optional[datetime] = None
+    details: Optional[str] = None
+    computed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class QualityDashboardResponse(BaseModel):
+    overall_prediction_accuracy: float
+    score_performance_correlation: float
+    total_hires_tracked: int
+    hire_success_rate: float
+    average_performance_by_recommendation: dict
+    metrics_over_time: List[dict]

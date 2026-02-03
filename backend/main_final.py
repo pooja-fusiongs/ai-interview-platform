@@ -106,6 +106,58 @@ try:
 except Exception as e:
     print(f"⚠️ Could not load recruiter flow endpoints: {e}")
 
+# Import and mount GDPR endpoints
+try:
+    from api.gdpr.consent.app import router as gdpr_consent_router
+    from api.gdpr.deletion.app import router as gdpr_deletion_router
+    from api.gdpr.data_export.app import router as gdpr_export_router
+    from api.gdpr.retention.app import router as gdpr_retention_router
+    from api.gdpr.audit.app import router as gdpr_audit_router
+    from api.gdpr.privacy.app import router as gdpr_privacy_router
+    app.include_router(gdpr_consent_router, tags=["GDPR Consent"])
+    app.include_router(gdpr_deletion_router, tags=["GDPR Deletion"])
+    app.include_router(gdpr_export_router, tags=["GDPR Data Export"])
+    app.include_router(gdpr_retention_router, tags=["GDPR Retention"])
+    app.include_router(gdpr_audit_router, tags=["GDPR Audit"])
+    app.include_router(gdpr_privacy_router, tags=["GDPR Privacy"])
+    print("✅ GDPR endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load GDPR endpoints: {e}")
+
+# Import and mount ATS endpoints
+try:
+    from api.ats.connections.app import router as ats_connections_router
+    from api.ats.sync.app import router as ats_sync_router
+    from api.ats.webhooks.app import router as ats_webhooks_router
+    app.include_router(ats_connections_router, tags=["ATS Connections"])
+    app.include_router(ats_sync_router, tags=["ATS Sync"])
+    app.include_router(ats_webhooks_router, tags=["ATS Webhooks"])
+    print("✅ ATS endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load ATS endpoints: {e}")
+
+# Import and mount Video Interview endpoints
+try:
+    from api.video.interviews.app import router as video_interviews_router
+    from api.video.zoom.app import router as video_zoom_router
+    from api.video.fraud.app import router as video_fraud_router
+    app.include_router(video_interviews_router, tags=["Video Interviews"])
+    app.include_router(video_zoom_router, tags=["Zoom Integration"])
+    app.include_router(video_fraud_router, tags=["Fraud Detection"])
+    print("✅ Video Interview & Fraud Detection endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load Video Interview endpoints: {e}")
+
+# Import and mount Post-Hire Feedback endpoints
+try:
+    from api.feedback.submissions.app import router as feedback_submissions_router
+    from api.feedback.quality.app import router as feedback_quality_router
+    app.include_router(feedback_submissions_router, tags=["Post-Hire Feedback"])
+    app.include_router(feedback_quality_router, tags=["Quality Metrics"])
+    print("✅ Post-Hire Feedback & Quality Metrics endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load Feedback endpoints: {e}")
+
 print("✅ Auth Router included")
 print("🌐 CORS enabled for frontend")
 print("📡 API ready - ONLY YOUR DATABASE DATA")
