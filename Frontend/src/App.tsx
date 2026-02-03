@@ -20,6 +20,40 @@ import Profile from './components/layout/profile'
 import RecruiterCandidates from './components/recruiter/RecruiterCandidates'
 import RoleProtectedRoute from './components/common/RoleProtectedRoute'
 
+// GDPR Components
+import ConsentManager from './components/gdpr/ConsentManager'
+import DataExportPage from './components/gdpr/DataExportPage'
+import DeletionRequestPage from './components/gdpr/DeletionRequestPage'
+import PrivacyNotice from './components/gdpr/PrivacyNotice'
+import AdminAuditLog from './components/gdpr/AdminAuditLog'
+import AdminRetentionPolicies from './components/gdpr/AdminRetentionPolicies'
+import AdminDeletionRequests from './components/gdpr/AdminDeletionRequests'
+
+// ATS Components
+import ATSSettings from './components/ats/ATSSettings'
+import ATSSyncDashboard from './components/ats/ATSSyncDashboard'
+import ATSJobMappings from './components/ats/ATSJobMappings'
+
+// Video Interview Components
+import VideoInterviewScheduler from './components/video/VideoInterviewScheduler'
+import VideoInterviewList from './components/video/VideoInterviewList'
+import VideoInterviewRoom from './components/video/VideoInterviewRoom'
+import VideoInterviewDetail from './components/video/VideoInterviewDetail'
+import CandidateVideoConsent from './components/video/CandidateVideoConsent'
+
+// Fraud Detection Components
+import FraudDashboard from './components/fraud/FraudDashboard'
+import FraudAnalysisPanel from './components/fraud/FraudAnalysisPanel'
+import RealTimeFlagMonitor from './components/fraud/RealTimeFlagMonitor'
+
+// Post-Hire Feedback Components
+import FeedbackForm from './components/feedback/FeedbackForm'
+import FeedbackList from './components/feedback/FeedbackList'
+import FeedbackDetail from './components/feedback/FeedbackDetail'
+import QualityDashboard from './components/feedback/QualityDashboard'
+import PerformanceTracker from './components/feedback/PerformanceTracker'
+import ScoringRefinementPanel from './components/feedback/ScoringRefinementPanel'
+
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
@@ -240,8 +274,185 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
             
-            
-            
+
+            {/* GDPR Routes */}
+            <Route path="/consent-manager" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['candidate']}>
+                  <ConsentManager />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/data-export" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['candidate']}>
+                  <DataExportPage />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/deletion-request" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['candidate']}>
+                  <DeletionRequestPage />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/privacy-notice" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
+                  <PrivacyNotice />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin-audit-log" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin']}>
+                  <AdminAuditLog />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin-retention" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin']}>
+                  <AdminRetentionPolicies />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin-deletion-requests" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin']}>
+                  <AdminDeletionRequests />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* ATS Routes */}
+            <Route path="/ats-settings" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <ATSSettings />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/ats-sync" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <ATSSyncDashboard />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/ats-mappings" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <ATSJobMappings />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* Video Interview Routes */}
+            <Route path="/video-scheduler" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <VideoInterviewScheduler />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/video-interviews" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin', 'candidate']}>
+                  <VideoInterviewList />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/video-room/:videoId" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin', 'candidate']}>
+                  <VideoInterviewRoom />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/video-detail/:videoId" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <VideoInterviewDetail />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/video-consent" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['candidate']}>
+                  <CandidateVideoConsent />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* Fraud Detection Routes */}
+            <Route path="/fraud-dashboard" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <FraudDashboard />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/fraud-analysis/:videoId" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <FraudAnalysisPanel />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/fraud-monitor" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <RealTimeFlagMonitor />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* Post-Hire Feedback Routes */}
+            <Route path="/feedback-form" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <FeedbackForm />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/feedback-list" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <FeedbackList />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/feedback/:feedbackId" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <FeedbackDetail />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/quality-dashboard" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <QualityDashboard />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/performance-tracker" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
+                  <PerformanceTracker />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/scoring-refinement" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin']}>
+                  <ScoringRefinementPanel />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
             {/* Catch all - redirect to user's default route */}
             <Route path="*" element={
               <ProtectedRoute>

@@ -18,3 +18,5 @@ export const fraudDetectionService = {
     return response.data;
   },
 };
+
+export default fraudDetectionService;

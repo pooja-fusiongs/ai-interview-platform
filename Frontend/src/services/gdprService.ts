@@ -66,3 +66,5 @@ export const gdprService = {
     return response.data;
   },
 };
+
+export default gdprService;

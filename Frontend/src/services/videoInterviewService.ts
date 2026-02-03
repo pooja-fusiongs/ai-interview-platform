@@ -38,3 +38,5 @@ export const videoInterviewService = {
     return response.data;
   },
 };
+
+export default videoInterviewService;

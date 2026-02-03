@@ -42,3 +42,5 @@ export const atsService = {
     return response.data;
   },
 };
+
+export default atsService;

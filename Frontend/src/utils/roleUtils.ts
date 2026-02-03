@@ -114,6 +114,77 @@ export const getRouteAccess = (): RouteAccess[] => [
     label: 'Results',
     icon: 'fas fa-chart-bar'
   },
+  // Video Interviews
+  {
+    path: '/video-interviews',
+    allowedRoles: ['recruiter', 'admin', 'candidate'],
+    label: 'Video Interviews',
+    icon: 'fas fa-video'
+  },
+  {
+    path: '/video-scheduler',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Schedule Interview',
+    icon: 'fas fa-calendar-plus'
+  },
+  // Fraud Detection
+  {
+    path: '/fraud-dashboard',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Fraud Detection',
+    icon: 'fas fa-shield-alt'
+  },
+  {
+    path: '/fraud-monitor',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Live Monitor',
+    icon: 'fas fa-broadcast-tower'
+  },
+  // ATS Integration
+  {
+    path: '/ats-settings',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'ATS Integration',
+    icon: 'fas fa-plug'
+  },
+  // Post-Hire Feedback
+  {
+    path: '/feedback-list',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Post-Hire Feedback',
+    icon: 'fas fa-comment-dots'
+  },
+  {
+    path: '/quality-dashboard',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Quality Metrics',
+    icon: 'fas fa-chart-pie'
+  },
+  // GDPR / Privacy
+  {
+    path: '/consent-manager',
+    allowedRoles: ['candidate'],
+    label: 'Privacy & Consent',
+    icon: 'fas fa-lock'
+  },
+  {
+    path: '/privacy-notice',
+    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
+    label: 'Privacy Notice',
+    icon: 'fas fa-file-alt'
+  },
+  {
+    path: '/admin-audit-log',
+    allowedRoles: ['admin'],
+    label: 'Audit Log',
+    icon: 'fas fa-clipboard-list'
+  },
+  {
+    path: '/admin-retention',
+    allowedRoles: ['admin'],
+    label: 'Data Retention',
+    icon: 'fas fa-database'
+  },
   {
     path: '/candidate-profile',
     allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],

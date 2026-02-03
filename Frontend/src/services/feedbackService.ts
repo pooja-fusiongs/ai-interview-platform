@@ -42,3 +42,5 @@ export const feedbackService = {
     return response.data;
   },
 };
+
+export default feedbackService;
