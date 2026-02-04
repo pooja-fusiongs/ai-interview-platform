@@ -636,7 +636,7 @@ const Candidates = () => {
                         transition: 'all 0.3s ease',
                         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                         '&:hover': {
-                          transform: 'translateY(-2px)',
+                          // transform: 'translateY(-2px)',
                           boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)'
                         }
                       }}>

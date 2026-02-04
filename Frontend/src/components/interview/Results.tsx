@@ -21,7 +21,19 @@ const Results = () => {
   const [selectedSession, setSelectedSession] = useState<InterviewSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 8
+  // Calculate pagination
+  const totalPages = Math.ceil(sessions.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedSessions = sessions.slice(startIndex, endIndex) 
+  const handlePageChange = (_event: React.ChangeEvent<unknown> | null, value: number) => {
+    if (value >= 1 && value <= totalPages) {
+      setCurrentPage(value)
+    }
+  }
   useEffect(() => {
     loadData()
   }, [])
@@ -34,6 +46,8 @@ const Results = () => {
       }
       const list = await interviewService.listInterviews()
       setSessions(list)
+      // Reset to first page when data loads
+      setCurrentPage(1)
     } catch (err: any) {
       console.error('Error loading results:', err)
       setError('Failed to load interview results. Make sure you are logged in.')
@@ -98,10 +112,13 @@ const Results = () => {
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* Back button */}
+    {/* Back button */}
         {sessions.length > 1 && (
           <Button
-            onClick={() => setSelectedSession(null)}
+            onClick={() => {
+              setSelectedSession(null)
+              setCurrentPage(1) // Reset to first page when going back to list
+            }}
             sx={{
               alignSelf: 'flex-start',
               textTransform: 'none',
@@ -119,7 +136,7 @@ const Results = () => {
         )}
 
         {/* Score overview card */}
-        <Card sx={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <Card sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
           <Box sx={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Box sx={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#f59e0b,#d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px' }}>
               <i className="fas fa-chart-bar"></i>
@@ -139,7 +156,7 @@ const Results = () => {
             />
           </Box>
 
-          <CardContent sx={{ padding: '24px' }}>
+          <CardContent sx={{ padding: '24px', }}>
             {/* Top row: score + candidate info */}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, gap: '24px', mb: '24px' }}>
               {/* Score circle */}
@@ -224,7 +241,25 @@ const Results = () => {
                 Answer Breakdown
               </Typography>
             </Box>
-            <CardContent sx={{ padding: '16px 24px' }}>
+            <CardContent sx={{ 
+              padding: '16px 24px',
+              // maxHeight: '400px',
+              overflowY: 'auto',
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f5f9',
+                borderRadius: '3px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#cbd5e1',
+                borderRadius: '3px',
+                '&:hover': {
+                  background: '#94a3b8',
+                },
+              },
+            }}>
               {selectedSession.answers.map((answer, idx) => {
                 const asc = scoreColor(answer.score)
                 return (
@@ -357,115 +392,280 @@ const Results = () => {
 
   // ─── List View ───────────────────────────────────────────────────────────────
   const renderList = () => (
-    <Card sx={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-      <Box sx={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <i className="fas fa-list" style={{ color: '#f59e0b', fontSize: 14 }}></i>
-        <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>All Interviews</Typography>
-      </Box>
-      <CardContent sx={{ padding: '16px 24px' }}>
-        {error && (
-          <Box sx={{ padding: '12px 16px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '13px', mb: '16px' }}>
-            <i className="fas fa-exclamation-circle" style={{ marginRight: 8 }}></i>{error}
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: 'calc(100vh - 120px)', // Fixed height
+      minHeight: '600px' ,
+      overflow:"hidden"
+    }}>
+      <Card sx={{
+        borderRadius: '16px',
+        border: '1px solid #e2e8f0',
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0
+      }}>
+        <Box sx={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <i className="fas fa-chart-bar" style={{ color: '#f59e0b', fontSize: 14 }}></i>
+            <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b' }}> Interviews Result</Typography>
           </Box>
-        )}
-
-        {sessions.length === 0 ? (
-          <Box sx={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-            <Box sx={{ fontSize: '40px', mb: '12px', opacity: 0.4 }}>
-              <i className="fas fa-inbox"></i>
+          
+        </Box>
+        
+        <CardContent sx={{
+          padding: '16px 24px',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0
+        }}>
+          {error && (
+            <Box sx={{ padding: '12px 16px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '13px', mb: '16px' }}>
+              <i className="fas fa-exclamation-circle" style={{ marginRight: 8 }}></i>{error}
             </Box>
-            <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>No interview results yet</Typography>
-            <Typography sx={{ fontSize: '12px', mt: '4px' }}>Complete an interview to see results here.</Typography>
-          </Box>
-        ) : (
-          sessions.map((s) => {
-            const rec = recChip(s.recommendation)
-            const sc = scoreColor(s.overall_score)
-            return (
-              <Box
-                key={s.id}
-                onClick={() => viewSession(s.id)}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '16px 0',
-                  borderBottom: '1px solid #f1f5f9',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  '&:hover': { background: '#fefce8', margin: '0 -24px', padding: '16px 24px', borderRadius: '10px' },
-                  '&:last-child': { borderBottom: 'none' },
-                }}
-              >
-                {/* Left */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
-                  <Avatar sx={{ width: 42, height: 42, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: '15px' }}>
-                    <i className="fas fa-user"></i>
-                  </Avatar>
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {s.candidate_name || 'Candidate'}
-                    </Typography>
-                    <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                      {s.job_title || 'Position'} &middot; {s.answered_questions}/{s.total_questions} answered
-                    </Typography>
-                    {s.completed_at && (
-                      <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
-                        {new Date(s.completed_at).toLocaleDateString()}
-                      </Typography>
-                    )}
-                  </Box>
-                </Box>
+          )}
 
-                {/* Right: score + rec */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-                  {s.overall_score != null && (
-                    <Box sx={{ width: 48, height: 48, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <Typography sx={{ fontSize: '16px', fontWeight: 800, color: sc.text, lineHeight: 1 }}>
-                        {s.overall_score.toFixed(1)}
-                      </Typography>
-                      <Typography sx={{ fontSize: '9px', color: sc.text, opacity: 0.7 }}>/10</Typography>
-                    </Box>
-                  )}
-                  {s.recommendation && (
-                    <Chip
-                      label={rec.label}
-                      size="small"
-                      sx={{
-                        fontWeight: 600,
-                        fontSize: '11px',
-                        backgroundColor: rec.bg,
-                        color: rec.color,
-                        height: '26px',
-                      }}
-                    />
-                  )}
-                  <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: 12 }}></i>
-                </Box>
+          {sessions.length === 0 ? (
+            <Box sx={{ 
+              textAlign: 'center', 
+              padding: '40px 0', 
+              color: '#94a3b8',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Box sx={{ fontSize: '40px', mb: '12px', opacity: 0.4 }}>
+                <i className="fas fa-inbox"></i>
               </Box>
-            )
-          })
-        )}
-      </CardContent>
-    </Card>
+              <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>No interview results yet</Typography>
+              <Typography sx={{ fontSize: '12px', mt: '4px' }}>Complete an interview to see results here.</Typography>
+            </Box>
+          ) : (
+            <Box sx={{
+              flex: 1,
+              overflowY: 'auto',
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f5f9',
+                borderRadius: '3px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#cbd5e1',
+                borderRadius: '3px',
+                '&:hover': {
+                  background: '#94a3b8',
+                },
+              },
+            }}>
+              {paginatedSessions.map((s) => {
+                const rec = recChip(s.recommendation)
+                const sc = scoreColor(s.overall_score)
+                return (
+                  <Box
+                    key={s.id}
+                    onClick={() => viewSession(s.id)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '16px 0',
+                      borderBottom: '1px solid #f1f5f9',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      '&:hover': { background: '#fefce8', margin: '0 -24px', padding: '16px 24px', borderRadius: '10px' },
+                      '&:last-child': { borderBottom: 'none' },
+                    }}
+                  >
+                    {/* Left */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+                      <Avatar sx={{ width: 42, height: 42, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: '15px' }}>
+                        <i className="fas fa-user"></i>
+                      </Avatar>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {s.candidate_name || 'Candidate'}
+                        </Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                          {s.job_title || 'Position'} &middot; {s.answered_questions}/{s.total_questions} answered
+                        </Typography>
+                        {s.completed_at && (
+                          <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
+                            {new Date(s.completed_at).toLocaleDateString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+
+                    {/* Right: score + rec */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                      {s.overall_score != null && (
+                        <Box sx={{ width: 48, height: 48, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                          <Typography sx={{ fontSize: '16px', fontWeight: 800, color: sc.text, lineHeight: 1 }}>
+                            {s.overall_score.toFixed(1)}
+                          </Typography>
+                          <Typography sx={{ fontSize: '9px', color: sc.text, opacity: 0.7 }}>/10</Typography>
+                        </Box>
+                      )}
+                      {s.recommendation && (
+                        <Chip
+                          label={rec.label}
+                          size="small"
+                          sx={{
+                            fontWeight: 600,
+                            fontSize: '11px',
+                            backgroundColor: rec.bg,
+                            color: rec.color,
+                            height: '26px',
+                          }}
+                        />
+                      )}
+                      <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: 12 }}></i>
+                    </Box>
+                  </Box>
+                )
+              })}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Fixed Pagination at Bottom */}
+      {sessions.length > itemsPerPage && (
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          gap: '12px', 
+          // mt: '20px',
+          backgroundColor: '#f8fafc',
+          paddingTop: '16px'
+        }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+          }}>
+            {/* Previous Button */}
+            <Button
+              onClick={() => handlePageChange(null, currentPage - 1)}
+              disabled={currentPage === 1}
+              sx={{
+                minWidth: '36px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                padding: 0,
+                color: currentPage === 1 ? '#cbd5e1' : '#64748b',
+                '&:hover': {
+                  backgroundColor: currentPage === 1 ? 'transparent' : '#f1f5f9',
+                },
+                '&:disabled': {
+                  color: '#cbd5e1',
+                },
+              }}
+            >
+              <i className="fas fa-chevron-left" style={{ fontSize: '12px' }} />
+            </Button>
+
+            {/* Page Numbers */}
+            {Array.from({ length: totalPages }, (_, index) => {
+              const pageNumber = index + 1
+              const isCurrentPage = pageNumber === currentPage
+              
+              // Show first page, last page, current page, and pages around current
+              const showPage = 
+                pageNumber === 1 || 
+                pageNumber === totalPages || 
+                (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+              
+              if (!showPage) {
+                // Show ellipsis for gaps
+                if (pageNumber === currentPage - 2 || pageNumber === currentPage + 2) {
+                  return (
+                    <Box key={`ellipsis-${pageNumber}`} sx={{ 
+                      color: '#cbd5e1', 
+                      fontSize: '14px',
+                      padding: '0 4px'
+                    }}>
+                      ...
+                    </Box>
+                  )
+                }
+                return null
+              }
+
+              return (
+                <Button
+                  key={pageNumber}
+                  onClick={() => handlePageChange(null, pageNumber)}
+                  sx={{
+                    minWidth: '36px',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    padding: 0,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    backgroundColor: isCurrentPage ? '#6366f1' : 'transparent',
+                    color: isCurrentPage ? 'white' : '#64748b',
+                    '&:hover': {
+                      backgroundColor: isCurrentPage ? '#5b5bd6' : '#f1f5f9',
+                    },
+                  }}
+                >
+                  {pageNumber}
+                </Button>
+              )
+            })}
+
+            {/* Next Button */}
+            <Button
+              onClick={() => handlePageChange(null, currentPage + 1)}
+              disabled={currentPage === totalPages}
+              sx={{
+                minWidth: '36px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                padding: 0,
+                color: currentPage === totalPages ? '#cbd5e1' : '#64748b',
+                '&:hover': {
+                  backgroundColor: currentPage === totalPages ? 'transparent' : '#f1f5f9',
+                },
+                '&:disabled': {
+                  color: '#cbd5e1',
+                },
+              }}
+            >
+              <i className="fas fa-chevron-right" style={{ fontSize: '12px' }} />
+            </Button>
+          </Box>
+          
+         
+        </Box>
+      )}
+    </Box>
   )
+
 
   // ─── Main Render ─────────────────────────────────────────────────────────────
   return (
-    <Navigation>
-      <Box sx={{ padding: '24px', background: '#f8fafc', minHeight: '100%' }}>
-        <Box sx={{ mb: '24px' }}>
-          <Typography sx={{ fontSize: '22px', fontWeight: 700, color: '#1e293b' }}>
-            <i className="fas fa-chart-bar" style={{ color: '#f59e0b', marginRight: 10 }}></i>
-            Interview Results
-          </Typography>
-          <Typography sx={{ fontSize: '13px', color: '#64748b', mt: '4px' }}>
-            {selectedSession
-              ? `Viewing results for ${selectedSession.candidate_name || 'candidate'}`
-              : `${sessions.length} interview${sessions.length !== 1 ? 's' : ''} completed`}
-          </Typography>
-        </Box>
-
+    <Navigation noScroll={!selectedSession}>
+      <Box sx={{
+        padding: '24px',
+        background: '#f8fafc',
+        minHeight: selectedSession ? 'auto' : '900px',
+        overflow: 'hidden',
+      }}>
         {selectedSession ? renderDetail() : renderList()}
       </Box>
     </Navigation>

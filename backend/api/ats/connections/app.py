@@ -217,12 +217,24 @@ def test_connection(
     connection = _get_connection_or_404(connection_id, db, current_user)
 
     try:
-        decrypted_key = decrypt_pii(connection.api_key)
-        connector = get_connector(connection.provider)
-        connector.test_connection(
-            api_key=decrypted_key,
-            base_url=connection.base_url,
-        )
+        # Decrypt the API key
+        try:
+            decrypted_key = decrypt_pii(connection.api_key_encrypted)
+        except Exception:
+            decrypted_key = connection.api_key_encrypted or ""
+
+        # Get provider value safely
+        provider_val = connection.provider.value if hasattr(connection.provider, 'value') else str(connection.provider)
+
+        # Create connector and test
+        connector = get_connector(provider_val, decrypted_key, connection.api_base_url)
+        result = connector.test_connection()
+
+        if not result:
+            return {
+                "status": "failure",
+                "message": "Connection test failed: Could not connect to ATS API",
+            }
     except Exception as exc:
         return {
             "status": "failure",
@@ -233,6 +245,8 @@ def test_connection(
         db=db,
         user_id=current_user.id,
         action="ats_connection_tested",
+        resource_type="ats_connection",
+        resource_id=connection.id,
         details=f"Tested ATS connection id={connection.id} — success",
     )
 

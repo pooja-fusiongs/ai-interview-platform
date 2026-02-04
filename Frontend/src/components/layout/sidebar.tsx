@@ -6,9 +6,10 @@ import { getAccessibleRoutes, getRoleColor } from '../../utils/roleUtils'
 
 interface NavigationProps {
   children: React.ReactNode;
+  noScroll?: boolean;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ children }) => {
+const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
@@ -243,7 +244,7 @@ const Navigation: React.FC<NavigationProps> = ({ children }) => {
         </Box>
 
         {/* Content Area with Scroll */}
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, overflow: noScroll ? 'hidden' : 'auto' }}>
           {children}
         </Box>
       </Box>

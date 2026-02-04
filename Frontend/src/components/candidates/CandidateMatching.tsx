@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useSearchParams,  } from 'react-router-dom'
+import { useSearchParams, } from 'react-router-dom'
 import {
   Box,
   Typography,
@@ -13,7 +13,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Pagination,
+  // Pagination,
   IconButton,
   Tooltip,
   Dialog,
@@ -88,18 +88,18 @@ const CandidateMatching = () => {
   const [filterModalOpen, setFilterModalOpen] = useState(false)
   const [activeFilters, setActiveFilters] = useState<CandidateFilters>({})
   const [tempFilters, setTempFilters] = useState<CandidateFilters>({})
-  
+
   // Sorting state
   const [sortField, setSortField] = useState<string>('')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  
+
   // New states for enhancements
   const [matchScoreTooltip, setMatchScoreTooltip] = useState<{
     open: boolean;
     candidate: CandidateData | null;
     anchorEl: HTMLElement | null;
   }>({ open: false, candidate: null, anchorEl: null })
-  
+
   // State for detailed match score data
   const [detailedMatchScore, setDetailedMatchScore] = useState<DetailedMatchScore | null>(null)
 
@@ -319,20 +319,20 @@ const CandidateMatching = () => {
   const renderSortIcon = (field: string) => {
     if (sortField !== field) {
       return (
-        <i className="fas fa-sort" style={{ 
-          color: '#cbd5e1', 
-          fontSize: '12px', 
+        <i className="fas fa-sort" style={{
+          color: '#cbd5e1',
+          fontSize: '12px',
           marginLeft: '6px',
           opacity: 0.5,
           transition: 'all 0.2s ease'
         }}></i>
       )
     }
-    
+
     return (
-      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'}`} style={{ 
-        color: '#f59e0b', 
-        fontSize: '12px', 
+      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'}`} style={{
+        color: '#f59e0b',
+        fontSize: '12px',
         marginLeft: '6px',
         transition: 'all 0.2s ease'
       }}></i>
@@ -343,32 +343,32 @@ const CandidateMatching = () => {
   // Quick Actions
   const handleQuickAction = async (candidateId: number, action: 'shortlist' | 'reject') => {
     const loadingToast = showLoading(`${action === 'shortlist' ? 'Shortlisting' : 'Rejecting'} candidate...`)
-    
+
     try {
       console.log(`${action} candidate:`, candidateId)
       const response = await candidateService.updateCandidateStatus(candidateId, action)
-      
+
       // Dismiss loading toast
       dismissToast(loadingToast)
-      
+
       // Show success message
       showSuccess(`Candidate ${action === 'shortlist' ? 'shortlisted' : 'rejected'} successfully!`)
-      
+
       // Update the candidate status in the local state immediately for better UX
-      setCandidates(prevCandidates => 
-        prevCandidates.map(candidate => 
-          candidate.id === candidateId 
+      setCandidates(prevCandidates =>
+        prevCandidates.map(candidate =>
+          candidate.id === candidateId
             ? { ...candidate, status: response.status }
             : candidate
         )
       )
-      
+
       // Also refresh candidates list to ensure consistency
       fetchCandidates()
     } catch (error) {
       // Dismiss loading toast
       dismissToast(loadingToast)
-      
+
       console.error(`Error ${action}ing candidate:`, error)
       showError(`Error ${action}ing candidate. Please try again.`)
     }
@@ -396,7 +396,7 @@ const CandidateMatching = () => {
             language: 15
           }
         )
-        
+
         // Update the candidate data with detailed breakdown
         // This will be used in getMatchScoreBreakdown function
         setDetailedMatchScore(data)
@@ -430,7 +430,7 @@ const CandidateMatching = () => {
         overall: detailedMatchScore.totalScore
       }
     }
-    
+
     // Fallback to mock data that matches your image
     const overall = candidate.matchScore
     return {
@@ -444,10 +444,10 @@ const CandidateMatching = () => {
   // Enhanced Match Score Tooltip Component - Exact match to your image
   const MatchScoreTooltip = ({ candidate }: { candidate: CandidateData }) => {
     const breakdown = getMatchScoreBreakdown(candidate)
-    
+
     return (
-      <Box sx={{ 
-        padding: '12px 16px', 
+      <Box sx={{
+        padding: '12px 16px',
         minWidth: '240px',
         background: '#2d3748',
         borderRadius: '8px',
@@ -456,9 +456,9 @@ const CandidateMatching = () => {
         fontSize: '13px'
       }}>
         {/* Header */}
-        <Typography sx={{ 
-          fontWeight: 600, 
-          color: 'white', 
+        <Typography sx={{
+          fontWeight: 600,
+          color: 'white',
           marginBottom: '8px',
           display: 'flex',
           alignItems: 'center',
@@ -468,16 +468,16 @@ const CandidateMatching = () => {
           <i className="fas fa-chart-pie" style={{ fontSize: '12px', color: 'white' }} />
           Match Score Breakdown
         </Typography>
-        
+
         {/* Skills Match */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '4px'
         }}>
-          <Typography sx={{ 
-            color: 'white', 
+          <Typography sx={{
+            color: 'white',
             fontSize: '13px',
             fontWeight: 400,
             display: 'flex',
@@ -487,24 +487,24 @@ const CandidateMatching = () => {
             <i className="fas fa-cogs" style={{ fontSize: '11px', color: '#48bb78' }} />
             Skills Match
           </Typography>
-          <Typography sx={{ 
-            fontWeight: 600, 
-            color: 'white', 
+          <Typography sx={{
+            fontWeight: 600,
+            color: 'white',
             fontSize: '13px'
           }}>
             {breakdown.skillsMatch}%
           </Typography>
         </Box>
-        
+
         {/* Experience Match */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '4px'
         }}>
-          <Typography sx={{ 
-            color: 'white', 
+          <Typography sx={{
+            color: 'white',
             fontSize: '13px',
             fontWeight: 400,
             display: 'flex',
@@ -514,24 +514,24 @@ const CandidateMatching = () => {
             <i className="fas fa-briefcase" style={{ fontSize: '11px', color: '#ed8936' }} />
             Experience Match
           </Typography>
-          <Typography sx={{ 
-            fontWeight: 600, 
-            color: 'white', 
+          <Typography sx={{
+            fontWeight: 600,
+            color: 'white',
             fontSize: '13px'
           }}>
             {breakdown.experienceMatch}%
           </Typography>
         </Box>
-        
+
         {/* Location Match */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '8px'
         }}>
-          <Typography sx={{ 
-            color: 'white', 
+          <Typography sx={{
+            color: 'white',
             fontSize: '13px',
             fontWeight: 400,
             display: 'flex',
@@ -542,26 +542,26 @@ const CandidateMatching = () => {
             <i className="fas fa-map-marker-alt" style={{ fontSize: '11px', color: '#4299e1' }} />
             Location Match
           </Typography>
-          <Typography sx={{ 
-            fontWeight: 600, 
-            color: 'white', 
+          <Typography sx={{
+            fontWeight: 600,
+            color: 'white',
             fontSize: '13px'
           }}>
             {breakdown.locationMatch}%
           </Typography>
         </Box>
-        
+
         {/* Overall Score */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           paddingTop: '6px',
           borderTop: '1px solid #4a5568'
         }}>
-          <Typography sx={{ 
-            color: 'white', 
-            fontSize: '13px', 
+          <Typography sx={{
+            color: 'white',
+            fontSize: '13px',
             fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
@@ -570,8 +570,8 @@ const CandidateMatching = () => {
             <i className="fas fa-star" style={{ fontSize: '11px', color: '#f6e05e' }} />
             Overall Score
           </Typography>
-          <Typography sx={{ 
-            fontWeight: 700, 
+          <Typography sx={{
+            fontWeight: 700,
             color: 'white',
             fontSize: '13px'
           }}>
@@ -589,8 +589,8 @@ const CandidateMatching = () => {
     return '#ef4444' // red for 0-30%
   }
 
-  const CircularMatchScore = React.forwardRef<HTMLDivElement, { 
-    score: number; 
+  const CircularMatchScore = React.forwardRef<HTMLDivElement, {
+    score: number;
     onMouseEnter?: (event: React.MouseEvent<HTMLElement>) => void;
     onMouseLeave?: () => void;
     onClick?: () => void;
@@ -599,10 +599,10 @@ const CandidateMatching = () => {
     const color = getMatchScoreColor(score)
 
     return (
-      <Box 
-        ref={ref} 
-        sx={{ 
-          position: 'relative', 
+      <Box
+        ref={ref}
+        sx={{
+          position: 'relative',
           display: 'inline-flex',
           cursor: hoverable || onClick ? 'pointer' : 'default',
           '&:hover': (hoverable || onClick) ? {
@@ -697,7 +697,7 @@ const CandidateMatching = () => {
   }
 
   return (
-    <Navigation>
+    <Navigation noScroll={true}>
       <Box sx={{ padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>
 
         {/* Search and Filter Section */}
@@ -752,7 +752,7 @@ const CandidateMatching = () => {
               sx={{
                 minWidth: '120px',
                 height: '45px',
-                  border: '2px solid #f59e0b',
+                border: '2px solid #f59e0b',
                 color: '#f59e0b',
                 borderRadius: '8px',
                 fontSize: '14px',
@@ -760,7 +760,7 @@ const CandidateMatching = () => {
                 textTransform: 'none',
                 position: 'relative',
                 '&:hover': {
-                    border: '2px solid #f59e0b',
+                  border: '2px solid #f59e0b',
                   color: '#f59e0b',
                   background: 'rgba(245, 158, 11, 0.1)',
                 }
@@ -801,23 +801,24 @@ const CandidateMatching = () => {
         <Card sx={{
           borderRadius: '12px',
           border: '1px solid #e2e8f0',
-          overflow: 'hidden',
+          height: 'calc(100vh - 266px)', // Fixed height
+          minHeight: '677px',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
         }}>
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow sx={{ background: '#f8fafc' }}>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: sortField === 'matchScore' ? '#f59e0b' : '#374151', 
+                  <TableCell
+                    sx={{
+                      fontWeight: 700,
+                      color: sortField === 'matchScore' ? '#f59e0b' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
                       backgroundColor: sortField === 'matchScore' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
-                      '&:hover': { 
+                      '&:hover': {
                         color: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
                       }
@@ -829,16 +830,16 @@ const CandidateMatching = () => {
                       {renderSortIcon('matchScore')}
                     </Box>
                   </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: sortField === 'name' ? '#f59e0b' : '#374151', 
+                  <TableCell
+                    sx={{
+                      fontWeight: 700,
+                      color: sortField === 'name' ? '#f59e0b' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
                       backgroundColor: sortField === 'name' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
-                      '&:hover': { 
+                      '&:hover': {
                         color: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
                       }
@@ -850,16 +851,16 @@ const CandidateMatching = () => {
                       {renderSortIcon('name')}
                     </Box>
                   </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: sortField === 'email' ? '#f59e0b' : '#374151', 
+                  <TableCell
+                    sx={{
+                      fontWeight: 700,
+                      color: sortField === 'email' ? '#f59e0b' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
                       backgroundColor: sortField === 'email' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
-                      '&:hover': { 
+                      '&:hover': {
                         color: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
                       }
@@ -871,16 +872,16 @@ const CandidateMatching = () => {
                       {renderSortIcon('email')}
                     </Box>
                   </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: sortField === 'location' ? '#f59e0b' : '#374151', 
+                  <TableCell
+                    sx={{
+                      fontWeight: 700,
+                      color: sortField === 'location' ? '#f59e0b' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
                       backgroundColor: sortField === 'location' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
-                      '&:hover': { 
+                      '&:hover': {
                         color: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
                       }
@@ -892,16 +893,16 @@ const CandidateMatching = () => {
                       {renderSortIcon('location')}
                     </Box>
                   </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: sortField === 'category' ? '#f59e0b' : '#374151', 
+                  <TableCell
+                    sx={{
+                      fontWeight: 700,
+                      color: sortField === 'category' ? '#f59e0b' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
                       backgroundColor: sortField === 'category' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
-                      '&:hover': { 
+                      '&:hover': {
                         color: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
                       }
@@ -913,16 +914,16 @@ const CandidateMatching = () => {
                       {renderSortIcon('category')}
                     </Box>
                   </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: sortField === 'status' ? '#f59e0b' : '#374151', 
+                  <TableCell
+                    sx={{
+                      fontWeight: 700,
+                      color: sortField === 'status' ? '#f59e0b' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
                       backgroundColor: sortField === 'status' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
-                      '&:hover': { 
+                      '&:hover': {
                         color: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
                       }
@@ -939,7 +940,7 @@ const CandidateMatching = () => {
                   </TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>
+              <TableBody >
                 {loading ? (
                   <TableRow>
                     <TableCell colSpan={7} sx={{ textAlign: 'center', padding: '40px' }}>
@@ -1011,8 +1012,8 @@ const CandidateMatching = () => {
                                 }
                               }}
                             >
-                              <CircularMatchScore 
-                                score={candidate.matchScore} 
+                              <CircularMatchScore
+                                score={candidate.matchScore}
                                 onMouseEnter={(e) => handleMatchScoreHover(e, candidate)}
                                 onMouseLeave={handleMatchScoreLeave}
                                 hoverable={true}
@@ -1082,21 +1083,20 @@ const CandidateMatching = () => {
                           label={candidate.status}
                           size="small"
                           sx={{
-                            background: 
+                            background:
                               candidate.status === 'Shortlisted' ? '#dcfce7' :
-                              candidate.status === 'Rejected' ? '#fef2f2' :
-                              candidate.status === 'Applied' ? '#eff6ff' : '#f3f4f6',
-                            color: 
+                                candidate.status === 'Rejected' ? '#fef2f2' :
+                                  candidate.status === 'Applied' ? '#eff6ff' : '#f3f4f6',
+                            color:
                               candidate.status === 'Shortlisted' ? '#166534' :
-                              candidate.status === 'Rejected' ? '#dc2626' :
-                              candidate.status === 'Applied' ? '#1d4ed8' : '#374151',
+                                candidate.status === 'Rejected' ? '#dc2626' :
+                                  candidate.status === 'Applied' ? '#1d4ed8' : '#374151',
                             fontSize: '12px',
                             fontWeight: 600,
-                            border: `1px solid ${
-                              candidate.status === 'Shortlisted' ? '#bbf7d0' :
-                              candidate.status === 'Rejected' ? '#fecaca' :
-                              candidate.status === 'Applied' ? '#dbeafe' : '#e5e7eb'
-                            }`
+                            border: `1px solid ${candidate.status === 'Shortlisted' ? '#bbf7d0' :
+                                candidate.status === 'Rejected' ? '#fecaca' :
+                                  candidate.status === 'Applied' ? '#dbeafe' : '#e5e7eb'
+                              }`
                           }}
                         />
                       </TableCell>
@@ -1171,28 +1171,120 @@ const CandidateMatching = () => {
           </TableContainer>
         </Card>
 
-        {/* Pagination */}
+        {/* Pagination - Always Show */}
         <Box sx={{
           display: 'flex',
-          justifyContent: 'center',
-          marginTop: '24px'
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px',
+          mt: '20px'
         }}>
-          <Pagination
-            count={totalPages}
-            page={currentPage}
-            onChange={(_, page) => setCurrentPage(page)}
-            color="primary"
-            sx={{
-              '& .MuiPaginationItem-root': {
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 20px',
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+          }}>
+            {/* Previous Button */}
+            <Button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              sx={{
+                minWidth: '36px',
+                width: '36px',
+                height: '36px',
                 borderRadius: '8px',
-                fontWeight: 600
-              },
-              '& .Mui-selected': {
-                backgroundColor: '#6366f1 !important',
-                color: 'white'
+                padding: 0,
+                color: currentPage === 1 ? '#cbd5e1' : '#64748b',
+                '&:hover': {
+                  backgroundColor: currentPage === 1 ? 'transparent' : '#f1f5f9',
+                },
+                '&:disabled': {
+                  color: '#cbd5e1',
+                },
+              }}
+            >
+              <i className="fas fa-chevron-left" style={{ fontSize: '12px' }} />
+            </Button>
+
+            {/* Page Numbers */}
+            {Array.from({ length: Math.max(1, totalPages) }, (_, index) => {
+              const pageNumber = index + 1
+              const isCurrentPage = pageNumber === currentPage
+              const maxPages = Math.max(1, totalPages)
+
+              // Show first page, last page, current page, and pages around current
+              const showPage =
+                pageNumber === 1 ||
+                pageNumber === maxPages ||
+                (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+
+              if (!showPage && maxPages > 5) {
+                // Show ellipsis for gaps
+                if (pageNumber === currentPage - 2 || pageNumber === currentPage + 2) {
+                  return (
+                    <Box key={`ellipsis-${pageNumber}`} sx={{
+                      color: '#cbd5e1',
+                      fontSize: '14px',
+                      padding: '0 4px'
+                    }}>
+                      ...
+                    </Box>
+                  )
+                }
+                return null
               }
-            }}
-          />
+
+              return (
+                <Button
+                  key={pageNumber}
+                  onClick={() => setCurrentPage(pageNumber)}
+                  sx={{
+                    minWidth: '36px',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    padding: 0,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    backgroundColor: isCurrentPage ? '#6366f1' : 'transparent',
+                    color: isCurrentPage ? 'white' : '#64748b',
+                    '&:hover': {
+                      backgroundColor: isCurrentPage ? '#5b5bd6' : '#f1f5f9',
+                    },
+                  }}
+                >
+                  {pageNumber}
+                </Button>
+              )
+            })}
+
+            {/* Next Button */}
+            <Button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage >= Math.max(1, totalPages)}
+              sx={{
+                minWidth: '36px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                padding: 0,
+                color: currentPage >= Math.max(1, totalPages) ? '#cbd5e1' : '#64748b',
+                '&:hover': {
+                  backgroundColor: currentPage >= Math.max(1, totalPages) ? 'transparent' : '#f1f5f9',
+                },
+                '&:disabled': {
+                  color: '#cbd5e1',
+                },
+              }}
+            >
+              <i className="fas fa-chevron-right" style={{ fontSize: '12px' }} />
+            </Button>
+          </Box>
         </Box>
 
         {/* Filter Modal */}
@@ -1319,7 +1411,7 @@ const CandidateMatching = () => {
               onClick={handleApplyFilters}
               variant="contained"
               sx={{
-               background: 'rgba(245, 158, 11, 0.1)',
+                background: 'rgba(245, 158, 11, 0.1)',
                 color: '#f59e0b',
                 border: '2px solid #f59e0b',
                 borderRadius: '10px',

@@ -92,25 +92,59 @@ def trigger_sync(
         )
 
     try:
-        sync_log = sync_fn(db=db, connection_id=connection.id)
+        sync_result = sync_fn(db=db, connection_id=connection.id)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Sync failed: {str(exc)}",
         )
 
-    log_action(
-        db=db,
-        user_id=current_user.id,
-        action="ats_sync_triggered",
-        details=(
-            f"sync_type={payload.sync_type} "
-            f"connection_id={connection.id} "
-            f"sync_log_id={sync_log.id}"
-        ),
-    )
-
-    return sync_log
+    # Handle full_sync (returns dict) vs single sync (returns log object)
+    if payload.sync_type == "full":
+        job_log = sync_result.get("jobs")
+        cand_log = sync_result.get("candidates")
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action="ats_sync_triggered",
+            resource_type="ats_connection",
+            resource_id=connection.id,
+            details=f"sync_type=full connection_id={connection.id}",
+        )
+        return {
+            "sync_type": "full",
+            "connection_id": connection.id,
+            "jobs": {
+                "id": job_log.id,
+                "status": job_log.status.value if hasattr(job_log.status, 'value') else str(job_log.status),
+                "records_synced": job_log.records_synced,
+                "records_failed": job_log.records_failed,
+            } if job_log else None,
+            "candidates": {
+                "id": cand_log.id,
+                "status": cand_log.status.value if hasattr(cand_log.status, 'value') else str(cand_log.status),
+                "records_synced": cand_log.records_synced,
+                "records_failed": cand_log.records_failed,
+            } if cand_log else None,
+        }
+    else:
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action="ats_sync_triggered",
+            resource_type="ats_connection",
+            resource_id=connection.id,
+            details=f"sync_type={payload.sync_type} connection_id={connection.id} sync_log_id={sync_result.id}",
+        )
+        return {
+            "id": sync_result.id,
+            "connection_id": sync_result.connection_id,
+            "sync_type": sync_result.sync_type,
+            "status": sync_result.status.value if hasattr(sync_result.status, 'value') else str(sync_result.status),
+            "records_synced": sync_result.records_synced,
+            "records_failed": sync_result.records_failed,
+            "error_details": sync_result.error_details,
+        }
 
 
 @router.get("/api/ats/connections/{connection_id}/sync-logs")
