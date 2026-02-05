@@ -58,6 +58,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health check endpoint for Render
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "message": "AI Interview Platform API is running"}
+
 # Mount auth router
 app.include_router(auth_router)
 app.include_router(create_job_router)
