@@ -21,54 +21,50 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
         
         html_content = f"""
         <!DOCTYPE html>
-        <html lang="en">
+        <html>
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
         </head>
-        <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
-            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 30px 0;">
                 <tr>
-                    <td style="padding: 40px 20px;">
-                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    <td align="center">
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border: 1px solid #e0e0e0;">
+
                             <!-- Header -->
                             <tr>
-                                <td style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 40px 40px 30px 40px; text-align: center;">
-                                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">Interview Scheduled</h1>
-                                    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">AI Interview Platform</p>
+                                <td style="background-color: #f59e0b; padding: 25px; text-align: center;">
+                                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">Interview Scheduled</h1>
                                 </td>
                             </tr>
 
-                            <!-- Content -->
+                            <!-- Body -->
                             <tr>
-                                <td style="padding: 40px;">
-                                    <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                                        Dear <strong style="color: #1f2937;">{candidate_name}</strong>,
-                                    </p>
-                                    <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-                                        We are pleased to inform you that your interview has been scheduled for the position of <strong style="color: #f59e0b;">{job_title}</strong>.
+                                <td style="padding: 30px;">
+                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
+                                        Dear {candidate_name},
                                     </p>
 
-                                    <!-- Interview Details Card -->
-                                    <table role="presentation" style="width: 100%; background: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
+                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0;">
+                                        Your interview has been scheduled for the position of <strong>{job_title}</strong>.
+                                    </p>
+
+                                    <!-- Details Box -->
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; border: 1px solid #e5e5e5; margin-bottom: 25px;">
                                         <tr>
-                                            <td style="padding: 24px;">
-                                                <h3 style="color: #92400e; margin: 0 0 16px 0; font-size: 18px; font-weight: 600;">Interview Details</h3>
-                                                <table role="presentation" style="width: 100%;">
+                                            <td style="padding: 20px;">
+                                                <table width="100%" cellpadding="0" cellspacing="0">
                                                     <tr>
-                                                        <td style="padding: 8px 0; color: #78350f; font-size: 14px; width: 40px; vertical-align: top;">📅</td>
-                                                        <td style="padding: 8px 0; color: #78350f; font-size: 14px; font-weight: 500;">Date</td>
-                                                        <td style="padding: 8px 0; color: #1f2937; font-size: 14px; font-weight: 600; text-align: right;">{interview_date}</td>
+                                                        <td style="padding: 8px 0; color: #666666; font-size: 14px; width: 100px;">Date:</td>
+                                                        <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">{interview_date}</td>
                                                     </tr>
                                                     <tr>
-                                                        <td style="padding: 8px 0; color: #78350f; font-size: 14px; width: 40px; vertical-align: top;">⏰</td>
-                                                        <td style="padding: 8px 0; color: #78350f; font-size: 14px; font-weight: 500;">Time</td>
-                                                        <td style="padding: 8px 0; color: #1f2937; font-size: 14px; font-weight: 600; text-align: right;">{interview_time}</td>
+                                                        <td style="padding: 8px 0; color: #666666; font-size: 14px;">Time:</td>
+                                                        <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">{interview_time}</td>
                                                     </tr>
                                                     <tr>
-                                                        <td style="padding: 8px 0; color: #78350f; font-size: 14px; width: 40px; vertical-align: top;">💼</td>
-                                                        <td style="padding: 8px 0; color: #78350f; font-size: 14px; font-weight: 500;">Position</td>
-                                                        <td style="padding: 8px 0; color: #1f2937; font-size: 14px; font-weight: 600; text-align: right;">{job_title}</td>
+                                                        <td style="padding: 8px 0; color: #666666; font-size: 14px;">Position:</td>
+                                                        <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">{job_title}</td>
                                                     </tr>
                                                 </table>
                                             </td>
@@ -76,74 +72,31 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
                                     </table>
 
                                     {f'''
-                                    <!-- Meeting Link Button -->
-                                    <table role="presentation" style="width: 100%; margin-top: 30px;">
-                                        <tr>
-                                            <td style="text-align: center;">
-                                                <a href="{meeting_url}" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);">
-                                                    🎥 Join Interview Meeting
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="text-align: center; padding-top: 12px;">
-                                                <p style="color: #6b7280; font-size: 12px; margin: 0;">
-                                                    Or copy this link: <a href="{meeting_url}" style="color: #f59e0b; word-break: break-all;">{meeting_url}</a>
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    </table>
+                                    <p style="text-align: center; margin: 25px 0;">
+                                        <a href="{meeting_url}" style="display: inline-block; background-color: #f59e0b; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 14px; font-weight: 600;">Join Meeting</a>
+                                    </p>
                                     ''' if meeting_url else ''}
 
-                                    <!-- Tips Section -->
-                                    <table role="presentation" style="width: 100%; margin-top: 30px; background: #f9fafb; border-radius: 12px;">
-                                        <tr>
-                                            <td style="padding: 24px;">
-                                                <h4 style="color: #374151; margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">📋 Preparation Tips</h4>
-                                                <ul style="color: #6b7280; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
-                                                    <li>Test your camera and microphone before the interview</li>
-                                                    <li>Ensure you have a stable internet connection</li>
-                                                    <li>Choose a quiet, well-lit location</li>
-                                                    <li>Join the meeting 5 minutes early</li>
-                                                    <li>Have your resume and notes ready</li>
-                                                </ul>
-                                            </td>
-                                        </tr>
-                                    </table>
+                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 20px 0 0 0;">
+                                        Please be prepared and join on time.
+                                    </p>
 
-                                    <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 30px 0 0 0;">
-                                        We wish you the best of luck!
+                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 20px 0 0 0;">
+                                        Best regards,<br>
+                                        <strong>AI Interview Platform Team</strong>
                                     </p>
                                 </td>
                             </tr>
 
                             <!-- Footer -->
                             <tr>
-                                <td style="background: #f9fafb; padding: 30px 40px; border-top: 1px solid #e5e7eb;">
-                                    <table role="presentation" style="width: 100%;">
-                                        <tr>
-                                            <td style="text-align: center;">
-                                                <p style="color: #9ca3af; font-size: 14px; margin: 0 0 8px 0; font-weight: 600;">AI Interview Platform</p>
-                                                <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-                                                    Powered by intelligent recruitment technology
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-
-                        <!-- Disclaimer -->
-                        <table role="presentation" style="max-width: 600px; margin: 20px auto 0 auto;">
-                            <tr>
-                                <td style="text-align: center;">
-                                    <p style="color: #9ca3af; font-size: 11px; margin: 0;">
-                                        This is an automated message. Please do not reply directly to this email.<br>
-                                        If you have questions, please contact our support team.
+                                <td style="background-color: #f5f5f5; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
+                                    <p style="color: #999999; font-size: 12px; margin: 0;">
+                                        This is an automated message from AI Interview Platform.
                                     </p>
                                 </td>
                             </tr>
+
                         </table>
                     </td>
                 </tr>
