@@ -90,8 +90,14 @@ const SignUp = () => {
       })
 
       if (result.success) {
-        showSuccess('Account created successfully! Please login with your credentials.')
-        setTimeout(() => navigate('/login'), 1500)
+        // Check if message indicates auto-login worked
+        if (result.message?.includes('logged in')) {
+          showSuccess('Account created and logged in successfully!')
+          setTimeout(() => navigate('/dashboard'), 1500)
+        } else {
+          showSuccess('Account created successfully! Please login with your credentials.')
+          setTimeout(() => navigate('/login'), 1500)
+        }
       } else {
         // Check if user already exists
         if (result.message?.toLowerCase().includes('already exists') ||
