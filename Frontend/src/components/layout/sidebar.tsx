@@ -1,7 +1,7 @@
-import React from 'react'
-import { useNavigate, useLocation,  } from 'react-router-dom'
+import React, { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Box, Typography, Button, Avatar, Chip } from '@mui/material'
+import { Box, Typography, Button, Avatar, Chip, Menu, MenuItem, Divider } from '@mui/material'
 import { getAccessibleRoutes, getRoleColor } from '../../utils/roleUtils'
 
 interface NavigationProps {
@@ -13,6 +13,26 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const menuOpen = Boolean(anchorEl)
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget)
+  }
+
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+  }
+
+  const handleMenuItemClick = (path: string) => {
+    handleMenuClose()
+    navigate(path)
+  }
+
+  const handleLogout = () => {
+    handleMenuClose()
+    logout()
+  }
 
 
 
@@ -76,39 +96,63 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
           </Box>
         </Box>
         
-        <Box sx={{ flex: 1, padding: '20px 0', overflowY: 'auto' }}>
+        <Box sx={{
+          flex: 1,
+          padding: '20px 0',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          '&::-webkit-scrollbar': {
+            width: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#e2e8f0',
+            borderRadius: '10px',
+            transition: 'background 0.2s',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            background: '#cbd5e1',
+          },
+          '&:hover::-webkit-scrollbar-thumb': {
+            background: '#cbd5e1',
+          },
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#e2e8f0 transparent',
+        }}>
           {accessibleRoutes.map(route => (
-            <Box key={route.path}>
-              <Button
-                onClick={() => handleNavigation(route.path)}
-                sx={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '14px 20px',
-                  border: 'none',
-                  background: isActive(route.path) ? 'rgba(245, 158, 11, 0.1)' : 'none',
-                  color: isActive(route.path) ? 'black' : '#64748b',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  textAlign: 'left',
-                  justifyContent: 'flex-start',
-                  textTransform: 'none',
-                  '&:hover': {
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    color: '#f59e0b'
-                  }
-                }}
-              >
-                <i className={route.icon} style={{ width: '20px', textAlign: 'center', fontSize: '16px' }}></i>
-                <span>{route.label}</span>
-              </Button>
-              
-              
-            </Box>
+            <Button
+              key={route.path}
+              onClick={() => handleNavigation(route.path)}
+              sx={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '11px 20px',
+                border: 'none',
+                borderLeft: isActive(route.path) ? '3px solid #f59e0b' : '3px solid transparent',
+                background: isActive(route.path) ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
+                color: isActive(route.path) ? '#f59e0b' : '#64748b',
+                fontSize: '13px',
+                fontWeight: isActive(route.path) ? 600 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'left',
+                justifyContent: 'flex-start',
+                textTransform: 'none',
+                borderRadius: 0,
+                '&:hover': {
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  color: '#f59e0b',
+                  borderLeftColor: '#f59e0b'
+                }
+              }}
+            >
+              <i className={route.icon} style={{ width: '18px', textAlign: 'center', fontSize: '14px' }}></i>
+              <span>{route.label}</span>
+            </Button>
           ))}
         </Box>
 
@@ -212,22 +256,25 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
               />
             </Button>
            
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              color: '#1e293b',
-              border: '1px solid #e2e8f0',
-              '&:hover': {
-                background: '#f1f5f9',
-                borderColor: '#cbd5e1'
-              }
-            }}
-            onClick={() => handleNavigation('/candidate-profile')}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                color: '#1e293b',
+                border: menuOpen ? '1px solid #f59e0b' : '1px solid #e2e8f0',
+                background: menuOpen ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+                transition: 'all 0.2s',
+                '&:hover': {
+                  background: 'rgba(245, 158, 11, 0.05)',
+                  borderColor: '#f59e0b'
+                }
+              }}
+              onClick={handleMenuOpen}
             >
               <Avatar sx={{
                 width: 32,
@@ -238,8 +285,105 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
                 <i className="fas fa-user"></i>
               </Avatar>
               <span>{user?.name || user?.username || 'User'}</span>
-              <i className="fas fa-chevron-down"></i>
+              <i
+                className="fas fa-chevron-down"
+                style={{
+                  fontSize: '12px',
+                  transition: 'transform 0.2s',
+                  transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)'
+                }}
+              ></i>
             </Box>
+
+            {/* User Dropdown Menu */}
+            <Menu
+              anchorEl={anchorEl}
+              open={menuOpen}
+              onClose={handleMenuClose}
+              onClick={handleMenuClose}
+              PaperProps={{
+                elevation: 0,
+                sx: {
+                  overflow: 'visible',
+                  filter: 'drop-shadow(0px 4px 20px rgba(0,0,0,0.12))',
+                  mt: 1.5,
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  minWidth: 220,
+                  '&:before': {
+                    content: '""',
+                    display: 'block',
+                    position: 'absolute',
+                    top: 0,
+                    right: 20,
+                    width: 12,
+                    height: 12,
+                    bgcolor: 'background.paper',
+                    transform: 'translateY(-50%) rotate(45deg)',
+                    zIndex: 0,
+                    borderLeft: '1px solid #e2e8f0',
+                    borderTop: '1px solid #e2e8f0',
+                  },
+                },
+              }}
+              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            >
+              {/* User Info Header */}
+              <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f1f5f9' }}>
+                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                  {user?.name || user?.username || 'User'}
+                </Typography>
+                <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                  {user?.email || 'user@example.com'}
+                </Typography>
+              </Box>
+
+              <MenuItem
+                onClick={() => handleMenuItemClick('/candidate-profile')}
+                sx={{
+                  py: 1.5,
+                  px: 2,
+                  fontSize: '14px',
+                  gap: '12px',
+                  '&:hover': { background: 'rgba(245, 158, 11, 0.08)' }
+                }}
+              >
+                <i className="fas fa-user-circle" style={{ width: 20, color: '#64748b' }}></i>
+                My Profile
+              </MenuItem>
+
+              <MenuItem
+                onClick={() => handleMenuItemClick('/consent-manager')}
+                sx={{
+                  py: 1.5,
+                  px: 2,
+                  fontSize: '14px',
+                  gap: '12px',
+                  '&:hover': { background: 'rgba(245, 158, 11, 0.08)' }
+                }}
+              >
+                <i className="fas fa-shield-alt" style={{ width: 20, color: '#64748b' }}></i>
+                Privacy & Consent
+              </MenuItem>
+
+              <Divider sx={{ my: 1 }} />
+
+              <MenuItem
+                onClick={handleLogout}
+                sx={{
+                  py: 1.5,
+                  px: 2,
+                  fontSize: '14px',
+                  gap: '12px',
+                  color: '#ef4444',
+                  '&:hover': { background: 'rgba(239, 68, 68, 0.08)' }
+                }}
+              >
+                <i className="fas fa-sign-out-alt" style={{ width: 20 }}></i>
+                Sign Out
+              </MenuItem>
+            </Menu>
           </Box>
         </Box>
 

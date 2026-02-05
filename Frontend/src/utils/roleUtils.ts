@@ -184,18 +184,6 @@ export const getRouteAccess = (): RouteAccess[] => [
     allowedRoles: ['admin'],
     label: 'Data Retention',
     icon: 'fas fa-database'
-  },
-  {
-    path: '/candidate-profile',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
-    label: 'Profile',
-    icon: 'fas fa-user'
-  },
-  {
-    path: '/user-management',
-    allowedRoles: ['admin'],
-    label: 'User Management',
-    icon: 'fas fa-users-cog'
   }
 ];
 

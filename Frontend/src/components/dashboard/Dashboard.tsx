@@ -1,4 +1,4 @@
-
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
@@ -7,91 +7,209 @@ import {
   Card,
   CardContent,
   Avatar,
-  Chip
+  Chip,
+  CircularProgress,
+  Skeleton
 } from '@mui/material'
 import Navigation from '../layout/sidebar'
+import { jobService } from '../../services/jobService'
+import { videoInterviewService } from '../../services/videoInterviewService'
+import { questionGenerationService } from '../../services/questionGenerationService'
+import { useAuth } from '../../contexts/AuthContext'
+
+interface Job {
+  id: number
+  title: string
+  status: string
+  created_at: string
+  application_count?: number
+}
+
+interface Interview {
+  id: number
+  candidate_name: string
+  job_title: string
+  scheduled_at: string
+  status: string
+}
+
+interface QuestionSet {
+  id: number
+  job_title: string
+  candidate_name: string
+  total_questions: number
+  approved_questions: number
+  status: string
+  created_at: string
+  generation_mode: string
+}
 
 const Dashboard = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
-  const stats = [
-    { title: 'Active Jobs', value: '12', icon: 'fas fa-briefcase', color: 'blue', change: '+2 this week' },
-    { title: 'Total Candidates', value: '145', icon: 'fas fa-users', color: 'green', change: '+15 this week' },
-    { title: 'Interviews Scheduled', value: '8', icon: 'fas fa-calendar', color: 'orange', change: '3 today' },
-    { title: 'AI Questions Generated', value: '1,250', icon: 'fas fa-robot', color: 'purple', change: '+50 today' }
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    activeJobs: 0,
+    totalCandidates: 0,
+    scheduledInterviews: 0,
+    aiQuestions: 0
+  })
+  const [recentJobs, setRecentJobs] = useState<Job[]>([])
+  const [upcomingInterviews, setUpcomingInterviews] = useState<Interview[]>([])
+  const [recentQuestionSets, setRecentQuestionSets] = useState<QuestionSet[]>([])
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [])
+
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      // Fetch all data in parallel
+      const [jobsData, interviewsData, questionSetsData] = await Promise.allSettled([
+        jobService.getJobs({ limit: 5 }),
+        videoInterviewService.getInterviews(),
+        questionGenerationService.getQuestionSets()
+      ])
+
+      // Process jobs data
+      if (jobsData.status === 'fulfilled') {
+        const jobs = Array.isArray(jobsData.value) ? jobsData.value : []
+        setRecentJobs(jobs.slice(0, 3))
+
+        const activeJobsCount = jobs.filter((j: Job) => j.status === 'active' || j.status === 'Active').length
+        const totalApplicants = jobs.reduce((sum: number, j: Job) => sum + (j.application_count || 0), 0)
+
+        setStats(prev => ({
+          ...prev,
+          activeJobs: activeJobsCount || jobs.length,
+          totalCandidates: totalApplicants
+        }))
+      }
+
+      // Process interviews data
+      if (interviewsData.status === 'fulfilled') {
+        const interviews = Array.isArray(interviewsData.value) ? interviewsData.value : []
+        // Filter upcoming interviews (scheduled or confirmed)
+        const upcoming = interviews
+          .filter((i: Interview) => ['scheduled', 'confirmed', 'pending'].includes(i.status?.toLowerCase()))
+          .slice(0, 3)
+        setUpcomingInterviews(upcoming)
+
+        setStats(prev => ({
+          ...prev,
+          scheduledInterviews: interviews.length
+        }))
+      }
+
+      // Process question sets data
+      if (questionSetsData.status === 'fulfilled') {
+        const questionSets = questionSetsData.value?.data || []
+        setRecentQuestionSets(Array.isArray(questionSets) ? questionSets.slice(0, 3) : [])
+
+        const totalQuestions = Array.isArray(questionSets)
+          ? questionSets.reduce((sum: number, qs: QuestionSet) => sum + (qs.total_questions || 0), 0)
+          : 0
+
+        setStats(prev => ({
+          ...prev,
+          aiQuestions: totalQuestions
+        }))
+      }
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A'
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays} days ago`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`
+    return date.toLocaleDateString()
+  }
+
+  const formatInterviewTime = (dateStr: string) => {
+    if (!dateStr) return 'N/A'
+    const date = new Date(dateStr)
+    const now = new Date()
+    const isToday = date.toDateString() === now.toDateString()
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const isTomorrow = date.toDateString() === tomorrow.toDateString()
+
+    const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+
+    if (isToday) return `${time} Today`
+    if (isTomorrow) return `${time} Tomorrow`
+    return `${time} ${date.toLocaleDateString()}`
+  }
+
+  const statsConfig = [
+    { title: 'Active Jobs', value: stats.activeJobs, icon: 'fas fa-briefcase', color: 'blue', change: 'Total active' },
+    { title: 'Total Candidates', value: stats.totalCandidates, icon: 'fas fa-users', color: 'green', change: 'Applicants' },
+    { title: 'Interviews Scheduled', value: stats.scheduledInterviews, icon: 'fas fa-calendar', color: 'orange', change: 'Upcoming' },
+    { title: 'AI Questions Generated', value: stats.aiQuestions, icon: 'fas fa-robot', color: 'purple', change: 'Total generated' }
   ]
-
-  const recentJobs = [
-    { id: 1, title: 'Senior Software Engineer', applicants: 25, status: 'Active', created: '2 days ago' },
-    { id: 2, title: 'Frontend Developer', applicants: 18, status: 'Active', created: '5 days ago' },
-    { id: 3, title: 'Data Scientist', applicants: 12, status: 'Draft', created: '1 week ago' }
-  ]
-
-  const upcomingInterviews = [
-    { id: 1, candidate: 'John Smith', position: 'Senior Software Engineer', time: '2:00 PM Today', status: 'Scheduled' },
-    { id: 2, candidate: 'Sarah Johnson', position: 'Frontend Developer', time: '10:00 AM Tomorrow', status: 'Confirmed' },
-    { id: 3, candidate: 'Mike Chen', position: 'Data Scientist', time: '3:30 PM Tomorrow', status: 'Pending' }
-  ]
-
-  const recentQuestionGenerations = [
-    { id: 1, candidate: 'John Smith', job: 'Senior Software Engineer', questions: 10, status: 'Generated', time: '2 hours ago', mode: 'Preview' },
-    { id: 2, candidate: 'Sarah Johnson', job: 'Frontend Developer', questions: 10, status: 'Pending Review', time: '4 hours ago', mode: 'Preview' },
-    { id: 3, candidate: 'Mike Chen', job: 'Data Scientist', questions: 10, status: 'Approved', time: '1 day ago', mode: 'Preview' }
-  ]
-
- 
 
   const renderOverview = () => (
-    <Box sx={{ padding: '20px', background: '#f8fafc', height: '100%' }}>
-
-
+    <Box sx={{ padding: '20px', background: '#f8fafc', minHeight: '100%' }}>
       {/* Stats Cards */}
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: {
-            xs: "1fr",                // mobile
-            sm: "repeat(2, 1fr)",     // tablet
-            md: "repeat(4, 1fr)",     // desktop
+            xs: "1fr",
+            sm: "repeat(2, 1fr)",
+            md: "repeat(4, 1fr)",
           },
-          gap: "20px",
-          marginBottom: "24px",
+          gap: "16px",
+          marginBottom: "20px",
         }}
       >
-        {stats.map((stat, index) => (
+        {statsConfig.map((stat, index) => (
           <Card
             key={index}
             sx={{
-              padding: "20px",
-              borderRadius: "16px",
+              padding: "16px",
+              borderRadius: "12px",
               border: "1px solid #e2e8f0",
               display: "flex",
               alignItems: "center",
-              gap: "16px",
-              height: "100px",
+              gap: "14px",
               background: "#fff",
               boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-              transition: "all 0.3s ease",
+              transition: "all 0.2s ease",
               "&:hover": {
                 transform: "translateY(-2px)",
-                boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
               },
             }}
           >
-            {/* Icon */}
             <Box
               sx={{
-                width: 56,
-                height: 56,
-                borderRadius: "14px",
+                width: 48,
+                height: 48,
+                borderRadius: "10px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "20px",
+                fontSize: "18px",
                 color: "#fff",
+                flexShrink: 0,
                 background:
                   stat.color === "blue"
-                    ? "linear-gradient(135deg,#f59e0b,#d97706)"
+                    ? "linear-gradient(135deg,#3b82f6,#2563eb)"
                     : stat.color === "green"
                       ? "linear-gradient(135deg,#10b981,#059669)"
                       : stat.color === "orange"
@@ -102,230 +220,212 @@ const Dashboard = () => {
               <i className={stat.icon}></i>
             </Box>
 
-            {/* Text */}
-            <Box sx={{ flex: 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              {loading ? (
+                <Skeleton width={60} height={32} />
+              ) : (
+                <Typography
+                  sx={{
+                    fontSize: "24px",
+                    fontWeight: 700,
+                    color: "#1e293b",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {stat.value.toLocaleString()}
+                </Typography>
+              )}
               <Typography
                 sx={{
-                  fontSize: "26px",
-                  fontWeight: 700,
-                  color: "#1e293b",
-                  lineHeight: 1,
-                }}
-              >
-                {stat.value}
-              </Typography>
-
-              <Typography
-                sx={{
-                  fontSize: "14px",
+                  fontSize: "13px",
                   color: "#64748b",
                   fontWeight: 500,
-                  margin: "6px 0",
                 }}
               >
                 {stat.title}
               </Typography>
-
-              <Chip
-                label={stat.change}
-                size="small"
-                sx={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  height: "22px",
-                  background: "#dcfce7",
-                  color: "#166534",
-                }}
-              />
             </Box>
           </Card>
         ))}
       </Box>
 
-
-      {/* Recent Activity - Two Column Layout */}
-      <Box sx={{display:"grid",gridTemplateColumns:{sm:"1fr",lg:"1fr 1fr"},gap:"20px "}} >
-        <Box>
-          <Card sx={{
-            borderRadius: '12px',
-            border: '1px solid #e2e8f0',
-            overflow: 'hidden',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            height: 'fit-content'
+      {/* Two Column Layout */}
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: "16px", mb: "16px" }}>
+        {/* Recent Jobs */}
+        <Card sx={{
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+        }}>
+          <Box sx={{
+            padding: '14px 16px',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(245, 158, 11, 0.08)'
           }}>
-            <Box sx={{
-              padding: '16px 20px',
-              borderBottom: '1px solid #f1f5f9',
+            <Typography sx={{
+              fontSize: '15px',
+              fontWeight: 600,
+              color: '#1e293b',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'rgba(245, 158, 11, 0.1)'
+              gap: '8px'
             }}>
-              <Typography variant="h6" sx={{
-                fontSize: '16px',
-                fontWeight: 600,
-                color: '#1e293b',
-                margin: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <i className="fas fa-briefcase" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
-                Recent Jobs
-              </Typography>
-              <Button 
-               onClick={() => navigate('/jobs')}
+              <i className="fas fa-briefcase" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
+              Recent Jobs
+            </Typography>
+            <Button
+              onClick={() => navigate('/jobs')}
               sx={{
-                background: 'none',
-                border: 'none',
                 color: '#f59e0b',
                 fontSize: '12px',
                 fontWeight: 500,
-                textDecoration: 'none',
                 padding: '4px 8px',
                 borderRadius: '6px',
                 textTransform: 'none',
                 minWidth: 'auto',
-                '&:hover': {
-                  background: '#fef3c7'
-                }
+                '&:hover': { background: '#fef3c7' }
               }}>
-                View All
-              </Button>
-            </Box>
-            <CardContent sx={{ padding: '20px' }}>
-              {recentJobs.map(job => (
+              View All
+            </Button>
+          </Box>
+          <CardContent sx={{ padding: '0 !important' }}>
+            {loading ? (
+              <Box sx={{ p: 2 }}>
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} height={50} sx={{ mb: 1 }} />
+                ))}
+              </Box>
+            ) : recentJobs.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: 'center', color: '#64748b' }}>
+                <i className="fas fa-briefcase" style={{ fontSize: 24, marginBottom: 8, opacity: 0.5 }}></i>
+                <Typography sx={{ fontSize: '13px' }}>No jobs found</Typography>
+              </Box>
+            ) : (
+              recentJobs.map((job, idx) => (
                 <Box key={job.id} sx={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '12px 0',
-                  borderBottom: job.id === recentJobs.length ? 'none' : '1px solid #f1f5f9',
-                  '&:first-of-type': {
-                    paddingTop: 0
-                  },
-                  '&:last-child': {
-                    paddingBottom: 0
-                  }
+                  padding: '12px 16px',
+                  borderBottom: idx < recentJobs.length - 1 ? '1px solid #f1f5f9' : 'none',
+                  '&:hover': { background: '#fafafa' }
                 }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="h6" sx={{
-                      fontSize: '14px',
+                    <Typography sx={{
+                      fontSize: '13px',
                       fontWeight: 600,
                       color: '#1e293b',
-                      margin: '0 0 4px 0'
+                      mb: '2px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
                     }}>
                       {job.title}
                     </Typography>
-                    <Typography sx={{
-                      fontSize: '12px',
-                      color: '#64748b',
-                      margin: 0
-                    }}>
-                      {job.applicants} applicants • {job.created}
+                    <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
+                      {job.application_count || 0} applicants • {formatDate(job.created_at)}
                     </Typography>
                   </Box>
                   <Chip
-                    label={job.status}
+                    label={job.status || 'Active'}
                     size="small"
                     sx={{
-                      padding: '4px 8px',
-                      borderRadius: '16px',
                       fontSize: '10px',
                       fontWeight: 600,
                       textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      backgroundColor: job.status === 'Active' ? '#dcfce7' : '#fef3c7',
-                      color: job.status === 'Active' ? '#166534' : '#92400e',
-                      marginLeft: '8px',
-                      flexShrink: 0
+                      height: '22px',
+                      backgroundColor: (job.status?.toLowerCase() === 'active' || !job.status) ? '#dcfce7' : '#fef3c7',
+                      color: (job.status?.toLowerCase() === 'active' || !job.status) ? '#166534' : '#92400e',
+                      ml: 1
                     }}
                   />
                 </Box>
-              ))}
-            </CardContent>
-          </Card>
-        </Box>
+              ))
+            )}
+          </CardContent>
+        </Card>
 
-        <Box>
-          <Card sx={{
-            borderRadius: '12px',
-            border: '1px solid #e2e8f0',
-            overflow: 'hidden',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            height: 'fit-content'
+        {/* Upcoming Interviews */}
+        <Card sx={{
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+        }}>
+          <Box sx={{
+            padding: '14px 16px',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(245, 158, 11, 0.08)'
           }}>
-            <Box sx={{
-              padding: '16px 20px',
-              borderBottom: '1px solid #f1f5f9',
+            <Typography sx={{
+              fontSize: '15px',
+              fontWeight: 600,
+              color: '#1e293b',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'rgba(245, 158, 11, 0.1)'
+              gap: '8px'
             }}>
-              <Typography variant="h6" sx={{
-                fontSize: '16px',
-                fontWeight: 600,
-                color: '#1e293b',
-                margin: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <i className="fas fa-calendar" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
-                Upcoming Interviews
-              </Typography>
-              <Button sx={{
-                background: 'none',
-                border: 'none',
+              <i className="fas fa-calendar" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
+              Upcoming Interviews
+            </Typography>
+            <Button
+              onClick={() => navigate('/video-interviews')}
+              sx={{
                 color: '#f59e0b',
                 fontSize: '12px',
                 fontWeight: 500,
-                textDecoration: 'none',
                 padding: '4px 8px',
                 borderRadius: '6px',
                 textTransform: 'none',
                 minWidth: 'auto',
-                '&:hover': {
-                  background: '#fef3c7'
-                }
+                '&:hover': { background: '#fef3c7' }
               }}>
-                View Schedule
-              </Button>
-            </Box>
-            <CardContent sx={{ padding: '20px' }}>
-              {upcomingInterviews.map(interview => (
+              View Schedule
+            </Button>
+          </Box>
+          <CardContent sx={{ padding: '0 !important' }}>
+            {loading ? (
+              <Box sx={{ p: 2 }}>
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} height={50} sx={{ mb: 1 }} />
+                ))}
+              </Box>
+            ) : upcomingInterviews.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: 'center', color: '#64748b' }}>
+                <i className="fas fa-calendar-check" style={{ fontSize: 24, marginBottom: 8, opacity: 0.5 }}></i>
+                <Typography sx={{ fontSize: '13px' }}>No upcoming interviews</Typography>
+              </Box>
+            ) : (
+              upcomingInterviews.map((interview, idx) => (
                 <Box key={interview.id} sx={{
                   display: 'flex',
-                  alignItems: 'flex-start',
+                  alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '12px 0',
-                  borderBottom: interview.id === upcomingInterviews.length ? 'none' : '1px solid #f1f5f9',
-                  '&:first-of-type': {
-                    paddingTop: 0
-                  },
-                  '&:last-child': {
-                    paddingBottom: 0
-                  }
+                  padding: '12px 16px',
+                  borderBottom: idx < upcomingInterviews.length - 1 ? '1px solid #f1f5f9' : 'none',
+                  '&:hover': { background: '#fafafa' }
                 }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="h6" sx={{
-                      fontSize: '14px',
+                    <Typography sx={{
+                      fontSize: '13px',
                       fontWeight: 600,
                       color: '#1e293b',
-                      margin: '0 0 2px 0'
+                      mb: '2px'
                     }}>
-                      {interview.candidate}
+                      {interview.candidate_name || 'Candidate'}
                     </Typography>
-                    <Typography sx={{
-                      fontSize: '12px',
-                      color: '#64748b',
-                      margin: '0 0 4px 0'
-                    }}>
-                      {interview.position}
+                    <Typography sx={{ fontSize: '11px', color: '#64748b', mb: '4px' }}>
+                      {interview.job_title || 'Position'}
                     </Typography>
                     <Box sx={{
-                      fontSize: '11px',
+                      fontSize: '10px',
                       color: '#f59e0b',
                       fontWeight: 600,
                       background: '#fef3c7',
@@ -333,127 +433,149 @@ const Dashboard = () => {
                       borderRadius: '4px',
                       display: 'inline-block'
                     }}>
-                      {interview.time}
+                      {formatInterviewTime(interview.scheduled_at)}
                     </Box>
                   </Box>
                   <Chip
-                    label={interview.status}
+                    label={interview.status || 'Scheduled'}
                     size="small"
                     sx={{
-                      padding: '4px 8px',
-                      borderRadius: '16px',
                       fontSize: '10px',
                       fontWeight: 600,
                       textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      backgroundColor: interview.status === 'Scheduled' ? '#dbeafe' :
-                        interview.status === 'Confirmed' ? '#dcfce7' : '#fef3c7',
-                      color: interview.status === 'Scheduled' ? '#1e40af' :
-                        interview.status === 'Confirmed' ? '#166534' : '#92400e',
-                      marginLeft: '8px',
-                      flexShrink: 0
+                      height: '22px',
+                      backgroundColor: interview.status?.toLowerCase() === 'confirmed' ? '#dcfce7' :
+                        interview.status?.toLowerCase() === 'scheduled' ? '#dbeafe' : '#fef3c7',
+                      color: interview.status?.toLowerCase() === 'confirmed' ? '#166534' :
+                        interview.status?.toLowerCase() === 'scheduled' ? '#1e40af' : '#92400e',
+                      ml: 1
                     }}
                   />
                 </Box>
-              ))}
-            </CardContent>
-          </Card>
-        </Box>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </Box>
 
       {/* Recent AI Question Generations */}
       <Card sx={{
-        marginBottom: '20px',
         borderRadius: '12px',
         border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)'
       }}>
         <Box sx={{
+          padding: '14px 16px',
+          borderBottom: '1px solid #f1f5f9',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '20px 20px 0 20px'
+          justifyContent: 'space-between',
+          background: 'rgba(139, 92, 246, 0.08)'
         }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+          <Typography sx={{
+            fontSize: '15px',
+            fontWeight: 600,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <i className="fas fa-robot" style={{ color: '#8b5cf6', fontSize: '14px' }}></i>
             Recent AI Question Generations
           </Typography>
           <Button
             onClick={() => navigate('/ai-questions')}
             sx={{
-              color: '#f59e0b',
-              textTransform: 'none',
-              fontSize: '14px',
+              color: '#8b5cf6',
+              fontSize: '12px',
               fontWeight: 500,
-              '&:hover': { backgroundColor: 'rgba(245, 158, 11, 0.1)' }
-            }}
-          >
+              padding: '4px 8px',
+              borderRadius: '6px',
+              textTransform: 'none',
+              minWidth: 'auto',
+              '&:hover': { background: '#ede9fe' }
+            }}>
             View All
           </Button>
         </Box>
-        <CardContent sx={{ padding: '20px' }}>
-          {recentQuestionGenerations.map(generation => (
-            <Box key={generation.id} sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 0',
-              borderBottom: generation.id === recentQuestionGenerations.length ? 'none' : '1px solid #f1f5f9',
-              '&:first-of-type': {
-                paddingTop: 0
-              }
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Avatar sx={{ 
-                  width: 40, 
-                  height: 40, 
-                  backgroundColor: '#f59e0b',
-                  fontSize: '14px',
-                  fontWeight: 600
-                }}>
-                  <i className="fas fa-robot"></i>
-                </Avatar>
-                <Box>
-                  <Typography sx={{ fontWeight: 500, fontSize: '14px', color: '#1e293b' }}>
-                    {generation.candidate}
-                  </Typography>
-                  <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                    {generation.job} • {generation.questions} questions • {generation.mode} Mode
+        <CardContent sx={{ padding: '0 !important' }}>
+          {loading ? (
+            <Box sx={{ p: 2 }}>
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} height={60} sx={{ mb: 1 }} />
+              ))}
+            </Box>
+          ) : recentQuestionSets.length === 0 ? (
+            <Box sx={{ p: 4, textAlign: 'center', color: '#64748b' }}>
+              <i className="fas fa-robot" style={{ fontSize: 28, marginBottom: 8, opacity: 0.5 }}></i>
+              <Typography sx={{ fontSize: '13px' }}>No question generations yet</Typography>
+            </Box>
+          ) : (
+            recentQuestionSets.map((qs, idx) => (
+              <Box key={qs.id} sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderBottom: idx < recentQuestionSets.length - 1 ? '1px solid #f1f5f9' : 'none',
+                '&:hover': { background: '#fafafa' }
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                  <Avatar sx={{
+                    width: 36,
+                    height: 36,
+                    backgroundColor: '#8b5cf6',
+                    fontSize: '14px'
+                  }}>
+                    <i className="fas fa-robot"></i>
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      color: '#1e293b',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {qs.candidate_name || 'Candidate'}
+                    </Typography>
+                    <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
+                      {qs.job_title || 'Job'} • {qs.total_questions || 0} questions • {qs.generation_mode || 'Preview'}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ textAlign: 'right', flexShrink: 0, ml: 2 }}>
+                  <Chip
+                    label={qs.status || 'Generated'}
+                    size="small"
+                    sx={{
+                      backgroundColor: qs.status?.toLowerCase() === 'approved' ? '#dcfce7' :
+                        qs.status?.toLowerCase() === 'pending' ? '#fef3c7' : '#ede9fe',
+                      color: qs.status?.toLowerCase() === 'approved' ? '#166534' :
+                        qs.status?.toLowerCase() === 'pending' ? '#92400e' : '#6d28d9',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      height: '20px',
+                      mb: '4px'
+                    }}
+                  />
+                  <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>
+                    {formatDate(qs.created_at)}
                   </Typography>
                 </Box>
               </Box>
-              <Box sx={{ textAlign: 'right' }}>
-                <Chip
-                  label={generation.status}
-                  size="small"
-                  sx={{
-                    backgroundColor: generation.status === 'Generated' ? '#fef3c7' : 
-                                   generation.status === 'Approved' ? '#d1fae5' : '#fef2f2',
-                    color: generation.status === 'Generated' ? '#d97706' : 
-                           generation.status === 'Approved' ? '#059669' : '#dc2626',
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    marginBottom: '4px'
-                  }}
-                />
-                <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
-                  {generation.time}
-                </Typography>
-              </Box>
-            </Box>
-          ))}
+            ))
+          )}
         </CardContent>
       </Card>
     </Box>
   )
 
- 
-  const renderContent = () => {
-    return renderOverview()
-  }
-
   return (
     <Navigation>
-      {renderContent()}
+      {renderOverview()}
     </Navigation>
   )
 }
