@@ -20,89 +20,110 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
         subject = f"Interview Scheduled: {job_title}"
         
         html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-        </head>
-        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 30px 0;">
-                <tr>
-                    <td align="center">
-                        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border: 1px solid #e0e0e0;">
+       <!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Interview Scheduled</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+        <tr>
+            <td align="center">
 
-                            <!-- Header -->
-                            <tr>
-                                <td style="background-color: #f59e0b; padding: 25px; text-align: center;">
-                                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">Interview Scheduled</h1>
-                                </td>
-                            </tr>
+                <!-- Card -->
+                <table width="560" cellpadding="0" cellspacing="0" style="background:#80808042; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.08);">
 
-                            <!-- Body -->
-                            <tr>
-                                <td style="padding: 30px;">
-                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
-                                        Dear {candidate_name},
-                                    </p>
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding:30px 30px 20px 30px; text-align:center;">
+                            <h2 style="margin:0; color:#f59e0b; font-size:22px; font-weight:700;">
+                                Interview Scheduled!
+                            </h2>
+                        </td>
+                    </tr>
 
-                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0;">
-                                        Your interview has been scheduled for the position of <strong>{job_title}</strong>.
-                                    </p>
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding:0 30px 30px 30px;">
+                            <p style="margin:0 0 15px 0; color:#374151; font-size:15px;">
+                                Dear <strong>{candidate_name}</strong>,
+                            </p>
 
-                                    <!-- Details Box -->
-                                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; border: 1px solid #e5e5e5; margin-bottom: 25px;">
-                                        <tr>
-                                            <td style="padding: 20px;">
-                                                <table width="100%" cellpadding="0" cellspacing="0">
-                                                    <tr>
-                                                        <td style="padding: 8px 0; color: #666666; font-size: 14px; width: 100px;">Date:</td>
-                                                        <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">{interview_date}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td style="padding: 8px 0; color: #666666; font-size: 14px;">Time:</td>
-                                                        <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">{interview_time}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td style="padding: 8px 0; color: #666666; font-size: 14px;">Position:</td>
-                                                        <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">{job_title}</td>
-                                                    </tr>
-                                                </table>
-                                            </td>
-                                        </tr>
-                                    </table>
+                            <p style="margin:0 0 25px 0; color:#374151; font-size:15px;">
+                                Your interview has been scheduled for the position of
+                                <strong>{job_title}</strong>.
+                            </p>
 
-                                    {f'''
-                                    <p style="text-align: center; margin: 25px 0;">
-                                        <a href="{meeting_url}" style="display: inline-block; background-color: #f59e0b; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 14px; font-weight: 600;">Join Meeting</a>
-                                    </p>
-                                    ''' if meeting_url else ''}
+                            <!-- Info Box -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:4px;">
+                                <tr>
+                                    <td style="padding:18px;">
+                                        <table width="100%">
+                                            <tr>
+                                                <td style="font-size:14px; color:#6b7280; padding:6px 0;">
+                                                    📅 <strong>Date:</strong>
+                                                </td>
+                                                <td style="font-size:14px; color:#111827; font-weight:600; padding:6px 0;">
+                                                    {interview_date}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-size:14px; color:#6b7280; padding:6px 0;">
+                                                    ⏰ <strong>Time:</strong>
+                                                </td>
+                                                <td style="font-size:14px; color:#111827; font-weight:600; padding:6px 0;">
+                                                    {interview_time}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
 
-                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 20px 0 0 0;">
-                                        Please be prepared and join on time.
-                                    </p>
+                            <!-- CTA -->
+                            {f'''
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:25px;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{meeting_url}"
+                                           style="background:#f59e0b; color:#ffffff; text-decoration:none;
+                                                  padding:12px 28px; font-size:14px; font-weight:600;
+                                                  border-radius:4px; display:inline-block;">
+                                            Join Interview
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            ''' if meeting_url else ''}
 
-                                    <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 20px 0 0 0;">
-                                        Best regards,<br>
-                                        <strong>AI Interview Platform Team</strong>
-                                    </p>
-                                </td>
-                            </tr>
+                            <p style="margin:25px 0 0 0; font-size:14px; color:#374151;">
+                                Please be prepared and join on time. Good luck!
+                            </p>
 
-                            <!-- Footer -->
-                            <tr>
-                                <td style="background-color: #f5f5f5; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
-                                    <p style="color: #999999; font-size: 12px; margin: 0;">
-                                        This is an automated message from AI Interview Platform.
-                                    </p>
-                                </td>
-                            </tr>
+                            <p style="margin:20px 0 0 0; font-size:14px; color:#374151;">
+                                — <strong>AI Interview Platform Team</strong>
+                            </p>
+                        </td>
+                    </tr>
 
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
+                </table>
+
+                <!-- Footer -->
+                <table width="560" cellpadding="0" cellspacing="0" style="margin-top:15px;">
+                    <tr>
+                        <td align="center" style="font-size:12px; color:#9ca3af;">
+                            This is an automated message. Please do not reply.
+                        </td>
+                    </tr>
+                </table>
+
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+
         """
         
         message = Mail(
