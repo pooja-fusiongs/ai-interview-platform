@@ -609,7 +609,7 @@ const SignUp = () => {
         }}>
           <Box
             component="img"
-            src="/src/images/right_login.png"
+            src="/right_login.png"
             alt="AI Interview Platform Illustration"
             sx={{
               width: '100%',

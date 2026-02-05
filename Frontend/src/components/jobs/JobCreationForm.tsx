@@ -17,6 +17,7 @@ import DescriptionIcon from '@mui/icons-material/Description'
 import InterviewIcon from '@mui/icons-material/Quiz'
 import { JobFormData, Job } from '../../types'
 import { showSuccess, showError, showLoading, dismissToast } from '../../utils/toast'
+import { apiClient } from '../../services/api'
 
 interface JobCreationFormProps {
   open: boolean;
@@ -82,23 +83,9 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
         expert_review_status: jobData.expertReviewStatus
       }
 
-      // Call API to create job
-      const token = localStorage.getItem('token')
-      const response = await fetch('/api/createJob', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(jobPayload)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to create job')
-      }
-
-      const createdJob = await response.json()
+      // Call API to create job using apiClient (with correct base URL)
+      const response = await apiClient.post('/api/createJob', jobPayload)
+      const createdJob = response.data
       
       // Convert API response to frontend Job format
       const newJob: Job = {
