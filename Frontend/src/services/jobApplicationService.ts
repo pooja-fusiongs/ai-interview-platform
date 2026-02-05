@@ -3,6 +3,8 @@
  * Handles job application related API calls
  */
 
+import { apiClient } from './api';
+
 export interface ApplicationStatus {
   has_applied: boolean;
   application_id: number | null;
@@ -53,21 +55,8 @@ export const jobApplicationService = {
   // Submit job application
   submitApplication: async (applicationData: JobApplicationData) => {
     try {
-      // Use the main backend port
-      const response = await fetch('http://localhost:8000/api/job/apply', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(applicationData)
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to submit application');
-      }
-
-      return await response.json();
+      const response = await apiClient.post('/api/job/apply', applicationData);
+      return response.data;
     } catch (error) {
       console.error('Error submitting application:', error);
       throw error;

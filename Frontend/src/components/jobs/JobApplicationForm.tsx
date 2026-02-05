@@ -18,6 +18,7 @@ import PersonIcon from '@mui/icons-material/Person'
 import WorkIcon from '@mui/icons-material/Work'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser'
+import { apiClient } from '../../services/api'
 import { ApplicationFormData, Job } from '../../types'
 import { showSuccess, showError, showLoading, dismissToast } from '../../utils/toast'
 
@@ -118,47 +119,32 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
         availability: formData.noticePeriod
       }
       
-      // Call the job application API
-      const response = await fetch('/api/job/apply', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(applicationData)
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        console.log('✅ Application submitted successfully:', result)
-        
-        // If resume is uploaded, process it
-        if (formData.resume && result.id) {
-          await handleResumeUploadAndParse(result.id, job.id)
-        }
-        
-        // Dismiss loading toast and show success
-        dismissToast(loadingToast)
-        showSuccess('Application submitted successfully! AI questions are being generated for your interview. We will contact you soon.')
-        
-        // Call callback to refresh application status
-        if (onApplicationSubmitted) {
-          onApplicationSubmitted()
-        }
-      } else {
-        const error = await response.json()
-        console.error('❌ Application failed:', error)
-        
-        // Dismiss loading toast and show error
-        dismissToast(loadingToast)
-        showError(`Application failed: ${error.detail || 'Unknown error'}`)
+      // Call the job application API using apiClient
+      const response = await apiClient.post('/api/job/apply', applicationData)
+      const result = response.data
+      console.log('✅ Application submitted successfully:', result)
+
+      // If resume is uploaded, process it
+      if (formData.resume && result.id) {
+        await handleResumeUploadAndParse(result.id, job.id)
+      }
+
+      // Dismiss loading toast and show success
+      dismissToast(loadingToast)
+      showSuccess('Application submitted successfully! AI questions are being generated for your interview. We will contact you soon.')
+
+      // Call callback to refresh application status
+      if (onApplicationSubmitted) {
+        onApplicationSubmitted()
       }
       
-    } catch (error) {
-      console.error('❌ Network error:', error)
-      
+    } catch (error: any) {
+      console.error('❌ Application error:', error)
+
       // Dismiss loading toast and show error
       dismissToast(loadingToast)
-      showError('Network error. Please check your connection and try again.')
+      const errorMessage = error.response?.data?.detail || 'Network error. Please check your connection and try again.'
+      showError(errorMessage)
     }
     
     onClose()
