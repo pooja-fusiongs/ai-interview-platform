@@ -34,7 +34,8 @@ class RoleManager:
             "view_applications",
             "schedule_interview",
             "review_candidates",
-            "create_questions"
+            "create_questions",
+            "review_interviews"
         ],
         UserRole.DOMAIN_EXPERT: [
             "create_questions",

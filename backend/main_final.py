@@ -33,11 +33,8 @@ print("📊 ONLY DATABASE DATA - NO SAMPLE DATA")
 print("🔧 All data loaded dynamically from your database")
 
 # Create database tables ONLY - NO SAMPLE DATA
-# Drop and recreate tables to fix schema mismatch (one-time fix)
-Base.metadata.drop_all(bind=engine)
-print("🗑️ Dropped existing tables")
 Base.metadata.create_all(bind=engine)
-print("✅ Database tables created (empty)")
+print("✅ Database tables created/verified")
 
 app = FastAPI(
     title="AI Interview Platform API - Database Only", 
