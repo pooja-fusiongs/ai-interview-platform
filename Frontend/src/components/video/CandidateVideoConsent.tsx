@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, FormControlLabel, Checkbox, Button, Alert, Divider
 } from '@mui/material';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import gdprService from '../../services/gdprService';
 
 const CandidateVideoConsent: React.FC = () => {
@@ -39,8 +39,7 @@ const CandidateVideoConsent: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" gutterBottom>Video Interview Consent</Typography>
         <Paper sx={{ p: 4, maxWidth: 600 }}>
@@ -73,7 +72,7 @@ const CandidateVideoConsent: React.FC = () => {
           </Box>
         </Paper>
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

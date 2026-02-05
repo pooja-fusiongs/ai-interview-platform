@@ -157,6 +157,12 @@ def fraud_dashboard(
         .filter(FraudAnalysis.flag_count > 0)
         .count()
     )
+    cleared_count = (
+        db.query(FraudAnalysis)
+        .filter(FraudAnalysis.analysis_status == "completed")
+        .filter(FraudAnalysis.flag_count == 0)
+        .count()
+    )
 
     avg_result = (
         db.query(sql_func.avg(FraudAnalysis.overall_trust_score))
@@ -187,6 +193,7 @@ def fraud_dashboard(
         total_interviews=total_interviews,
         analyzed_count=analyzed_count,
         flagged_count=flagged_count,
+        cleared_count=cleared_count,
         average_trust_score=average_trust_score,
         flag_breakdown=severity_counts,
     )

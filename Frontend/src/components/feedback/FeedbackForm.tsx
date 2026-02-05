@@ -3,7 +3,7 @@ import {
   Box, Typography, TextField, Button, Slider, Switch, FormControlLabel,
   Select, MenuItem, FormControl, InputLabel, Paper, Alert, Grid
 } from '@mui/material';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import feedbackService from '../../services/feedbackService';
 
 const FeedbackForm: React.FC = () => {
@@ -58,8 +58,7 @@ const FeedbackForm: React.FC = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3 }}>Submit Hire Feedback</Typography>
         {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
@@ -104,7 +103,7 @@ const FeedbackForm: React.FC = () => {
           <Button variant="contained" size="large" onClick={handleSubmit}>Submit Feedback</Button>
         </Paper>
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

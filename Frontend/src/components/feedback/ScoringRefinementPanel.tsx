@@ -4,7 +4,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Divider
 } from '@mui/material';
 import { AutoFixHigh } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface CorrelationData {
@@ -57,18 +57,16 @@ const ScoringRefinementPanel: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', height: '100vh' }}>
-        <Sidebar />
+      <Naivgation>
         <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5' }}>
           <CircularProgress />
         </Box>
-      </Box>
+      </Naivgation>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3 }}>Scoring Refinement</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -147,7 +145,7 @@ const ScoringRefinementPanel: React.FC = () => {
           message="Coming soon - weight adjustment is not yet available"
         />
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

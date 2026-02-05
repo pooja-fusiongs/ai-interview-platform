@@ -40,11 +40,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser({
         id: userData.id.toString(),
         username: userData.username,
+        name: userData.name || userData.username,
         email: userData.email,
         company: userData.company,
         role: userData.role
       })
-      
+
       // Start activity tracking for verified users
       activityService.startTracking()
     } catch (error) {
@@ -59,56 +60,72 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (username: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
       console.log('🔐 Attempting login for:', username)
-      
+
       const data = await authService.login(username, password)
       console.log('✅ Login response:', data)
-      
-      const { access_token, role, user_id, user } = data
-      
+
+      const { access_token } = data
+
       if (!access_token) {
         throw new Error('No access token received')
       }
-      
+
       localStorage.setItem('token', access_token)
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-      
-      // Use user data from login response
-      if (user) {
+
+      // Always fetch complete user data from /api/auth/me to ensure we have correct username
+      try {
+        const userData = await authService.getCurrentUser()
         setUser({
-          id: user.id.toString(),
-          username: user.username,
-          email: user.email,
-          company: user.company || '',
-          role: user.role
+          id: userData.id.toString(),
+          username: userData.username,
+          name: userData.name || userData.username,
+          email: userData.email,
+          company: userData.company || '',
+          role: userData.role
         })
-      } else {
-        // Fallback if user object not in response
-        setUser({
-          id: user_id?.toString() || '0',
-          username: username,
-          email: username,
-          company: '',
-          role: role || 'candidate'
-        })
+      } catch (fetchError) {
+        console.error('Failed to fetch user data:', fetchError)
+        // Fallback to login response data if getCurrentUser fails
+        const { role, user_id, user } = data
+        if (user) {
+          setUser({
+            id: user.id.toString(),
+            username: user.username,
+            name: user.name || user.username,
+            email: user.email,
+            company: user.company || '',
+            role: user.role
+          })
+        } else {
+          setUser({
+            id: user_id?.toString() || '0',
+            username: username,
+            name: username,
+            email: username,
+            company: '',
+            role: role || 'candidate'
+          })
+        }
       }
-      
+
       console.log('✅ Login successful, user set')
-      
+
       // Start activity tracking after successful login
       activityService.startTracking()
-      
+
       return { success: true }
-      
+
     } catch (error: any) {
       console.error('❌ Login error:', error)
-      
+
       // Clear any partial auth state
       localStorage.removeItem('token')
       delete apiClient.defaults.headers.common['Authorization']
       setUser(null)
-      
+
       let errorMessage = 'Login failed'
-      
+
       if (error.response?.status === 401) {
         errorMessage = 'Invalid email or password'
       } else if (error.response?.data?.detail) {
@@ -116,9 +133,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else if (error.message) {
         errorMessage = error.message
       }
-      
-      return { 
-        success: false, 
+
+      return {
+        success: false,
         message: errorMessage
       }
     }

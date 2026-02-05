@@ -61,6 +61,13 @@ class User(Base):
     # GDPR fields
     is_anonymized = Column(Boolean, default=False)
     anonymized_at = Column(DateTime(timezone=True), nullable=True)
+    score = Column(Float, default=0)
+    transcription = Column(Text, nullable=True)
+    has_transcript = Column(Boolean, default=False)
+    
+    # Nested objects for questions and transcripts (JSON fields)
+    interview_questions = Column(Text, nullable=True)  # JSON string of questions array
+    interview_transcripts = Column(Text, nullable=True)  # JSON string of transcripts array
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -257,23 +257,13 @@ function App(): JSX.Element {
             } />
             
             {/* Profile - All roles */}
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
-                  <Profile />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            
-            {/* Candidate Profile - Candidate only */}
             <Route path="/candidate-profile" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
                   <CandidateProfile />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
-            
 
             {/* GDPR Routes */}
             <Route path="/consent-manager" element={

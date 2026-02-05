@@ -79,6 +79,9 @@ class AIQuestionGenerator:
             session.generated_at = datetime.utcnow()
             db.commit()
             
+            # Update nested questions in candidate object
+            self._update_candidate_nested_questions(db, candidate_id, job_id)
+            
             return {
                 "session_id": session.id,
                 "status": "success",
@@ -338,6 +341,46 @@ class AIQuestionGenerator:
             "expert_reviewed": question.expert_reviewed,
             "expert_notes": question.expert_notes
         }
+    
+    def _update_candidate_nested_questions(self, db: Session, candidate_id: int, job_id: int):
+        """Update nested questions in candidate object"""
+        from models import User, JobApplication
+        
+        # Get candidate user via job application
+        application = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
+        if not application:
+            return
+            
+        candidate_user = db.query(User).filter(User.email == application.applicant_email).first()
+        if not candidate_user:
+            return
+        
+        # Get all questions for this candidate
+        questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.candidate_id == candidate_id,
+            InterviewQuestion.job_id == job_id
+        ).all()
+        
+        # Convert to nested format
+        nested_questions = []
+        for question in questions:
+            nested_questions.append({
+                "id": question.id,
+                "job_id": question.job_id,
+                "question_text": question.question_text,
+                "sample_answer": question.sample_answer,
+                "question_type": question.question_type.value,
+                "difficulty": question.difficulty.value,
+                "skill_focus": question.skill_focus,
+                "is_approved": question.is_approved,
+                "expert_reviewed": question.expert_reviewed,
+                "expert_notes": question.expert_notes,
+                "created_at": question.created_at.isoformat() if question.created_at else None
+            })
+        
+        # Update candidate's nested questions
+        candidate_user.interview_questions = json.dumps(nested_questions)
+        db.commit()
 
 # Global instance
 question_generator = AIQuestionGenerator()

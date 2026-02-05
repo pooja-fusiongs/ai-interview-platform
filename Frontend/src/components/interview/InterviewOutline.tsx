@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Navigation from '../layout/sidebar';
 import {
     Box,
@@ -55,12 +55,18 @@ interface QuestionSet {
 const InterviewOutline: React.FC = () => {
     const { setId } = useParams<{ setId: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState(0); // 0: All, 1: Pending, 2: Approved
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editedAnswer, setEditedAnswer] = useState<string>('');
+
+    // Get navigation context from URL parameters
+    const fromPage = searchParams.get('from');
+    const jobId = searchParams.get('jobId');
+    const jobTitle = searchParams.get('jobTitle');
 
     useEffect(() => {
         if (setId) {
@@ -135,7 +141,16 @@ const InterviewOutline: React.FC = () => {
     };
 
     const handleGoBack = () => {
-        navigate('/ai-questions');
+        // Check if we came from manage-candidates page
+        if (fromPage === 'manage-candidates' && jobId && jobTitle) {
+            navigate(`/recruiter-candidates?jobId=${jobId}&jobTitle=${encodeURIComponent(jobTitle)}`);
+        } else if (window.history.length > 1) {
+            // Go back to previous page in history
+            navigate(-1);
+        } else {
+            // Fallback to AI Questions page if no history
+            navigate('/ai-questions');
+        }
     };
 
     const handleApproveQuestion = async (questionId: string) => {
@@ -263,7 +278,7 @@ const InterviewOutline: React.FC = () => {
                         Question set not found
                     </Typography>
                     <Button onClick={handleGoBack} sx={{ mt: 2 }}>
-                        Go Back
+                        {fromPage === 'manage-candidates' ? 'Back to Candidates' : 'Go Back'}
                     </Button>
                 </Box>
             </Navigation>
@@ -307,7 +322,7 @@ const InterviewOutline: React.FC = () => {
                             >
                                 <ArrowBackIcon fontSize="small" />
                                 <Typography>
-                                    Back
+                                    {fromPage === 'manage-candidates' ? 'Back to Candidates' : 'Back'}
                                 </Typography>
                             </Box>
                         </Box>

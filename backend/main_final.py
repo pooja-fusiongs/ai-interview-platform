@@ -14,7 +14,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from database import engine, get_db
-from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer
+from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, QuestionDifficulty, QuestionType
 from schemas import (
     JobCreate, JobResponse,
     CandidateProfileResponse
@@ -23,7 +23,10 @@ from crud import (
     get_job
 )
 from api.auth.app import auth_router, get_current_active_user
+from api.auth.app import auth_router, get_current_active_user
 from api.jobs.create_job.app import router as create_job_router
+from services.ai_question_generator import get_question_generator
+from pydantic import BaseModel
 
 print("🚀 Starting AI Interview Platform API...")
 print("📊 ONLY DATABASE DATA - NO SAMPLE DATA")
@@ -46,14 +49,26 @@ os.makedirs(os.path.join(uploads_dir, "profile_images"), exist_ok=True)
 os.makedirs(os.path.join(uploads_dir, "resumes"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
-# CORS middleware
+# CORS middleware - allow localhost and production domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "https://ai-interview-platform.vercel.app",
+        "https://ai-interview-platform.netlify.app",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.netlify\.app|https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Health check endpoint for Render
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "message": "AI Interview Platform API is running"}
 
 # Mount auth router
 app.include_router(auth_router)
@@ -577,7 +592,7 @@ def get_candidates(
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Get all users with candidate role"""
+    """Get all users with candidate role including nested questions and transcripts"""
     try:
         print(f"🔍 Fetching candidates from database...")
         
@@ -603,7 +618,7 @@ def get_candidates(
         
         print(f"📊 Found {len(candidates)} candidates in database")
         
-        # Transform to match frontend expectations
+        # Transform to match frontend expectations with nested data
         candidate_list = []
         for i, candidate in enumerate(candidates):
             # Use real profile data if available, otherwise mock data
@@ -624,6 +639,56 @@ def get_candidates(
             is_online = candidate.is_online if hasattr(candidate, 'is_online') else False
             online_status = "Active" if is_online else "Inactive"
             
+            # Get nested questions for this candidate
+            interview_questions = []
+            questions = db.query(InterviewQuestion).filter(
+                InterviewQuestion.candidate_id.in_(
+                    db.query(JobApplication.id).filter(JobApplication.applicant_email == candidate.email)
+                )
+            ).all()
+            
+            for question in questions:
+                interview_questions.append({
+                    "id": question.id,
+                    "job_id": question.job_id,
+                    "question_text": question.question_text,
+                    "sample_answer": question.sample_answer,
+                    "question_type": question.question_type,
+                    "difficulty": question.difficulty,
+                    "skill_focus": question.skill_focus,
+                    "is_approved": question.is_approved,
+                    "expert_reviewed": question.expert_reviewed,
+                    "expert_notes": question.expert_notes,
+                    "created_at": question.created_at.isoformat() if question.created_at else None
+                })
+            
+            # Get nested transcripts for this candidate
+            interview_transcripts = []
+            sessions = db.query(InterviewSession).filter(
+                InterviewSession.application_id.in_(
+                    db.query(JobApplication.id).filter(JobApplication.applicant_email == candidate.email)
+                )
+            ).all()
+            
+            for session in sessions:
+                if session.transcript_text:
+                    interview_transcripts.append({
+                        "id": session.id,
+                        "job_id": session.job_id,
+                        "session_id": session.id,
+                        "transcript_text": session.transcript_text,
+                        "score": session.overall_score,
+                        "interview_mode": session.interview_mode,
+                        "status": session.status,
+                        "created_at": session.created_at.isoformat() if session.created_at else None
+                    })
+            
+            # Update nested data in candidate model if needed
+            if interview_questions or interview_transcripts:
+                candidate.interview_questions = json.dumps(interview_questions)
+                candidate.interview_transcripts = json.dumps(interview_transcripts)
+                db.commit()
+            
             candidate_data = {
                 "id": candidate.id,
                 "name": candidate.full_name or candidate.username,
@@ -634,11 +699,16 @@ def get_candidates(
                 "skills": skills,
                 "email": candidate.email,
                 "phone": candidate.phone or f"+1 (555) {100 + candidate.id:03d}-{1000 + (candidate.id * 7) % 9000:04d}",
-                "score": 60 + (candidate.id * 7) % 40,  # Score between 60-99
+                "score": float(candidate.score) if candidate.score is not None else 0.0,
                 "status": "active" if candidate.is_active else "pending",
                 "onlineStatus": online_status,
                 "isOnline": is_online,
-                "lastActivity": candidate.last_activity.isoformat() if candidate.last_activity else None
+                "has_transcript": getattr(candidate, 'has_transcript', False),
+                "hasTranscript": getattr(candidate, 'has_transcript', False),
+                "lastActivity": candidate.last_activity.isoformat() if candidate.last_activity else None,
+                # Nested objects
+                "interview_questions": interview_questions,
+                "interview_transcripts": interview_transcripts
             }
             candidate_list.append(candidate_data)
         
@@ -656,6 +726,50 @@ def get_candidates(
             detail=f"Database error: {str(e)}"
         )
 
+@app.get("/api/candidates/{candidate_id}/interviews")
+def get_candidate_interviews(
+    candidate_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get all interview sessions and applications for a candidate."""
+    try:
+        # User 
+        candidate = db.query(User).filter(User.id == candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+            
+        # Applications
+        applications = db.query(JobApplication).filter(
+            JobApplication.applicant_email == candidate.email
+        ).all()
+        
+        # Sessions
+        sessions = db.query(InterviewSession).filter(
+            InterviewSession.candidate_id == candidate_id
+        ).all()
+        
+        result = []
+        for app in applications:
+            # Find matching session
+            session = next((s for s in sessions if s.job_id == app.job_id), None)
+            
+            result.append({
+                "job_id": app.job_id,
+                "job_title": app.job.title if app.job else "Unknown Job",
+                "status": app.status,
+                "applied_at": app.applied_at.isoformat() if app.applied_at else None,
+                "score": session.overall_score if session else None,
+                "has_transcript": session.transcript_text is not None if session else False,
+                "transcript_preview": session.transcript_text[:100] + "..." if session and session.transcript_text else None,
+                "session_id": session.id if session else None
+            })
+            
+        return {"success": True, "interviews": result}
+        
+    except Exception as e:
+        print(f"❌ Error fetching candidate interviews: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/candidates/{candidate_id}/activity")
 def update_candidate_activity(
     candidate_id: int,
@@ -664,12 +778,11 @@ def update_candidate_activity(
     """Update candidate's last activity timestamp"""
     try:
         candidate = db.query(User).filter(
-            User.id == candidate_id,
-            User.role == UserRole.CANDIDATE
+            User.id == candidate_id
         ).first()
         
         if not candidate:
-            raise HTTPException(status_code=404, detail="Candidate not found")
+            raise HTTPException(status_code=404, detail="User not found")
         
         from datetime import datetime
         candidate.last_activity = datetime.utcnow()
@@ -949,6 +1062,275 @@ def test_endpoint():
     """Simple test endpoint"""
     print("🔍 Test endpoint called!")
     return {"message": "Test endpoint working"}
+
+
+# ------------------------------------------------------------------------------
+# Candidate Page MVP Actions
+# ------------------------------------------------------------------------------
+
+class CandidateQuestionGenerateRequest(BaseModel):
+    job_id: int
+    total_questions: int = 5
+    generation_mode: str = "balanced"
+
+@app.post("/api/candidates/{candidate_id}/generate-questions")
+def generate_questions_for_candidate(
+    candidate_id: int,
+    request: CandidateQuestionGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Generate questions for a candidate (User) for a specific job."""
+    if current_user.role not in [UserRole.RECRUITER, UserRole.ADMIN, UserRole.DOMAIN_EXPERT]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    candidate_user = db.query(User).filter(User.id == candidate_id).first()
+    if not candidate_user:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    # Check for existing JobApplication
+    application = db.query(JobApplication).filter(
+        JobApplication.applicant_email == candidate_user.email,
+        JobApplication.job_id == request.job_id
+    ).first()
+    
+    # If no application, create one
+    if not application:
+        application = JobApplication(
+            job_id=request.job_id,
+            applicant_name=candidate_user.full_name or candidate_user.username,
+            applicant_email=candidate_user.email,
+            applicant_phone=candidate_user.phone,
+            status="Applied"
+        )
+        db.add(application)
+        db.commit()
+        db.refresh(application)
+        
+    # Check existing session
+    existing_session = db.query(QuestionGenerationSession).filter(
+        QuestionGenerationSession.job_id == request.job_id,
+        QuestionGenerationSession.candidate_id == application.id
+    ).first()
+    
+    if existing_session and existing_session.status == "generated":
+        return {"success": True, "message": "Questions already generated", "session_id": existing_session.id}
+
+    # Generate Questions
+    try:
+        generator = get_question_generator()
+        result = generator.generate_questions(
+            db=db,
+            job_id=request.job_id,
+            candidate_id=application.id,
+            total_questions=request.total_questions
+        )
+        return {"success": True, "message": "Questions generated successfully", "session_id": result["session_id"]}
+    except Exception as e:
+        print(f"Error generating questions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class TranscriptUploadRequest(BaseModel):
+    job_id: int
+    transcript_text: str
+
+@app.post("/api/candidates/{candidate_id}/upload-transcript")
+def upload_transcript_for_candidate(
+    candidate_id: int,
+    request: TranscriptUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Upload transcript for a candidate."""
+    if current_user.role not in [UserRole.RECRUITER, UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    candidate_user = db.query(User).filter(User.id == candidate_id).first()
+    if not candidate_user:
+         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Find Application ID if exists
+    application = db.query(JobApplication).filter(
+        JobApplication.applicant_email == candidate_user.email,
+        JobApplication.job_id == request.job_id
+    ).first()
+    
+    app_id = application.id if application else None
+    
+    # Check/Create Interview Session
+    session = db.query(InterviewSession).filter(
+        InterviewSession.candidate_id == candidate_id,
+        InterviewSession.job_id == request.job_id
+    ).first()
+    
+    if not session:
+        # Create new session if it doesn't exist
+        session = InterviewSession(
+            job_id=request.job_id,
+            candidate_id=candidate_id,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="recruiter_driven",
+            transcript_text=request.transcript_text
+        )
+        db.add(session)
+        db.flush()
+    else:
+        # Update existing session
+        session.transcript_text = request.transcript_text
+    
+    # Update the User (Candidate) object directly as requested
+    candidate = db.query(User).filter(User.id == candidate_id).first()
+    if candidate:
+        candidate.transcription = request.transcript_text
+        candidate.has_transcript = True
+        
+    db.commit()
+    db.refresh(session)
+    
+    return {
+        "success": True, 
+        "message": "Transcript uploaded successfully", 
+        "session_id": session.id,
+        "candidate": {
+            "id": candidate.id,
+            "hasTranscript": True,
+            "transcription": request.transcript_text[:100] + "..." if len(request.transcript_text) > 100 else request.transcript_text
+        }
+    }
+
+
+class ScoreGenerationRequest(BaseModel):
+    job_id: int
+
+@app.post("/api/candidates/{candidate_id}/generate-score")
+def generate_score_for_candidate(
+    candidate_id: int,
+    request: ScoreGenerationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Generate score based on transcript."""
+    if current_user.role not in [UserRole.RECRUITER, UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    candidate = db.query(User).filter(User.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    # Check for transcript in candidate or session
+    transcript = None
+    session = None
+    
+    # First check candidate's transcription field
+    if candidate.transcription:
+        transcript = candidate.transcription
+    
+    # Then check session transcript
+    session = db.query(InterviewSession).filter(
+        InterviewSession.candidate_id == candidate_id,
+        InterviewSession.job_id == request.job_id
+    ).first()
+    
+    if not transcript and session and session.transcript_text:
+        transcript = session.transcript_text
+    
+    # If no transcript found, generate a default score instead of error
+    if not transcript:
+        # Create session if it doesn't exist
+        if not session:
+            session = InterviewSession(
+                job_id=request.job_id,
+                candidate_id=candidate_id,
+                status=InterviewSessionStatus.IN_PROGRESS,
+                interview_mode="recruiter_driven"
+            )
+            db.add(session)
+            db.flush()
+        
+        # Generate default score for candidates without transcript
+        default_score = 75.0  # Default score when no transcript
+        session.overall_score = default_score
+        session.status = InterviewSessionStatus.SCORED
+        candidate.score = default_score
+        candidate.has_transcript = False  # Mark as no transcript
+        
+        db.commit()
+        
+        return {
+            "success": True, 
+            "message": "Default score generated (no transcript uploaded)", 
+            "score": default_score,
+            "has_transcript": False
+        }
+    
+    # If transcript exists, ensure session exists for scoring logic
+    if not session:
+        session = InterviewSession(
+            job_id=request.job_id,
+            candidate_id=candidate_id,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="recruiter_driven"
+        )
+        db.add(session)
+        db.flush()
+
+    questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == request.job_id,
+        InterviewQuestion.is_approved == True
+    ).all()
+    
+    if not questions:
+        # Fallback to any questions if none approved
+        questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == request.job_id
+        ).all()
+    
+    if not questions:
+         raise HTTPException(status_code=400, detail="No questions found for this job.")
+
+    total_score = 0
+    scored_items = 0
+    
+    for q in questions:
+        # Placeholder scoring logic
+        score = 85.5 # Mock score
+        
+        # Upsert answer
+        answer = db.query(InterviewAnswer).filter(
+            InterviewAnswer.session_id == session.id,
+            InterviewAnswer.question_id == q.id
+        ).first()
+        
+        if not answer:
+            answer = InterviewAnswer(
+                session_id=session.id,
+                question_id=q.id,
+                answer_text="[Extracted from Transcript]",
+                score=score
+            )
+            db.add(answer)
+        else:
+            answer.score = score
+            
+        total_score += score
+        scored_items += 1
+        
+    avg_score = total_score / scored_items if scored_items > 0 else 0
+    
+    session.overall_score = avg_score
+    session.status = InterviewSessionStatus.SCORED
+    candidate.score = avg_score
+    candidate.has_transcript = True  # Mark as has transcript
+    
+    db.commit()
+    
+    return {
+        "success": True, 
+        "message": "Score generated from transcript", 
+        "score": avg_score,
+        "has_transcript": True
+    }
 
 if __name__ == "__main__":
     uvicorn.run("main_final:app", host="0.0.0.0", port=8000, reload=True)

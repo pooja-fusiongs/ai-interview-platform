@@ -21,7 +21,8 @@ import {
   Tabs,
   Tab,
   Paper,
-  LinearProgress
+  LinearProgress,
+  Chip
 } from '@mui/material'
 import Grid from '@mui/material/GridLegacy'
 import {
@@ -1010,6 +1011,203 @@ const CandidateProfileEdit: React.FC = () => {
     </Box>
   )
 
+  const InterviewDataTab = () => (
+    <Box sx={{ p: 4 }}>
+      <Stack spacing={4}>
+        {/* Interview Questions Section */}
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+            <Box sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 2,
+              bgcolor: '#fef3c7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <i className="fas fa-question-circle" style={{ color: '#d97706', fontSize: 20 }} />
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                Interview Questions
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                Questions generated for your interviews
+              </Typography>
+            </Box>
+          </Box>
+
+          {profile.interview_questions && profile.interview_questions.length > 0 ? (
+            <Grid container spacing={2}>
+              {profile.interview_questions.map((question, index) => (
+                <Grid xs={12} key={question.id}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: 3, 
+                    border: '1px solid #e2e8f0',
+                    '&:hover': { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }
+                  }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', flex: 1 }}>
+                        Question {index + 1}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Chip
+                          label={question.question_type}
+                          size="small"
+                          sx={{ 
+                            bgcolor: '#f1f5f9', 
+                            color: '#475569',
+                            fontSize: '10px'
+                          }}
+                        />
+                        <Chip
+                          label={question.difficulty}
+                          size="small"
+                          sx={{ 
+                            bgcolor: question.difficulty === 'advanced' ? '#fef2f2' : question.difficulty === 'intermediate' ? '#fef3c7' : '#f0fdf4',
+                            color: question.difficulty === 'advanced' ? '#dc2626' : question.difficulty === 'intermediate' ? '#d97706' : '#16a34a',
+                            fontSize: '10px'
+                          }}
+                        />
+                        {question.is_approved && (
+                          <Chip
+                            label="Approved"
+                            size="small"
+                            sx={{ 
+                              bgcolor: '#f0fdf4', 
+                              color: '#16a34a',
+                              fontSize: '10px'
+                            }}
+                          />
+                        )}
+                      </Box>
+                    </Box>
+                    <Typography variant="body1" sx={{ color: '#374151', mb: 2, lineHeight: 1.6 }}>
+                      {question.question_text}
+                    </Typography>
+                    {question.skill_focus && (
+                      <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+                        Focus: {question.skill_focus}
+                      </Typography>
+                    )}
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Card sx={{ p: 4, textAlign: 'center', bgcolor: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+              <i className="fas fa-question-circle" style={{ fontSize: 48, color: '#cbd5e1', marginBottom: 16 }} />
+              <Typography variant="h6" sx={{ color: '#64748b', mb: 1 }}>
+                No Interview Questions Yet
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+                Questions will appear here once they are generated for your interviews
+              </Typography>
+            </Card>
+          )}
+        </Box>
+
+        {/* Interview Transcripts Section */}
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+            <Box sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 2,
+              bgcolor: '#dbeafe',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <i className="fas fa-file-alt" style={{ color: '#2563eb', fontSize: 20 }} />
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                Interview Transcripts
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                Your interview transcripts and scores
+              </Typography>
+            </Box>
+          </Box>
+
+          {profile.interview_transcripts && profile.interview_transcripts.length > 0 ? (
+            <Grid container spacing={2}>
+              {profile.interview_transcripts.map((transcript, index) => (
+                <Grid xs={12} key={transcript.id}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: 3, 
+                    border: '1px solid #e2e8f0',
+                    '&:hover': { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }
+                  }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                        Interview {index + 1}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Chip
+                          label={transcript.interview_mode}
+                          size="small"
+                          sx={{ 
+                            bgcolor: '#f1f5f9', 
+                            color: '#475569',
+                            fontSize: '10px'
+                          }}
+                        />
+                        <Chip
+                          label={transcript.status}
+                          size="small"
+                          sx={{ 
+                            bgcolor: transcript.status === 'scored' ? '#f0fdf4' : '#fef3c7',
+                            color: transcript.status === 'scored' ? '#16a34a' : '#d97706',
+                            fontSize: '10px'
+                          }}
+                        />
+                        {transcript.score && (
+                          <Chip
+                            label={`Score: ${transcript.score}%`}
+                            size="small"
+                            sx={{ 
+                              bgcolor: transcript.score >= 80 ? '#f0fdf4' : transcript.score >= 60 ? '#fef3c7' : '#fef2f2',
+                              color: transcript.score >= 80 ? '#16a34a' : transcript.score >= 60 ? '#d97706' : '#dc2626',
+                              fontSize: '10px',
+                              fontWeight: 600
+                            }}
+                          />
+                        )}
+                      </Box>
+                    </Box>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 2 }}>
+                      {transcript.created_at && new Date(transcript.created_at).toLocaleDateString()}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#374151', lineHeight: 1.6 }}>
+                      {transcript.transcript_text.length > 200 
+                        ? `${transcript.transcript_text.substring(0, 200)}...` 
+                        : transcript.transcript_text}
+                    </Typography>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Card sx={{ p: 4, textAlign: 'center', bgcolor: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+              <i className="fas fa-file-alt" style={{ fontSize: 48, color: '#cbd5e1', marginBottom: 16 }} />
+              <Typography variant="h6" sx={{ color: '#64748b', mb: 1 }}>
+                No Interview Transcripts Yet
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+                Transcripts will appear here once your interviews are completed
+              </Typography>
+            </Card>
+          )}
+        </Box>
+      </Stack>
+    </Box>
+  )
+
   if (loading) {
     return (
       <Navigation>
@@ -1287,6 +1485,11 @@ const CandidateProfileEdit: React.FC = () => {
                       label="Skills & Education"
                       iconPosition="start"
                     />
+                    <Tab
+                      icon={<Description sx={{ fontSize: 24 }} />}
+                      label="Interview Data"
+                      iconPosition="start"
+                    />
                   </Tabs>
                 </Box>
 
@@ -1295,6 +1498,7 @@ const CandidateProfileEdit: React.FC = () => {
                   {activeTab === 0 && <BasicInformationTabContent />}
                   {activeTab === 1 && <JobPreferencesTab />}
                   {activeTab === 2 && <SkillsEducationTab />}
+                  {activeTab === 3 && <InterviewDataTab />}
                 </Box>
 
                 {/* Save Button Inside Card */}

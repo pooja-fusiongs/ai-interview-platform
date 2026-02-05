@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-// import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Candidate, CandidateFilters } from '../../types'
 import { apiClient } from '../../services/api'
 import { toast } from 'react-hot-toast'
@@ -39,10 +39,11 @@ import Navigation from '../layout/sidebar'
 import { CloudUpload as CloudUploadIcon } from '@mui/icons-material'
 
 const Candidates = () => {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCandidate, setMenuCandidate] = useState<Candidate | null>(null)
-  const [, setIsProfileOpen] = useState<boolean>(false)
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false)
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null)
@@ -64,7 +65,7 @@ const Candidates = () => {
   const [isTranscriptUploadOpen, setIsTranscriptUploadOpen] = useState(false)
   const [transcriptText, setTranscriptText] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
-  const [, setCandidateInterviews] = useState<any[]>([])
+  const [candidateInterviews, setCandidateInterviews] = useState<any[]>([])
 
   // Fetch candidates from API
   const fetchCandidates = async () => {
@@ -225,10 +226,10 @@ const Candidates = () => {
     }
   }
 
-  // const handleCloseProfile = () => {
-  //   setIsProfileOpen(false)
-  //   setMenuCandidate(null)
-  // }
+  const handleCloseProfile = () => {
+    setIsProfileOpen(false)
+    setMenuCandidate(null)
+  }
 
   const handleActionClick = (action: 'questions' | 'transcript') => {
     setActiveAction(action)
@@ -270,33 +271,25 @@ const Candidates = () => {
 
   // AUTO-GENERATE SCORE WHEN TRANSCRIPT IS UPLOADED
   const handleTranscriptSubmit = async () => {
-    if (!selectedJobId || !menuCandidate) return
+    if (!selectedJobId || !menuCandidate || !transcriptText) return
 
     try {
       setActionLoading(true)
-      toast.loading('Processing and generating score...')
+      toast.loading('Uploading transcript and generating score...')
       
-      // If transcript text is provided, upload it first
-      if (transcriptText && transcriptText.trim()) {
-        await apiClient.post(`/api/candidates/${menuCandidate.id}/upload-transcript`, {
-          job_id: selectedJobId,
-          transcript_text: transcriptText
-        })
-      }
+      // Upload transcript
+      const response = await apiClient.post(`/api/candidates/${menuCandidate.id}/upload-transcript`, {
+        job_id: selectedJobId,
+        transcript_text: transcriptText
+      })
       
-      // Generate score (works with or without transcript)
+      // Auto-generate score after transcript upload
       const scoreResponse = await apiClient.post(`/api/candidates/${menuCandidate.id}/generate-score`, {
         job_id: selectedJobId
       })
       
       toast.dismiss()
-      
-      const hasTranscript = scoreResponse.data.has_transcript || false
-      const message = hasTranscript 
-        ? `Score generated from transcript: ${scoreResponse.data.score?.toFixed(1) || 0}%`
-        : `Default score generated: ${scoreResponse.data.score?.toFixed(1) || 0}% (no transcript uploaded)`
-      
-      toast.success(message)
+      toast.success(`Transcript uploaded and score generated: ${scoreResponse.data.score?.toFixed(1) || 0}%`)
 
       // Update candidate state with transcript and new score
       setCandidates(prevCandidates =>
@@ -304,7 +297,7 @@ const Candidates = () => {
           candidate.id === menuCandidate.id
             ? { 
                 ...candidate, 
-                hasTranscript: hasTranscript,
+                hasTranscript: true,
                 score: scoreResponse.data.score || candidate.score
               }
             : candidate
@@ -314,7 +307,7 @@ const Candidates = () => {
       // Update menuCandidate as well
       setMenuCandidate(prev => prev ? { 
         ...prev, 
-        hasTranscript: hasTranscript,
+        hasTranscript: true,
         score: scoreResponse.data.score || prev.score
       } : null)
 
@@ -351,7 +344,7 @@ const Candidates = () => {
     })
   }
 
-  // const allDepartments = Array.from(new Set(candidates.map(c => c.department))).sort()
+  const allDepartments = Array.from(new Set(candidates.map(c => c.department))).sort()
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -636,7 +629,7 @@ const Candidates = () => {
                         transition: 'all 0.3s ease',
                         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                         '&:hover': {
-                          // transform: 'translateY(-2px)',
+                          transform: 'translateY(-2px)',
                           boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)'
                         }
                       }}>
@@ -726,8 +719,6 @@ const Candidates = () => {
                             <span>{candidate.phone}</span>
                           </Box>
                         </Box>
-
-                        
 
                         {/* Action Buttons */}
                         <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1046,383 +1037,55 @@ const Candidates = () => {
           </>
         )}
 
-        {/* Professional Job Selection Dialog */}
-        <Dialog 
-          open={isJobSelectOpen} 
-          onClose={() => setIsJobSelectOpen(false)} 
-          maxWidth="sm" 
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: '16px',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
-              border: '1px solid #e2e8f0'
-            }
-          }}
-        >
-          <DialogTitle sx={{
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-            color: 'white',
-            padding: '24px 32px',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
-            <Box sx={{
-              background: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: '12px',
-              padding: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <i className="fas fa-briefcase" style={{ fontSize: '20px' }}></i>
-            </Box>
-            <Box>
-              <Typography sx={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>
-                Select Job Context
-              </Typography>
-              <Typography sx={{ fontSize: '14px', opacity: 0.9, margin: 0 }}>
-                Choose the position for {activeAction === 'questions' ? 'AI question generation' : 'transcript analysis'}
-              </Typography>
-            </Box>
-          </DialogTitle>
-          
-          <DialogContent sx={{ padding: '32px' }}>
-           
-
-            {/* Job Selection */}
-            <Box>
-              <Typography sx={{ 
-                fontSize: '16px', 
-                fontWeight: 600, 
-                color: '#1e293b', 
-                marginBottom: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                mt:"10px"
-              }}>
-                <i className="fas fa-search" style={{ fontSize: '16px', color: '#f59e0b' }}></i>
-                Available Positions
-              </Typography>
-              
-              <FormControl fullWidth>
-                <InputLabel sx={{ 
-                  color: '#64748b',
-                  '&.Mui-focused': { color: '#f59e0b' }
-                }}>
-                  Select Job Position
-                </InputLabel>
-                <Select
-                  value={selectedJobId}
-                  label="Select Job Position"
-                  onChange={(e) => setSelectedJobId(Number(e.target.value))}
-                  sx={{
-                    borderRadius: '12px',
-                    '& .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#e2e8f0'
-                    },
-                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#f59e0b'
-                    },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#f59e0b',
-                      borderWidth: '2px'
-                    }
-                  }}
-                >
-                  {jobs.length === 0 ? (
-                    <MenuItem disabled>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
-                        <i className="fas fa-exclamation-circle"></i>
-                        No open positions available
-                      </Box>
-                    </MenuItem>
-                  ) : (
-                    jobs.map((job) => (
-                      <MenuItem key={job.id} value={job.id}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                          <Typography sx={{ fontWeight: 600, color: '#1e293b' }}>
-                            {job.title}
-                          </Typography>
-                          {job.department && (
-                            <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                              {job.department}
-                            </Typography>
-                          )}
-                        </Box>
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
-
-              {jobs.length > 0 && (
-                <Typography sx={{ 
-                  fontSize: '12px', 
-                  color: '#94a3b8', 
-                  marginTop: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <i className="fas fa-info-circle"></i>
-                  {jobs.length} open position{jobs.length !== 1 ? 's' : ''} available
-                </Typography>
-              )}
-            </Box>
+        {/* Job Selection Dialog */}
+        <Dialog open={isJobSelectOpen} onClose={() => setIsJobSelectOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>Select Job Context</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
+              Please select the job to apply this action to.
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel>Job</InputLabel>
+              <Select
+                value={selectedJobId}
+                label="Job"
+                onChange={(e) => setSelectedJobId(Number(e.target.value))}
+              >
+                {jobs.map((job) => (
+                  <MenuItem key={job.id} value={job.id}>{job.title}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </DialogContent>
-          
-          <DialogActions sx={{ 
-            padding: '24px 32px 32px 32px', 
-            gap: '12px',
-            background: '#fafbfc',
-            borderRadius: '0 0 16px 16px'
-          }}>
-            <Button 
-              onClick={() => {
-                setIsJobSelectOpen(false);
-                setSelectedJobId('');
-                setActiveAction(null);
-              }}
-              sx={{
-                color: '#64748b',
-                textTransform: 'none',
-                fontWeight: 600,
-                padding: '10px 24px',
-                borderRadius: '10px',
-                '&:hover': {
-                  background: '#f1f5f9'
-                }
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleJobSelectConfirm} 
-              variant="contained" 
-              disabled={!selectedJobId || jobs.length === 0}
-              sx={{
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                textTransform: 'none',
-                fontWeight: 600,
-                padding: '10px 32px',
-                borderRadius: '10px',
-                boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
-                  boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4)'
-                },
-                '&:disabled': {
-                  background: '#cbd5e1',
-                  color: '#94a3b8'
-                }
-              }}
-            >
-              <i className="fas fa-arrow-right" style={{ marginRight: '8px' }}></i>
-              Continue
-            </Button>
+          <DialogActions>
+            <Button onClick={() => setIsJobSelectOpen(false)}>Cancel</Button>
+            <Button onClick={handleJobSelectConfirm} variant="contained" disabled={!selectedJobId}>Continue</Button>
           </DialogActions>
         </Dialog>
 
-        {/* Professional Transcript Upload Dialog */}
-        <Dialog 
-          open={isTranscriptUploadOpen} 
-          onClose={() => setIsTranscriptUploadOpen(false)} 
-          maxWidth="md" 
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: '16px',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
-              border: '1px solid #e2e8f0'
-            }
-          }}
-        >
-          <DialogTitle sx={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            padding: '24px 32px',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
-            <Box sx={{
-              background: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: '12px',
-              padding: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <i className="fas fa-file-upload" style={{ fontSize: '20px' }}></i>
-            </Box>
-            <Box>
-              <Typography sx={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>
-                Upload Interview Transcript
-              </Typography>
-              <Typography sx={{ fontSize: '14px', opacity: 0.9, margin: 0 }}>
-                {menuCandidate?.name} - AI-Powered Scoring
-              </Typography>
-            </Box>
-          </DialogTitle>
-          
-          <DialogContent sx={{ padding: '32px' }}>
-           
-
-            {/* Upload Options */}
-            <Box sx={{ marginBottom: '24px' }}>
-              <Typography sx={{ 
-                fontSize: '16px', 
-                fontWeight: 600, 
-                color: '#1e293b', 
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                mt:"10px"
-              }}>
-                <i className="fas fa-edit" style={{ fontSize: '16px', color: '#667eea' }}></i>
-                Transcript Content
-              </Typography>
-              
+        {/* Transcript Upload Dialog */}
+        <Dialog open={isTranscriptUploadOpen} onClose={() => setIsTranscriptUploadOpen(false)} maxWidth="md" fullWidth>
+          <DialogTitle>Upload Transcript</DialogTitle>
+          <DialogContent>
+            <Box sx={{ padding: '20px 0' }}>
               <TextField
                 fullWidth
                 multiline
-                minRows={8}
-                maxRows={20}
-                label="Interview Transcript"
+                minRows={10}
+                label="Paste Transcript Text (or auto-extracted from file)"
                 value={transcriptText}
                 onChange={(e) => setTranscriptText(e.target.value)}
-                placeholder="Interviewer: Good morning! Thank you for joining us today. Could you start by telling us about yourself?
-
-Candidate: Good morning! Thank you for having me. I'm a software engineer with 5 years of experience...
-
-Interviewer: That's great! Can you walk us through your experience with React?
-
-Candidate: Absolutely! I've been working with React for the past 3 years..."
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '12px',
-                    background: '#fafbfc',
-                    '&:hover': {
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
-                    },
-                    '&.Mui-focused': {
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea',
-                        borderWidth: '2px'
-                      }
-                    }
-                  },
-                  '& .MuiInputLabel-root': {
-                    color: '#64748b',
-                    '&.Mui-focused': {
-                      color: '#667eea'
-                    }
-                  }
-                }}
+                placeholder="Speaker 1: Hello...\nSpeaker 2: Hi there..."
               />
-              
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                margin: '20px 0',
-                position: 'relative'
-              }}>
-                <Box sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: 0,
-                  right: 0,
-                  height: '1px',
-                  background: 'linear-gradient(90deg, transparent 0%, #e2e8f0 50%, transparent 100%)'
-                }} />
-                <Typography sx={{
-                  background: 'white',
-                  padding: '0 16px',
-                  fontSize: '12px',
-                  color: '#94a3b8',
-                  fontWeight: 500,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  OR
+              <Box sx={{ marginTop: '16px', textAlign: 'center' }}>
+                <Typography sx={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>
+                  OR Upload a text file (Integration pending)
                 </Typography>
-              </Box>
-
-              {/* File Upload Section */}
-              <Box sx={{
-                border: '2px dashed #cbd5e1',
-                borderRadius: '12px',
-                padding: '24px',
-                textAlign: 'center',
-                background: '#fafbfc',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  borderColor: '#667eea',
-                  background: '#f8faff'
-                }
-              }}>
-                <Box sx={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  borderRadius: '50%',
-                  width: '48px',
-                  height: '48px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px auto'
-                }}>
-                  <CloudUploadIcon sx={{ color: 'white', fontSize: '24px' }} />
-                </Box>
-                
-                <Typography sx={{ 
-                  fontSize: '16px', 
-                  fontWeight: 600, 
-                  color: '#1e293b', 
-                  marginBottom: '8px' 
-                }}>
-                  Upload Transcript File
-                </Typography>
-                
-                <Typography sx={{ 
-                  fontSize: '14px', 
-                  color: '#64748b', 
-                  marginBottom: '16px',
-                  lineHeight: 1.5
-                }}>
-                  Drag and drop your transcript file here, or click to browse
-                  <br />
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                    Supports: TXT, MD, JSON, CSV (Max 5MB)
-                  </span>
-                </Typography>
-                
                 <Button
                   component="label"
-                  variant="outlined"
                   startIcon={<CloudUploadIcon />}
-                  sx={{
-                    borderColor: '#667eea',
-                    color: '#667eea',
-                    borderRadius: '10px',
-                    padding: '10px 24px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      borderColor: '#5a67d8',
-                      background: 'rgba(102, 126, 234, 0.05)'
-                    }
-                  }}
                 >
-                  Choose File
+                  Upload File (Simulation)
                   <input
                     type="file"
                     hidden
@@ -1431,118 +1094,34 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      // Validation: Check file type and size
-                      if (file.size > 5 * 1024 * 1024) {
-                        toast.error('File too large (Max 5MB). Please upload a smaller text file.');
-                        e.target.value = '';
+                      // Validation: Check file type and size to prevent freezing on large videos
+                      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                        toast.error('File too large (Max 5MB). Please upload a text transcript.');
+                        e.target.value = ''; // Reset input
                         return;
                       }
 
+                      // Basic type check - allow text/* or known text extensions
                       const validTypes = ['text/plain', 'text/markdown', 'application/json', 'text/csv'];
                       if (!file.type.startsWith('text/') && !validTypes.includes(file.type) && !file.name.match(/\.(txt|md|json|csv)$/i)) {
-                        toast.error('Invalid file type. Please upload a text file (TXT, MD, JSON, CSV).');
-                        e.target.value = '';
+                        toast.error('Invalid file type. Please upload a text file (txt, md, json).');
+                        e.target.value = ''; // Reset input
                         return;
                       }
 
                       const reader = new FileReader();
-                      reader.onload = (e) => {
-                        setTranscriptText(e.target?.result as string);
-                        toast.success(`File "${file.name}" loaded successfully!`);
-                      };
+                      reader.onload = (e) => setTranscriptText(e.target?.result as string);
                       reader.onerror = () => toast.error('Error reading file');
                       reader.readAsText(file);
-                    }}
-                  />
+                    }} />
                 </Button>
               </Box>
             </Box>
-
-            {/* Character Count */}
-            {transcriptText && (
-              <Box sx={{
-                background: '#f1f5f9',
-                borderRadius: '8px',
-                padding: '12px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '16px'
-              }}>
-                <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                  <i className="fas fa-file-alt" style={{ marginRight: '8px', color: '#667eea' }}></i>
-                  Transcript loaded
-                </Typography>
-                <Typography sx={{ 
-                  fontSize: '12px', 
-                  color: '#94a3b8',
-                  background: 'white',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  fontWeight: 500
-                }}>
-                  {transcriptText.length.toLocaleString()} characters
-                </Typography>
-              </Box>
-            )}
           </DialogContent>
-          
-          <DialogActions sx={{ 
-            padding: '24px 32px 32px 32px', 
-            gap: '12px',
-            background: '#fafbfc',
-            borderRadius: '0 0 16px 16px'
-          }}>
-            <Button 
-              onClick={() => {
-                setIsTranscriptUploadOpen(false);
-                setTranscriptText('');
-              }}
-              sx={{
-                color: '#64748b',
-                textTransform: 'none',
-                fontWeight: 600,
-                padding: '10px 24px',
-                borderRadius: '10px',
-                '&:hover': {
-                  background: '#f1f5f9'
-                }
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleTranscriptSubmit} 
-              variant="contained" 
-              disabled={actionLoading}
-              sx={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                textTransform: 'none',
-                fontWeight: 600,
-                padding: '10px 32px',
-                borderRadius: '10px',
-                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
-                  boxShadow: '0 6px 20px rgba(102, 126, 234, 0.4)'
-                },
-                '&:disabled': {
-                  background: '#cbd5e1',
-                  color: '#94a3b8'
-                }
-              }}
-            >
-              {actionLoading ? (
-                <>
-                  <i className="fas fa-spinner fa-spin" style={{ marginRight: '8px' }}></i>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-magic" style={{ marginRight: '8px' }}></i>
-                  Generate AI Score
-                </>
-              )}
+          <DialogActions>
+            <Button onClick={() => setIsTranscriptUploadOpen(false)}>Cancel</Button>
+            <Button onClick={handleTranscriptSubmit} variant="contained" disabled={!transcriptText || actionLoading}>
+              {actionLoading ? 'Processing...' : 'Submit & Auto-Generate Score'}
             </Button>
           </DialogActions>
         </Dialog>
@@ -1662,17 +1241,38 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             <i className="fas fa-user" style={{ marginRight: '12px', color: '#64748b' }}></i>
             View Profile
           </MenuItem>
-         
+          <MenuItem
+            onClick={() => {
+              handleCloseMenu()
+              handleActionClick('questions')
+            }}
+            sx={{ padding: '12px 20px', fontSize: '14px' }}
+          >
+            <i className="fas fa-brain" style={{ marginRight: '12px', color: '#64748b' }}></i>
+            Generate AI Questions
+          </MenuItem>
 
-          
+          {/* Upload Transcript - Only show if no transcript */}
+          {!menuCandidate?.hasTranscript && (
+            <MenuItem
+              onClick={() => {
+                handleCloseMenu()
+                handleActionClick('transcript')
+              }}
+              sx={{ padding: '12px 20px', fontSize: '14px' }}
+            >
+              <i className="fas fa-file-alt" style={{ marginRight: '12px', color: '#64748b' }}></i>
+              Upload Transcript
+            </MenuItem>
+          )}
           <MenuItem onClick={handleCloseMenu} sx={{ padding: '12px 20px', fontSize: '14px' }}>
             <i className="fas fa-video" style={{ marginRight: '12px', color: '#64748b' }}></i>
             Schedule Interview
           </MenuItem>
-          {/* <MenuItem onClick={handleCloseMenu} sx={{ padding: '12px 20px', fontSize: '14px' }}>
+          <MenuItem onClick={handleCloseMenu} sx={{ padding: '12px 20px', fontSize: '14px' }}>
             <i className="fas fa-envelope" style={{ marginRight: '12px', color: '#64748b' }}></i>
             Send Message
-          </MenuItem> */}
+          </MenuItem>
           <Divider />
           <MenuItem onClick={handleCloseMenu} sx={{ padding: '12px 20px', fontSize: '14px', color: '#ef4444' }}>
             <i className="fas fa-trash" style={{ marginRight: '12px' }}></i>

@@ -3,7 +3,7 @@ import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Divider
 } from '@mui/material';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import atsService from '../../services/atsService';
 
 interface JobMapping {
@@ -48,18 +48,16 @@ const ATSJobMappings: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', height: '100vh' }}>
-        <Sidebar />
+      <Naivgation>
         <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5' }}>
           <CircularProgress />
         </Box>
-      </Box>
+      </Naivgation>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3 }}>ATS Field Mappings</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -126,7 +124,7 @@ const ATSJobMappings: React.FC = () => {
           </Table>
         </TableContainer>
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

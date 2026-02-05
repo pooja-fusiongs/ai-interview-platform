@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
-  Box, Typography, Button, Card, Chip, Avatar,
+  Box, Typography, Button, Card, Avatar,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, LinearProgress, IconButton, CircularProgress
+  TextField, LinearProgress, IconButton, CircularProgress,
+  InputAdornment
 } from '@mui/material'
 import { toast } from 'react-hot-toast'
 import Navigation from '../layout/sidebar'
@@ -16,7 +17,11 @@ const RecruiterCandidates = () => {
   const jobTitle = searchParams.get('jobTitle') || 'Job'
 
   const [candidates, setCandidates] = useState<RecruiterCandidate[]>([])
+  const [filteredCandidates, setFilteredCandidates] = useState<RecruiterCandidate[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<RecruiterCandidate | null>(null)
@@ -31,16 +36,58 @@ const RecruiterCandidates = () => {
   })
 
   const fetchCandidates = useCallback(async () => {
-    if (!jobId) return
+    if (!jobId) {
+      setLoading(false)
+      return
+    }
     try {
       const data = await recruiterService.getCandidates(jobId)
       setCandidates(data)
+      setFilteredCandidates(data) // Initialize filtered candidates
     } catch (err) {
       console.error('Failed to fetch candidates:', err)
+      setCandidates([]) // Set empty array on error
+      setFilteredCandidates([])
     } finally {
       setLoading(false)
     }
   }, [jobId])
+
+  // Search functionality
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredCandidates(candidates)
+    } else {
+      const filtered = candidates.filter(candidate =>
+        candidate.applicant_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        candidate.applicant_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        candidate.current_position?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        candidate.parsed_skills.some(skill =>
+          skill.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      )
+      setFilteredCandidates(filtered)
+    }
+    setCurrentPage(1) // Reset to first page when search changes
+  }, [searchQuery, candidates])
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredCandidates.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentCandidates = filteredCandidates.slice(startIndex, endIndex)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(event.target.value)
+  }
+
+  const clearSearch = () => {
+    setSearchQuery('')
+  }
 
   useEffect(() => { fetchCandidates() }, [fetchCandidates])
 
@@ -63,7 +110,7 @@ const RecruiterCandidates = () => {
       toast.success('Candidate added successfully')
       setAddDialogOpen(false)
       setAddForm({ name: '', email: '', phone: '', experience_years: '', current_position: '', resume: null })
-      fetchCandidates()
+      await fetchCandidates() // Refresh the list
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add candidate')
     } finally {
@@ -76,7 +123,7 @@ const RecruiterCandidates = () => {
     try {
       await recruiterService.generateQuestions(jobId, candidate.id)
       toast.success(`Questions generated for ${candidate.applicant_name}`)
-      fetchCandidates()
+      await fetchCandidates() // Refresh the list
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to generate questions')
     } finally {
@@ -96,7 +143,7 @@ const RecruiterCandidates = () => {
       setTranscriptDialogOpen(false)
       setTranscriptText('')
       setSelectedCandidate(null)
-      fetchCandidates()
+      await fetchCandidates() // Refresh the list
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to score transcript')
     } finally {
@@ -104,37 +151,29 @@ const RecruiterCandidates = () => {
     }
   }
 
-  const getStatusChip = (candidate: RecruiterCandidate) => {
+
+  const getScoreDisplay = (candidate: RecruiterCandidate) => {
     if (candidate.has_scores) {
       const score = candidate.overall_score || 0
       const color = score >= 7.5 ? '#16a34a' : score >= 5 ? '#f59e0b' : '#ef4444'
-      return <Chip label={`${score.toFixed(1)}/10`} size="small" sx={{ background: `${color}20`, color, fontWeight: 700, fontSize: '13px' }} />
+      return (
+        <Typography sx={{ fontSize: '13px', color, fontWeight: 600 }}>
+          Score: {score.toFixed(1)}/10
+        </Typography>
+      )
     }
-    if (candidate.has_transcript) return <Chip label="Scoring..." size="small" sx={{ background: '#dbeafe', color: '#2563eb' }} />
-    if (candidate.questions_status === 'approved') return <Chip label="Ready for Interview" size="small" sx={{ background: '#dcfce7', color: '#16a34a' }} />
-    if (candidate.has_questions) return <Chip label="Questions Generated" size="small" sx={{ background: '#fef3c7', color: '#d97706' }} />
-    if (candidate.has_resume) return <Chip label="Resume Uploaded" size="small" sx={{ background: '#e0e7ff', color: '#4f46e5' }} />
-    return <Chip label="Added" size="small" sx={{ background: '#f1f5f9', color: '#64748b' }} />
+    return null
   }
 
-  const getRecommendationChip = (rec: string | undefined) => {
-    if (!rec) return null
-    const map: Record<string, { bg: string; color: string; label: string }> = {
-      select: { bg: '#dcfce7', color: '#16a34a', label: 'SELECT' },
-      next_round: { bg: '#fef3c7', color: '#d97706', label: 'NEXT ROUND' },
-      reject: { bg: '#fee2e2', color: '#ef4444', label: 'REJECT' }
-    }
-    const style = map[rec] || map.reject
-    return <Chip label={style.label} size="small" sx={{ background: style.bg, color: style.color, fontWeight: 700 }} />
-  }
+
 
   return (
     <Navigation>
-      <Box sx={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+      <Box sx={{ padding: '24px', paddingBottom: '100px' }}>
         {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: "10px", gap: 3 }}>
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
               <IconButton onClick={() => navigate(-1)} sx={{ color: '#64748b' }}>
                 <i className="fas fa-arrow-left" />
               </IconButton>
@@ -142,40 +181,102 @@ const RecruiterCandidates = () => {
                 <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b' }}>
                   Manage Candidates
                 </Typography>
-                <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
-                  {jobTitle} — {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
-                </Typography>
+
               </Box>
             </Box>
+
+
           </Box>
-          <Button
-            onClick={() => setAddDialogOpen(true)}
-            sx={{
-              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-              color: 'white', borderRadius: '10px', textTransform: 'none',
-              fontWeight: 600, px: 3, py: 1.2,
-              '&:hover': { background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', transform: 'translateY(-1px)' }
-            }}
-          >
-            <i className="fas fa-plus" style={{ marginRight: 8 }} /> Add Candidate
-          </Button>
+
+          <Box sx={{ display: "flex", gap: "10px" }}>
+            <Box>
+              {/* Search Bar */}
+              <TextField
+                fullWidth
+                placeholder="Search candidates here..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                sx={{
+                  maxWidth: '500px',
+                  padding: 0,
+                  '& .MuiOutlinedInput-root': {
+                    height: "40px",
+                    borderRadius: '12px',
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      backgroundColor: '#f8fafc'
+                    },
+                    '&.Mui-focused': {
+                      backgroundColor: 'white'
+                    }
+                  }
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <i className="fas fa-search" style={{ color: '#64748b', fontSize: '16px' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={clearSearch}
+                        sx={{
+                          color: '#64748b',
+                          '&:hover': {
+                            backgroundColor: 'rgba(100, 116, 139, 0.1)'
+                          }
+                        }}
+                      >
+                        <i className="fas fa-times" style={{ fontSize: '14px' }} />
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Box>
+            <Button
+              onClick={() => setAddDialogOpen(true)}
+              sx={{
+                flex: 1,
+                background: 'rgba(245, 158, 11, 0.1)',
+                color: '#f59e0b',
+                border: '2px solid #f59f0baf',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                textTransform: 'none',
+                '&:hover': {
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  borderColor: '#f59e0b',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                }
+              }}
+            >
+              <i className="fas fa-plus" style={{ marginRight: 8 }} /> Add Candidate
+            </Button>
+          </Box>
         </Box>
 
-        {/* Pipeline Steps Guide */}
-        <Card sx={{ p: 2, mb: 3, borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {['Add Candidate', 'Generate Questions', 'Expert Review', 'Conduct Interview', 'Upload Transcript', 'View Results'].map((step, i) => (
-              <Box key={step} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{
-                  width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: '12px', fontWeight: 700
-                }}>{i + 1}</Box>
-                <Typography sx={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>{step}</Typography>
-                {i < 5 && <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '10px' }} />}
-              </Box>
-            ))}
-          </Box>
-        </Card>
+        {/* Pipeline Steps Guide - Only show when no candidates exist */}
+        {!loading && candidates.length === 0 && (
+          <Card sx={{ p: 2, mb: 3, borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {['Add Candidate', 'Generate Questions', 'Expert Review', 'Conduct Interview', 'Upload Transcript', 'View Results'].map((step, i) => (
+                <Box key={step} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{
+                    width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: '12px', fontWeight: 700
+                  }}>{i + 1}</Box>
+                  <Typography sx={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>{step}</Typography>
+                  {i < 5 && <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '10px' }} />}
+                </Box>
+              ))}
+            </Box>
+          </Card>
+        )}
 
         {/* Loading */}
         {loading && <Box sx={{ textAlign: 'center', py: 8 }}><CircularProgress sx={{ color: '#f59e0b' }} /></Box>}
@@ -183,8 +284,10 @@ const RecruiterCandidates = () => {
         {/* Empty State */}
         {!loading && candidates.length === 0 && (
           <Card sx={{ p: 6, textAlign: 'center', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-            <Box sx={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #f59e0b20, #d9770620)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+            <Box sx={{
+              width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #f59e0b20, #d9770620)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2
+            }}>
               <i className="fas fa-users" style={{ fontSize: 24, color: '#f59e0b' }} />
             </Box>
             <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', mb: 1 }}>No candidates yet</Typography>
@@ -198,8 +301,33 @@ const RecruiterCandidates = () => {
           </Card>
         )}
 
+        {/* No Search Results */}
+        {!loading && candidates.length > 0 && filteredCandidates.length === 0 && searchQuery && (
+          <Card sx={{ p: 6, textAlign: 'center', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <Box sx={{
+              width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #64748b20, #94a3b820)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2
+            }}>
+              <i className="fas fa-search" style={{ fontSize: 24, color: '#64748b' }} />
+            </Box>
+            <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', mb: 1 }}>
+              No candidates found
+            </Typography>
+            <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3 }}>
+              No candidates match your search for "{searchQuery}". Try different keywords or clear the search.
+            </Typography>
+            <Button onClick={clearSearch} sx={{
+              background: 'rgba(100, 116, 139, 0.1)', color: '#64748b',
+              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
+              '&:hover': { background: 'rgba(100, 116, 139, 0.2)' }
+            }}>
+              <i className="fas fa-times" style={{ marginRight: 8 }} /> Clear Search
+            </Button>
+          </Card>
+        )}
+
         {/* Candidate List */}
-        {!loading && candidates.map((candidate) => (
+        {!loading && currentCandidates.map((candidate) => (
           <Card key={candidate.id} sx={{
             mb: 2, p: 0, borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white',
             transition: 'all 0.2s', '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderColor: '#f59e0b40' }
@@ -219,8 +347,7 @@ const RecruiterCandidates = () => {
                   <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>
                     {candidate.applicant_name}
                   </Typography>
-                  {getStatusChip(candidate)}
-                  {candidate.has_scores && getRecommendationChip(candidate.recommendation)}
+                  {getScoreDisplay(candidate)}
                 </Box>
                 <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                   <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
@@ -253,6 +380,8 @@ const RecruiterCandidates = () => {
                     disabled={generatingFor === candidate.id}
                     onClick={() => handleGenerateQuestions(candidate)}
                     sx={{
+                      minWidth: '140px',
+                      height: '36px',
                       background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', border: '1px solid #fbbf2480',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
                       '&:hover': { background: 'rgba(245, 158, 11, 0.2)' }
@@ -269,9 +398,11 @@ const RecruiterCandidates = () => {
                 {/* View/Review Questions */}
                 {candidate.has_questions && candidate.question_session_id && (
                   <Button
-                    size="small"
-                    onClick={() => navigate(`/interview-outline/${candidate.question_session_id}`)}
+                    size="medium"
+                    onClick={() => navigate(`/interview-outline/${candidate.question_session_id}?from=manage-candidates&jobId=${jobId}&jobTitle=${encodeURIComponent(jobTitle)}`)}
                     sx={{
+                      minWidth: '140px',
+                      height: '36px',
                       background: candidate.questions_status === 'approved' ? '#dcfce720' : '#fef3c720',
                       color: candidate.questions_status === 'approved' ? '#16a34a' : '#d97706',
                       border: `1px solid ${candidate.questions_status === 'approved' ? '#16a34a40' : '#d9770640'}`,
@@ -290,6 +421,8 @@ const RecruiterCandidates = () => {
                     size="small"
                     onClick={() => { setSelectedCandidate(candidate); setTranscriptDialogOpen(true) }}
                     sx={{
+                      minWidth: '140px',
+                      height: '36px',
                       background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid #2563eb40',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
                       '&:hover': { background: 'rgba(37, 99, 235, 0.2)' }
@@ -302,12 +435,22 @@ const RecruiterCandidates = () => {
                 {/* View Results */}
                 {candidate.has_scores && candidate.session_id && (
                   <Button
-                    size="small"
+                    size="medium"
                     onClick={() => navigate(`/results?session=${candidate.session_id}`)}
                     sx={{
-                      background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
-                      borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
-                      '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' }
+                      minWidth: '140px',
+                      height: '36px',
+                      background: '#7c3aed17',
+                      color: '#7C3AED',
+                      border: '1px solid #7c3aedaf',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      '&:hover': {
+                        background: '#7c3aed3b',
+                        borderColor: '#7c3aedaf',
+                      }
                     }}
                   >
                     <i className="fas fa-chart-bar" style={{ marginRight: 6 }} /> View Results
@@ -321,42 +464,250 @@ const RecruiterCandidates = () => {
           </Card>
         ))}
 
+        {/* Pagination - Same as CandidateMatching */}
+        <Box sx={{
+          position: 'fixed',
+          width: "200px",
+          bottom: 0,
+          left: "50%",
+          right: 0,
+          mb: 3,
+          zIndex: 1000,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderRadius: "10px"
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+
+
+            {/* Previous Button */}
+            <Button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              sx={{
+                minWidth: 'auto',
+                width: 40,
+                height: 40,
+                borderRadius: '10px',
+                background: currentPage === 1 ? '#f1f5f9' : 'rgba(245, 158, 11, 0.1)',
+                color: currentPage === 1 ? '#94a3b8' : '#f59e0b',
+                border: `1px solid ${currentPage === 1 ? '#e2e8f0' : '#f59e0b40'}`,
+                '&:hover': {
+                  background: currentPage === 1 ? '#f1f5f9' : 'rgba(245, 158, 11, 0.2)',
+                }
+              }}
+            >
+              <i className="fas fa-chevron-left" style={{ fontSize: '12px' }} />
+            </Button>
+
+            {/* Page Numbers */}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {Array.from({ length: Math.min(Math.max(totalPages, 1), 7) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 7) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 4) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 3) {
+                  pageNum = totalPages - 6 + i;
+                } else {
+                  pageNum = currentPage - 3 + i;
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    sx={{
+                      minWidth: 'auto',
+                      width: 40,
+                      height: 40,
+                      borderRadius: '10px',
+                      background: currentPage === pageNum ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(245, 158, 11, 0.1)',
+                      color: currentPage === pageNum ? 'white' : '#f59e0b',
+                      border: `1px solid ${currentPage === pageNum ? 'transparent' : '#f59e0b40'}`,
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      '&:hover': {
+                        background: currentPage === pageNum ? 'linear-gradient(135deg, #d97706, #b45309)' : 'rgba(245, 158, 11, 0.2)',
+                      }
+                    }}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+
+              {totalPages > 7 && currentPage < totalPages - 3 && (
+                <>
+                  <Typography sx={{ display: 'flex', alignItems: 'center', color: '#64748b', px: 1 }}>...</Typography>
+                  <Button
+                    onClick={() => handlePageChange(totalPages)}
+                    sx={{
+                      minWidth: 'auto',
+                      width: 40,
+                      height: 40,
+                      borderRadius: '10px',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      color: '#f59e0b',
+                      border: '1px solid #f59e0b40',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      '&:hover': {
+                        background: 'rgba(245, 158, 11, 0.2)',
+                      }
+                    }}
+                  >
+                    {totalPages}
+                  </Button>
+                </>
+              )}
+            </Box>
+
+            {/* Next Button */}
+            <Button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= Math.max(totalPages, 1)}
+              sx={{
+                minWidth: 'auto',
+                width: 40,
+                height: 40,
+                borderRadius: '10px',
+                background: currentPage >= Math.max(totalPages, 1) ? '#f1f5f9' : 'rgba(245, 158, 11, 0.1)',
+                color: currentPage >= Math.max(totalPages, 1) ? '#94a3b8' : '#f59e0b',
+                border: `1px solid ${currentPage >= Math.max(totalPages, 1) ? '#e2e8f0' : '#f59e0b40'}`,
+                '&:hover': {
+                  background: currentPage >= Math.max(totalPages, 1) ? '#f1f5f9' : 'rgba(245, 158, 11, 0.2)',
+                }
+              }}
+            >
+              <i className="fas fa-chevron-right" style={{ fontSize: '12px' }} />
+            </Button>
+          </Box>
+        </Box>
+
+
+
         {/* ─── Add Candidate Dialog ─── */}
         <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth
           PaperProps={{ sx: { borderRadius: '16px' } }}>
           <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
               <Box sx={{
                 width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white'
               }}>
                 <i className="fas fa-user-plus" />
               </Box>
-              Add Candidate
+              <Box>
+                <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>
+                  Add Candidate
+                </Typography>
+                <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                  Add candidate details and upload resume
+                </Typography>
+
+              </Box>
             </Box>
           </DialogTitle>
           <DialogContent sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
               <TextField label="Full Name" required value={addForm.name}
                 onChange={e => setAddForm({ ...addForm, name: e.target.value })}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                InputLabelProps={{
+                  sx: {
+                    top: '50%',
+                    left: "10px",
+                    transform: 'translateY(-50%)',
+                    '&.Mui-focused': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                    '&.MuiInputLabel-shrink': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                  },
+                }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' }, }} />
               <TextField label="Email" type="email" required value={addForm.email}
                 onChange={e => setAddForm({ ...addForm, email: e.target.value })}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                InputLabelProps={{
+                  sx: {
+                    top: '50%',
+                    left: "10px",
+                    transform: 'translateY(-50%)',
+                    '&.Mui-focused': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                    '&.MuiInputLabel-shrink': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                  },
+                }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: "44px" } }} />
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <TextField label="Phone" value={addForm.phone}
                   onChange={e => setAddForm({ ...addForm, phone: e.target.value })}
-                  sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                  InputLabelProps={{
+                  sx: {
+                    top: '50%',
+                    left: "10px",
+                    transform: 'translateY(-50%)',
+                    '&.Mui-focused': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                    '&.MuiInputLabel-shrink': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                  },
+                }}
+                  sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px', height: "44px" } }} />
                 <TextField label="Experience (years)" type="number" value={addForm.experience_years}
                   onChange={e => setAddForm({ ...addForm, experience_years: e.target.value })}
-                  sx={{ width: 160, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                  InputLabelProps={{
+                  sx: {
+                    top: '50%',
+                    left: "10px",
+                    transform: 'translateY(-50%)',
+                    '&.Mui-focused': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                    '&.MuiInputLabel-shrink': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                  },
+                }}
+                  sx={{ width: 160, '& .MuiOutlinedInput-root': { borderRadius: '10px', height: "44px" } }} />
               </Box>
               <TextField label="Current Position" value={addForm.current_position}
+              InputLabelProps={{
+                  sx: {
+                    top: '50%',
+                    left: "10px",
+                    transform: 'translateY(-50%)',
+                    '&.Mui-focused': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                    '&.MuiInputLabel-shrink': {
+                      top: 0,
+                      transform: 'translateY(-50%) scale(0.75)',
+                    },
+                  },
+                }}
                 onChange={e => setAddForm({ ...addForm, current_position: e.target.value })}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: "44px" } }} />
               {/* Resume Upload */}
               <Box sx={{
-                border: '2px dashed #e2e8f0', borderRadius: '12px', p: 3, textAlign: 'center',
+                border: '2px dashed #cbd5e1', borderRadius: '12px', p: 3, textAlign: 'center',
                 background: addForm.resume ? '#f0fdf4' : '#f8fafc', cursor: 'pointer',
                 transition: 'all 0.2s', '&:hover': { borderColor: '#f59e0b', background: '#fffbeb' }
               }}
@@ -380,11 +731,18 @@ const RecruiterCandidates = () => {
             </Box>
           </DialogContent>
           <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
-            <Button onClick={() => setAddDialogOpen(false)} sx={{ color: '#64748b', textTransform: 'none' }}>Cancel</Button>
+            <Button onClick={() => setAddDialogOpen(false)} sx={{
+              color: '#64748b',
+              textTransform: 'none',
+              px: 3,
+              height: '40px',
+              borderRadius: '10px',
+              '&:hover': { background: '#f1f5f9' }
+            }}>Cancel</Button>
             <Button onClick={handleAddCandidate} disabled={submitting}
               sx={{
                 background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
-                borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3,
+                borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: "40px",
                 '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' },
                 '&:disabled': { opacity: 0.6 }
               }}>

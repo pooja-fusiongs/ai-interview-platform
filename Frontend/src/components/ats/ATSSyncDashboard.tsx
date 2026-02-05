@@ -3,8 +3,8 @@ import {
   Box, Typography, Button, ButtonGroup, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert
 } from '@mui/material';
-import { Sync, Work, People, CloudSync } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import {  Work, People, CloudSync } from '@mui/icons-material';
+import Naivgation from '../layout/sidebar';
 import atsService from '../../services/atsService';
 
 interface SyncLog {
@@ -63,8 +63,7 @@ const ATSSyncDashboard: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3 }}>ATS Sync Dashboard</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -123,7 +122,7 @@ const ATSSyncDashboard: React.FC = () => {
           </TableContainer>
         )}
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

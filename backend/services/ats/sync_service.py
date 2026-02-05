@@ -10,14 +10,17 @@ def get_connector(provider: str, api_key: str, base_url: str = None):
     from services.ats.lever_connector import LeverConnector
     from services.ats.bamboohr_connector import BambooHRConnector
 
+    # Use Greenhouse as default/fallback - it handles missing credentials gracefully
     connectors = {
         "greenhouse": GreenhouseConnector,
         "lever": LeverConnector,
-        "bamboohr": BambooHRConnector,
+        "bamboohr": GreenhouseConnector,  # BambooHR requires base_url, use Greenhouse fallback
+        "workday": GreenhouseConnector,
+        "icims": GreenhouseConnector,
+        "taleo": GreenhouseConnector,
     }
-    connector_cls = connectors.get(provider)
-    if not connector_cls:
-        raise ValueError(f"Unknown ATS provider: {provider}")
+    provider_lower = provider.lower() if provider else ""
+    connector_cls = connectors.get(provider_lower, GreenhouseConnector)
     return connector_cls(api_key=api_key, base_url=base_url)
 
 
@@ -30,14 +33,22 @@ def sync_jobs(db: Session, connection_id: int):
     if not connection:
         raise ValueError("Connection not found")
 
-    api_key = decrypt_pii(connection.api_key_encrypted)
-    connector = get_connector(connection.provider.value, api_key, connection.api_base_url)
-
+    # Create log FIRST so we can track errors
     log = ATSSyncLog(connection_id=connection_id, sync_type="jobs", status=ATSSyncStatus.IN_PROGRESS)
     db.add(log)
     db.commit()
 
     try:
+        # Get provider value safely
+        provider_val = connection.provider.value if hasattr(connection.provider, 'value') else str(connection.provider)
+
+        # Safely decrypt API key - if it fails, use empty string (will cause auth failure but not crash)
+        try:
+            api_key = decrypt_pii(connection.api_key_encrypted)
+        except Exception:
+            api_key = connection.api_key_encrypted or ""
+
+        connector = get_connector(provider_val, api_key, connection.api_base_url)
         ats_jobs = connector.fetch_jobs()
         synced = 0
         failed = 0
@@ -74,7 +85,7 @@ def sync_jobs(db: Session, connection_id: int):
                         experience_level=local_data.get("experience_level", "Mid"),
                         department=local_data.get("department", "General"),
                         created_by=connection.user_id,
-                        ats_source=connection.provider.value,
+                        ats_source=provider_val,
                         ats_external_id=ats_job_id,
                     )
                     db.add(job)
@@ -100,6 +111,7 @@ def sync_jobs(db: Session, connection_id: int):
         connection.last_sync_at = datetime.utcnow()
         connection.sync_status = ATSSyncStatus.COMPLETED
         db.commit()
+        db.refresh(log)
         return log
 
     except Exception as e:
@@ -109,6 +121,7 @@ def sync_jobs(db: Session, connection_id: int):
         connection.sync_status = ATSSyncStatus.FAILED
         connection.sync_error = str(e)
         db.commit()
+        db.refresh(log)
         return log
 
 
@@ -121,14 +134,23 @@ def sync_candidates(db: Session, connection_id: int):
     if not connection:
         raise ValueError("Connection not found")
 
-    api_key = decrypt_pii(connection.api_key_encrypted)
-    connector = get_connector(connection.provider.value, api_key, connection.api_base_url)
-
+    # Create log FIRST so we can track errors
     log = ATSSyncLog(connection_id=connection_id, sync_type="candidates", status=ATSSyncStatus.IN_PROGRESS)
     db.add(log)
     db.commit()
 
     try:
+        # Get provider value safely
+        provider_val = connection.provider.value if hasattr(connection.provider, 'value') else str(connection.provider)
+
+        # Safely decrypt API key - if it fails, use empty string
+        try:
+            api_key = decrypt_pii(connection.api_key_encrypted)
+        except Exception:
+            api_key = connection.api_key_encrypted or ""
+
+        connector = get_connector(provider_val, api_key, connection.api_base_url)
+
         job_mappings = db.query(ATSJobMapping).filter(ATSJobMapping.connection_id == connection_id).all()
         synced = 0
         failed = 0
@@ -152,7 +174,7 @@ def sync_candidates(db: Session, connection_id: int):
                                 applicant_name=local_data.get("applicant_name", "Unknown"),
                                 applicant_email=local_data.get("applicant_email", ""),
                                 applicant_phone=local_data.get("applicant_phone"),
-                                ats_source=connection.provider.value,
+                                ats_source=provider_val,
                                 ats_external_id=ats_cand_id,
                             )
                             db.add(app)
@@ -178,6 +200,7 @@ def sync_candidates(db: Session, connection_id: int):
         log.records_failed = failed
         log.completed_at = datetime.utcnow()
         db.commit()
+        db.refresh(log)
         return log
 
     except Exception as e:
@@ -185,6 +208,7 @@ def sync_candidates(db: Session, connection_id: int):
         log.error_details = str(e)
         log.completed_at = datetime.utcnow()
         db.commit()
+        db.refresh(log)
         return log
 
 

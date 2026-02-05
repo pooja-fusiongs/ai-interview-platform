@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, Paper, Button, TextField, Alert, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 
@@ -28,8 +28,7 @@ const DeletionRequestPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>Data Deletion Request</Typography>
         <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
@@ -80,7 +79,7 @@ const DeletionRequestPage: React.FC = () => {
           </DialogActions>
         </Dialog>
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

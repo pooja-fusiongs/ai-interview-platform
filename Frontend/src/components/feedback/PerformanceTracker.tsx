@@ -4,7 +4,7 @@ import {
   CircularProgress, Alert, Chip
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
-import Sidebar from '../layout/sidebar';
+import Naivgation from '../layout/sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface FeedbackEntry {
@@ -55,8 +55,7 @@ const PerformanceTracker: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar />
+    <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
         <Typography variant="h4" sx={{ mb: 3 }}>Performance Tracker</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -113,7 +112,7 @@ const PerformanceTracker: React.FC = () => {
           ))}
         </Grid>
       </Box>
-    </Box>
+    </Naivgation>
   );
 };
 

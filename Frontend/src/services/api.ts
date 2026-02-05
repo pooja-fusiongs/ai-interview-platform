@@ -4,9 +4,10 @@
  */
 
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
-// Configure axios base URL
-const API_BASE_URL = 'http://localhost:8000';
+// Configure axios base URL - uses environment variable or falls back to production URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
 
 // Create axios instance
 export const apiClient = axios.create({
@@ -16,6 +17,9 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Flag to prevent multiple redirects/toasts
+let isRedirecting = false;
 
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
@@ -36,10 +40,33 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access - remove token but don't redirect
-      // Let the components handle the redirect through React Router
-      localStorage.removeItem('token');
-      delete apiClient.defaults.headers.common['Authorization'];
+      // Check if this is a login request - don't redirect for login failures
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+
+      if (!isLoginRequest && !isRedirecting) {
+        isRedirecting = true;
+
+        // Clear auth data
+        localStorage.removeItem('token');
+        delete apiClient.defaults.headers.common['Authorization'];
+
+        // Show toast message
+        toast.error('Your session has expired. Please login again.', {
+          duration: 4000,
+          icon: '🔒',
+          style: {
+            borderRadius: '10px',
+            background: '#1e293b',
+            color: '#fff',
+          },
+        });
+
+        // Redirect to login page after a short delay
+        setTimeout(() => {
+          window.location.href = '/login';
+          isRedirecting = false;
+        }, 1000);
+      }
     }
     return Promise.reject(error);
   }
