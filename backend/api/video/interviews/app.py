@@ -33,6 +33,7 @@ from schemas import (
 )
 from api.auth.jwt_handler import get_current_active_user, require_any_role
 from services.zoom_service import create_zoom_meeting, delete_zoom_meeting
+from services.email_service import send_interview_notification
 
 router = APIRouter(tags=["Video Interviews"])
 
@@ -151,6 +152,27 @@ def schedule_video_interview(
     db.add(vi)
     db.commit()
     db.refresh(vi)
+
+    # Send email notification to candidate
+    try:
+        candidate_email = candidate.email
+        candidate_name = candidate.full_name or candidate.username
+        interview_date = body.scheduled_at.strftime("%B %d, %Y")
+        interview_time = body.scheduled_at.strftime("%I:%M %p")
+        meeting_url = vi.zoom_meeting_url
+
+        send_interview_notification(
+            candidate_email=candidate_email,
+            candidate_name=candidate_name,
+            job_title=job.title,
+            interview_date=interview_date,
+            interview_time=interview_time,
+            meeting_url=meeting_url
+        )
+        print(f"📧 Interview notification sent to {candidate_email}")
+    except Exception as e:
+        print(f"⚠️ Failed to send email notification: {e}")
+
     return _build_response(vi)
 
 

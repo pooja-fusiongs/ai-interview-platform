@@ -7,8 +7,8 @@ import {
   Button,
   Chip
 } from '@mui/material'
-import axios from 'axios'
 import { CanApplyJobs, CanViewCandidates } from '../common/RoleBasedComponent'
+import { apiClient } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { jobApplicationService } from '../../services/jobApplicationService'
 
@@ -64,7 +64,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       try {
         setLoading(true)
         console.log('🔍 Fetching applications for job ID:', selectedJob.id)
-        const response = await axios.get(`http://localhost:8000/api/job/${selectedJob.id}/applications`)
+        const response = await apiClient.get(`/api/job/${selectedJob.id}/applications`)
         
         console.log('📡 API Response:', response)
         console.log('📡 Response status:', response.status)
@@ -177,7 +177,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           experience_level: selectedJob.experience_level || selectedJob.experienceLevel
         })
         
-        const response = await axios.get('http://localhost:8000/api/jobs')
+        const response = await apiClient.get('/api/jobs')
         
         if (response.status === 200) {
           const allJobs = response.data

@@ -44,6 +44,9 @@ import { candidateProfileService } from '../../services/candidateProfileService'
 import { CandidateProfileData, EducationData } from '../../types'
 import Navigation from '../layout/sidebar'
 
+// API base URL from environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com'
+
 const CandidateProfileEdit: React.FC = () => {
   const [profile, setProfile] = useState<CandidateProfileData>({
     id: 0,
@@ -614,7 +617,7 @@ const CandidateProfileEdit: React.FC = () => {
                               variant="outlined"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                window.open(`http://localhost:8000${profile.resume_url}`, '_blank')
+                                window.open(`${API_BASE_URL}${profile.resume_url}`, '_blank')
                               }}
                               sx={{ 
                                 textTransform: 'none',
@@ -1273,7 +1276,7 @@ const CandidateProfileEdit: React.FC = () => {
                 <Box sx={{ p: 4, textAlign: 'center', bgcolor: 'white', borderBottom: '1px solid #e2e8f0' }}>
                   <Box sx={{ position: 'relative', display: 'inline-block', mb: 3 }}>
                     <Avatar
-                      src={profile.profile_image ? `http://localhost:8000${profile.profile_image}` : undefined}
+                      src={profile.profile_image ? `${API_BASE_URL}${profile.profile_image}` : undefined}
                       sx={{
                         width: 120,
                         height: 120,

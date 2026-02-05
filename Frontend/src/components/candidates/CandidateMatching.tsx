@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { useSearchParams, } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
+import { apiClient } from '../../services/api'
 import {
   Box,
   Typography,
@@ -33,8 +34,8 @@ import Navigation from '../layout/sidebar'
 import { candidateService, CandidateMatchResponse, CandidateFilters } from '../../services/candidateService'
 import { showSuccess, showError, showLoading, dismissToast } from '../../utils/toast'
 
-// API base URL
-const API_BASE_URL = 'http://localhost:8000'
+// API base URL from environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com'
 
 // Interface for candidate data from API (using the service interface)
 interface CandidateData extends CandidateMatchResponse { }
@@ -113,9 +114,8 @@ const CandidateMatching = () => {
 
   useEffect(() => {
     console.log('🧪 Testing API connection...')
-    fetch('http://localhost:8000/api/test')
-      .then(response => response.json())
-      .then(data => console.log('✅ API test successful:', data))
+    apiClient.get('/api/test')
+      .then(response => console.log('✅ API test successful:', response.data))
       .catch(error => console.error('❌ API test failed:', error))
   }, [])
 

@@ -31,17 +31,10 @@ export const jobApplicationService = {
   // Check if user has already applied for a job
   checkApplicationStatus: async (jobId: number, email: string): Promise<ApplicationStatus> => {
     try {
-      // Use the main backend port instead of separate service
-      const response = await fetch(`http://localhost:8000/api/job/${jobId}/check-application?email=${encodeURIComponent(email)}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to check application status');
-      }
-      
-      return await response.json();
+      const response = await apiClient.get(`/api/job/${jobId}/check-application?email=${encodeURIComponent(email)}`);
+      return response.data;
     } catch (error) {
       console.error('Error checking application status:', error);
-      // Return default status if API fails
       return {
         has_applied: false,
         application_id: null,
@@ -66,13 +59,8 @@ export const jobApplicationService = {
   // Get all applications for a job
   getJobApplications: async (jobId: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/job/${jobId}/applications`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch job applications');
-      }
-      
-      return await response.json();
+      const response = await apiClient.get(`/api/job/${jobId}/applications`);
+      return response.data;
     } catch (error) {
       console.error('Error fetching job applications:', error);
       throw error;

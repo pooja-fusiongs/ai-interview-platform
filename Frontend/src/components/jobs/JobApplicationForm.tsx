@@ -183,35 +183,21 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
       formDataUpload.append('file', formData.resume)
       formDataUpload.append('job_id', jobId.toString())
       
-      // Upload resume
-      const uploadResponse = await fetch(`/resume-upload/api/candidates/${candidateId}/resume/upload`, {
-        method: 'POST',
-        body: formDataUpload
+      // Upload resume using apiClient
+      const uploadResponse = await apiClient.post(`/api/candidates/${candidateId}/resume/upload`, formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
-      
-      if (uploadResponse.ok) {
-        const uploadResult = await uploadResponse.json()
-        console.log('✅ Resume uploaded successfully:', uploadResult)
-        
-        // Parse resume
-        console.log('🔍 Parsing resume...')
-        const parseResponse = await fetch(`/resume-parse/api/candidates/${candidateId}/resume/parse`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        })
-        
-        if (parseResponse.ok) {
-          const parseResult = await parseResponse.json()
-          console.log('✅ Resume parsed successfully:', parseResult)
-          console.log(`📊 Skills found: ${parseResult.skills.length}`)
-          console.log(`📅 Experience: ${parseResult.total_experience_years} years (${parseResult.experience_level})`)
-        } else {
-          console.error('❌ Resume parsing failed')
-        }
-      } else {
-        console.error('❌ Resume upload failed')
+      console.log('✅ Resume uploaded successfully:', uploadResponse.data)
+
+      // Parse resume
+      console.log('🔍 Parsing resume...')
+      try {
+        const parseResponse = await apiClient.post(`/api/candidates/${candidateId}/resume/parse`)
+        console.log('✅ Resume parsed successfully:', parseResponse.data)
+        console.log(`📊 Skills found: ${parseResponse.data.skills?.length || 0}`)
+        console.log(`📅 Experience: ${parseResponse.data.total_experience_years} years (${parseResponse.data.experience_level})`)
+      } catch (parseError) {
+        console.error('❌ Resume parsing failed:', parseError)
       }
     } catch (error) {
       console.error('❌ Resume processing error:', error)
