@@ -62,6 +62,7 @@ app.add_middleware(
         "http://localhost:5173",
         "https://ai-interview-platform.vercel.app",
         "https://ai-interview-platform.netlify.app",
+        "https://ai-interview-platform-unqg.vercel.app",
     ],
     allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.netlify\.app|https://.*\.onrender\.com",
     allow_credentials=True,
