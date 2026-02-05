@@ -21,9 +21,14 @@ const FraudDashboard: React.FC = () => {
           fraudDetectionService.getFlaggedInterviews(),
         ]);
         setStats(statsData);
-        setFlagged(flaggedData);
+        // Ensure flaggedData is always an array
+        setFlagged(Array.isArray(flaggedData) ? flaggedData : []);
       } catch (err: any) {
+        console.error('❌ Error loading fraud dashboard:', err);
         setError(err.message || 'Failed to load dashboard data.');
+        // Set empty array on error to prevent crash
+        setFlagged([]);
+        setStats(null);
       } finally {
         setLoading(false);
       }

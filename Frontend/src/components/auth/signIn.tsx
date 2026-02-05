@@ -33,9 +33,9 @@ const Login = () => {
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     console.log('🔐 Form submitted, preventing default behavior')
-    
+
     if (loading) {
       console.log('⏳ Already loading, ignoring submission')
       return
@@ -45,24 +45,40 @@ const Login = () => {
       showError('Please fill in all fields')
       return
     }
-    
+
     setLoading(true)
 
     try {
       console.log('🌐 Attempting login...')
       const result = await login(formData.username, formData.password)
-      
+
       if (result.success) {
         console.log('✅ Login successful')
         showSuccess('Login successful! Welcome back.')
         setTimeout(() => navigate('/'), 500)
       } else {
         console.log('❌ Login failed:', result.message)
-        showError(result.message || 'Login failed')
+
+        // Check for user not found
+        if (result.message?.toLowerCase().includes('not found') ||
+          result.message?.toLowerCase().includes('does not exist') ||
+          result.message?.toLowerCase().includes('user not found')) {
+          showError('User not found! Please sign up first.')
+        }
+        // Check for incorrect password
+        else if (result.message?.toLowerCase().includes('incorrect') ||
+          result.message?.toLowerCase().includes('invalid') ||
+          result.message?.toLowerCase().includes('wrong password')) {
+          showError('Incorrect password! Please try again.')
+        }
+        // Generic error
+        else {
+          showError(result.message || 'Login failed. Please check your credentials.')
+        }
       }
     } catch (error) {
       console.error('❌ Login error:', error)
-      showError('An unexpected error occurred')
+      showError('An unexpected error occurred. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -145,8 +161,8 @@ const Login = () => {
           </Box>
 
           {/* Form */}
-          <Box 
-            component="form" 
+          <Box
+            component="form"
             onSubmit={handleFormSubmit}
             sx={{ marginBottom: '10px' }}
             noValidate
@@ -251,7 +267,7 @@ const Login = () => {
                           }}
                           edge="end"
                           disabled={!formData.password}
-                          sx={{ 
+                          sx={{
                             color: formData.password ? '#6c757d' : '#d1d5db',
                             cursor: formData.password ? 'pointer' : 'not-allowed'
                           }}
@@ -322,7 +338,7 @@ const Login = () => {
 
           {/* Forgot Password */}
           <Box sx={{ margin: '10px 0' }}>
-            <Button 
+            <Button
               type="button"
               sx={{
                 background: 'none',

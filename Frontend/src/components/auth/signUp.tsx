@@ -23,7 +23,7 @@ const SignUp = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'candidate' as string
+    role: 'recruiter' as string
   })
   const [loading, setLoading] = useState(false)
 
@@ -38,9 +38,9 @@ const SignUp = () => {
         showError(`Error: ${event.error.message}`)
       }
     }
-    
+
     window.addEventListener('error', handleError)
-    
+
     return () => {
       window.removeEventListener('error', handleError)
     }
@@ -56,9 +56,9 @@ const SignUp = () => {
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     console.log('🔐 Signup form submitted, preventing default behavior')
-    
+
     if (loading) {
       console.log('⏳ Already loading, ignoring submission')
       return
@@ -90,10 +90,16 @@ const SignUp = () => {
       })
 
       if (result.success) {
-        showSuccess('Account created successfully! Welcome!')
-        setTimeout(() => navigate('/'), 500)
+        showSuccess('Account created successfully! Please login with your credentials.')
+        setTimeout(() => navigate('/login'), 1500)
       } else {
-        showError(result.message || 'Signup failed')
+        // Check if user already exists
+        if (result.message?.toLowerCase().includes('already exists') ||
+          result.message?.toLowerCase().includes('already registered')) {
+          showError('User already exists! Please login instead.')
+        } else {
+          showError(result.message || 'Signup failed')
+        }
       }
     } catch (error) {
       console.error('❌ Signup error:', error)
@@ -180,8 +186,8 @@ const SignUp = () => {
           </Box>
 
           {/* Form */}
-          <Box 
-            component="form" 
+          <Box
+            component="form"
             onSubmit={handleFormSubmit}
             sx={{ marginBottom: '10px' }}
             noValidate
@@ -402,7 +408,7 @@ const SignUp = () => {
                           }}
                           edge="end"
                           disabled={!formData.password}
-                          sx={{ 
+                          sx={{
                             color: formData.password ? '#6c757d' : '#d1d5db',
                             cursor: formData.password ? 'pointer' : 'not-allowed'
                           }}
@@ -482,7 +488,7 @@ const SignUp = () => {
                           }}
                           edge="end"
                           disabled={!formData.confirmPassword}
-                          sx={{ 
+                          sx={{
                             color: formData.confirmPassword ? '#6c757d' : '#d1d5db',
                             cursor: formData.confirmPassword ? 'pointer' : 'not-allowed'
                           }}
