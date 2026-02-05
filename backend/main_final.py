@@ -49,10 +49,17 @@ os.makedirs(os.path.join(uploads_dir, "profile_images"), exist_ok=True)
 os.makedirs(os.path.join(uploads_dir, "resumes"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
-# CORS middleware
+# CORS middleware - allow localhost and production domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "https://ai-interview-platform.vercel.app",
+        "https://ai-interview-platform.netlify.app",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.netlify\.app|https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

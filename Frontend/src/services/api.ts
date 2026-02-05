@@ -6,8 +6,8 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-// Configure axios base URL
-const API_BASE_URL = 'http://localhost:8000';
+// Configure axios base URL - uses environment variable or falls back to production URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
 
 // Create axios instance
 export const apiClient = axios.create({
