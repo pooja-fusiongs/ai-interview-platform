@@ -771,22 +771,11 @@ const FraudDashboard: React.FC = () => {
                                   size="small"
                                   href={`/fraud-analysis/${row.video_interview_id}`}
                                   sx={{
-                                    borderRadius: '8px',
-                                    textTransform: 'none',
-                                    fontWeight: 600,
-                                    fontSize: '13px',
-                                    padding: '8px 18px',
-                                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-                                    transition: 'all 0.2s ease',
-                                    '&:hover': {
-                                      background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
-                                      boxShadow: '0 6px 16px rgba(245, 158, 11, 0.4)',
-                                    },
+                                    background:"none",
+                                    boxShadow:"none"
                                   }}
-                                  startIcon={<Visibility sx={{ fontSize: '16px' }} />}
+                                  startIcon={<Visibility sx={{ fontSize: '16px',color:"grey" }} />}
                                 >
-                                  Review
                                 </Button>
                               </TableCell>
                             </TableRow>

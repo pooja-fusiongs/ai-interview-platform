@@ -657,7 +657,15 @@ const FeedbackList: React.FC = () => {
                               {fb.candidate_name?.charAt(0).toUpperCase() || 'C'}
                             </Box>
                             <Box>
-                              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                              <Typography
+                                sx={{
+                                  fontSize: '14px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  '&:hover': { cursor:"pointer" }
+                                }}
+                                onClick={() => navigate(`/feedback/${fb.id}`)}
+                              >
                                 {fb.candidate_name || `Candidate #${fb.candidate_id}`}
                               </Typography>
                               <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>
@@ -667,7 +675,15 @@ const FeedbackList: React.FC = () => {
                           </Box>
                         </TableCell>
                         <TableCell>
-                          <Typography sx={{ fontSize: '14px', color: '#1e293b' }}>
+                          <Typography
+                            sx={{
+                              fontSize: '14px',
+                              color: '#1e293b',
+                              cursor: 'pointer',
+                              '&:hover': { color: '#3b82f6' }
+                            }}
+                            onClick={() => navigate(`/feedback/${fb.id}`)}
+                          >
                             {fb.job_title || `Job #${fb.job_id}`}
                           </Typography>
                         </TableCell>
@@ -701,16 +717,30 @@ const FeedbackList: React.FC = () => {
                           />
                         </TableCell>
                         <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => handleMenuOpen(e, fb)}
-                            sx={{
-                              color: '#94a3b8',
-                              '&:hover': { backgroundColor: '#f1f5f9', color: '#64748b' },
-                            }}
-                          >
-                            <MoreVert sx={{ fontSize: '20px' }} />
-                          </IconButton>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Tooltip title="View Details" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={() => navigate(`/feedback/${fb.id}`)}
+                                sx={{
+                                  color: '#3b82f6',
+                                  '&:hover': { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#2563eb' },
+                                }}
+                              >
+                                <Visibility sx={{ fontSize: '18px' }} />
+                              </IconButton>
+                            </Tooltip>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => handleMenuOpen(e, fb)}
+                              sx={{
+                                color: '#94a3b8',
+                                '&:hover': { backgroundColor: '#f1f5f9', color: '#64748b' },
+                              }}
+                            >
+                              <MoreVert sx={{ fontSize: '20px' }} />
+                            </IconButton>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     ))}

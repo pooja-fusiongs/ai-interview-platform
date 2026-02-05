@@ -37,6 +37,14 @@ export const videoInterviewService = {
     const response = await apiClient.get('/api/video/zoom/signature', { params: { meeting_number: meetingNumber, role } });
     return response.data;
   },
+  getTranscript: async (id: number) => {
+    const response = await apiClient.get(`/api/video/interviews/${id}/transcript`);
+    return response.data;
+  },
+  createDemoInterview: async () => {
+    const response = await apiClient.post('/api/video/interviews/demo');
+    return response.data;
+  },
 };
 
 export default videoInterviewService;

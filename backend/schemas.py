@@ -592,6 +592,8 @@ class VideoInterviewResponse(BaseModel):
     candidate_name: Optional[str] = None
     interviewer_name: Optional[str] = None
     job_title: Optional[str] = None
+    transcript: Optional[str] = None
+    transcript_generated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

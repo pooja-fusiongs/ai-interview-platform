@@ -34,6 +34,7 @@ from schemas import (
 from api.auth.jwt_handler import get_current_active_user, require_any_role
 from services.zoom_service import create_zoom_meeting, delete_zoom_meeting
 from services.email_service import send_interview_notification
+from services.transcript_generator import generate_transcript_for_video_interview
 
 router = APIRouter(tags=["Video Interviews"])
 
@@ -71,6 +72,8 @@ def _build_response(vi: VideoInterview) -> VideoInterviewResponse:
         candidate_name=candidate_name,
         interviewer_name=interviewer_name,
         job_title=job_title,
+        transcript=vi.transcript,
+        transcript_generated_at=vi.transcript_generated_at,
     )
 
 
@@ -350,13 +353,162 @@ def end_video_interview(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Mark a video interview as completed."""
+    """Mark a video interview as completed and generate transcript."""
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     vi.status = VideoInterviewStatus.COMPLETED
     vi.ended_at = datetime.utcnow()
+
+    # Generate transcript automatically
+    try:
+        candidate_name = None
+        interviewer_name = None
+        job_title = None
+
+        if vi.candidate:
+            candidate_name = vi.candidate.full_name or vi.candidate.username
+        if vi.interviewer:
+            interviewer_name = vi.interviewer.full_name or vi.interviewer.username
+        if vi.job:
+            job_title = vi.job.title
+
+        transcript = generate_transcript_for_video_interview(
+            video_interview_id=vi.id,
+            candidate_name=candidate_name,
+            interviewer_name=interviewer_name,
+            job_title=job_title,
+            duration_minutes=vi.duration_minutes or 30
+        )
+        vi.transcript = transcript
+        vi.transcript_generated_at = datetime.utcnow()
+        print(f"Transcript generated for video interview {video_id}")
+    except Exception as e:
+        print(f"Failed to generate transcript: {e}")
+
     db.commit()
     db.refresh(vi)
     return _build_response(vi)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/video/interviews/{video_id}/transcript  -- Get transcript
+# ---------------------------------------------------------------------------
+
+@router.get("/api/video/interviews/{video_id}/transcript")
+def get_video_transcript(
+    video_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Get transcript for a video interview. Generate if not exists."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # Candidates can only view their own
+    if (
+        current_user.role == UserRole.CANDIDATE
+        and vi.candidate_id != current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Generate transcript if not exists
+    if not vi.transcript:
+        try:
+            candidate_name = None
+            interviewer_name = None
+            job_title = None
+
+            if vi.candidate:
+                candidate_name = vi.candidate.full_name or vi.candidate.username
+            if vi.interviewer:
+                interviewer_name = vi.interviewer.full_name or vi.interviewer.username
+            if vi.job:
+                job_title = vi.job.title
+
+            transcript = generate_transcript_for_video_interview(
+                video_interview_id=vi.id,
+                candidate_name=candidate_name,
+                interviewer_name=interviewer_name,
+                job_title=job_title,
+                duration_minutes=vi.duration_minutes or 30
+            )
+            vi.transcript = transcript
+            vi.transcript_generated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(vi)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate transcript: {e}")
+
+    return {
+        "video_interview_id": vi.id,
+        "transcript": vi.transcript,
+        "generated_at": vi.transcript_generated_at.isoformat() if vi.transcript_generated_at else None,
+        "candidate_name": vi.candidate.full_name or vi.candidate.username if vi.candidate else None,
+        "job_title": vi.job.title if vi.job else None
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/demo  -- Create demo video interview
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/demo")
+def create_demo_video_interview(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Create a demo video interview for testing."""
+    from datetime import timedelta
+    import random
+
+    # Find or create a candidate
+    candidate = db.query(User).filter(User.role == UserRole.CANDIDATE).first()
+    if not candidate:
+        # Use current user as candidate for demo
+        candidate = current_user
+
+    # Find any job
+    job = db.query(Job).filter(Job.is_active == True).first()
+    if not job:
+        # Create a demo job
+        job = Job(
+            title="Demo Software Engineer Position",
+            description="This is a demo job for testing video interviews",
+            company="Demo Company",
+            location="Remote",
+            status="Open",
+            is_active=True
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+    # Create demo video interview
+    scheduled_time = datetime.utcnow() + timedelta(minutes=5)
+
+    vi = VideoInterview(
+        job_id=job.id,
+        candidate_id=candidate.id,
+        interviewer_id=current_user.id,
+        scheduled_at=scheduled_time,
+        duration_minutes=30,
+        status=VideoInterviewStatus.SCHEDULED,
+        zoom_meeting_url=f"https://zoom.us/j/demo{random.randint(1000000, 9999999)}",
+        zoom_passcode=str(random.randint(100000, 999999)),
+    )
+
+    db.add(vi)
+    db.commit()
+    db.refresh(vi)
+
+    return {
+        "message": "Demo video interview created successfully",
+        "interview_id": vi.id,
+        "candidate_name": candidate.full_name or candidate.username,
+        "job_title": job.title,
+        "scheduled_at": vi.scheduled_at.isoformat(),
+        "zoom_url": vi.zoom_meeting_url
+    }

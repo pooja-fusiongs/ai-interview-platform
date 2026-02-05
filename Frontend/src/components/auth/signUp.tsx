@@ -364,8 +364,8 @@ const SignUp = () => {
                 >
                   <MenuItem value="candidate">Candidate</MenuItem>
                   <MenuItem value="recruiter">Recruiter</MenuItem>
-                  <MenuItem value="domain_expert">Domain Expert</MenuItem>
-                  <MenuItem value="admin">Administrator</MenuItem>
+                  {/* <MenuItem value="domain_expert">Domain Expert</MenuItem>
+                  <MenuItem value="admin">Administrator</MenuItem> */}
                 </Select>
               </FormControl>
             </Box>
