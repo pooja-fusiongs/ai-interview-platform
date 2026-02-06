@@ -150,55 +150,61 @@ Q: {qa['question_text']}
 Expected Answer: {qa['sample_answer']}
 ---"""
 
-    prompt = f"""You are an expert interview evaluator. Analyze the following interview transcript and score the candidate's responses against the expected answers.
+    prompt = f"""You are an expert interview evaluator. Analyze the interview transcript and extract + score the candidate's responses.
 
-INTERVIEW QUESTIONS AND EXPECTED ANSWERS:
+QUESTIONS TO EVALUATE:
 {questions_str}
 
 INTERVIEW TRANSCRIPT:
 {transcript_text}
 
-For each question, extract the candidate's answer from the transcript (they may not answer in order, use context to match), then score on these dimensions (0-10 scale):
-- relevance_score: How relevant is the answer to the question asked?
-- completeness_score: How completely does the answer cover the expected points?
-- accuracy_score: How technically accurate is the answer compared to the expected answer?
-- clarity_score: How clearly and coherently is the answer expressed?
-- score: Overall score for this question (weighted average)
-- feedback: 1-2 sentence specific feedback
+CRITICAL INSTRUCTIONS FOR ANSWER EXTRACTION:
+1. The transcript format is: [timestamp] Speaker: text
+2. Identify the Interviewer/Hiring Manager vs Candidate by their names
+3. For EACH question above, find where a SIMILAR question was asked in the transcript
+4. Extract ONLY the candidate's response (1-3 sentences) - NOT the entire transcript!
+5. If a question wasn't asked or no answer found, write "No relevant answer found in transcript"
+6. Questions may be worded differently - match by meaning, not exact words
 
-Then provide an overall assessment.
+SCORING (0-10 scale):
+- relevance_score: How relevant is the answer to the question?
+- completeness_score: How complete is the answer?
+- accuracy_score: How accurate compared to expected answer?
+- clarity_score: How clear and coherent?
+- score: Overall weighted average
+- feedback: 1-2 sentence feedback
 
-Respond ONLY with JSON in this exact format:
+OUTPUT FORMAT - Respond ONLY with this JSON:
 {{
   "per_question": [
     {{
       "question_id": <id>,
-      "extracted_answer": "what the candidate actually said for this question",
+      "extracted_answer": "ONLY the specific candidate response for this question (1-3 sentences max)",
       "score": 7.5,
       "relevance_score": 8.0,
       "completeness_score": 7.0,
       "accuracy_score": 7.5,
       "clarity_score": 8.0,
-      "feedback": "Specific feedback about this answer"
+      "feedback": "Specific feedback"
     }}
   ],
   "overall_score": 7.2,
   "recommendation": "select|next_round|reject",
-  "strengths": "2-3 sentence summary of candidate strengths",
-  "weaknesses": "2-3 sentence summary of areas for improvement"
+  "strengths": "2-3 sentence summary of strengths",
+  "weaknesses": "2-3 sentence summary of weaknesses"
 }}
 
-Scoring guidelines:
-- 8-10: Excellent, comprehensive answer
-- 6-8: Good, covers most points
-- 4-6: Adequate but missing key points
+SCORING GUIDELINES:
+- 8-10: Excellent answer
+- 6-8: Good answer
+- 4-6: Adequate, missing some points
 - 2-4: Poor, significant gaps
-- 0-2: Very poor or no relevant answer found
+- 0-2: No relevant answer
 
-Recommendation thresholds:
-- select: overall_score >= 7.5
-- next_round: overall_score >= 5.0
-- reject: overall_score < 5.0"""
+RECOMMENDATION:
+- select: overall >= 7.5
+- next_round: overall >= 5.0
+- reject: overall < 5.0"""
 
     try:
         model = _get_model()

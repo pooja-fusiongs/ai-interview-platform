@@ -44,10 +44,21 @@ router = APIRouter(tags=["Video Interviews"])
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _build_response(vi: VideoInterview) -> VideoInterviewResponse:
+def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewResponse:
     """Build a VideoInterviewResponse from an ORM object with joined names."""
     candidate_name = None
-    if vi.candidate:
+
+    # Try to get name from JobApplication first (more accurate)
+    if db and vi.candidate:
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id,
+            JobApplication.applicant_email == vi.candidate.email
+        ).first()
+        if application:
+            candidate_name = application.applicant_name
+
+    # Fallback to User table
+    if not candidate_name and vi.candidate:
         candidate_name = vi.candidate.full_name or vi.candidate.username
 
     interviewer_name = None
@@ -81,7 +92,18 @@ def _build_response(vi: VideoInterview) -> VideoInterviewResponse:
 def _build_list_item(vi: VideoInterview, db: Session) -> VideoInterviewListResponse:
     """Build a list-view item including fraud analysis summary."""
     candidate_name = ""
+
+    # Try to get name from JobApplication first (more accurate)
     if vi.candidate:
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id,
+            JobApplication.applicant_email == vi.candidate.email
+        ).first()
+        if application:
+            candidate_name = application.applicant_name
+
+    # Fallback to User table
+    if not candidate_name and vi.candidate:
         candidate_name = vi.candidate.full_name or vi.candidate.username or ""
 
     job_title = vi.job.title if vi.job else ""
@@ -209,7 +231,7 @@ def schedule_video_interview(
     except Exception as e:
         print(f"⚠️ Failed to send email notification: {e}")
 
-    return _build_response(vi)
+    return _build_response(vi, db)
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +277,7 @@ def get_my_video_interviews(
         .order_by(VideoInterview.scheduled_at.desc())
         .all()
     )
-    return [_build_response(vi) for vi in interviews]
+    return [_build_response(vi, db) for vi in interviews]
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +305,7 @@ def get_video_interview(
     ):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    return _build_response(vi)
+    return _build_response(vi, db)
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +340,7 @@ def update_video_interview(
 
     db.commit()
     db.refresh(vi)
-    return _build_response(vi)
+    return _build_response(vi, db)
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +392,7 @@ def start_video_interview(
     vi.started_at = datetime.utcnow()
     db.commit()
     db.refresh(vi)
-    return _build_response(vi)
+    return _build_response(vi, db)
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +409,8 @@ def end_video_interview(
     db: Session = Depends(get_db),
 ):
     """Mark a video interview as completed and generate transcript."""
+    from models import InterviewQuestion, JobApplication
+
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
@@ -407,22 +431,50 @@ def end_video_interview(
         if vi.job:
             job_title = vi.job.title
 
+        # Fetch actual interview questions for this candidate/job
+        actual_questions = []
+        if vi.job_id and vi.candidate_id:
+            # Try to find JobApplication for this candidate
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email if vi.candidate else None
+            ).first()
+
+            candidate_id_for_questions = application.id if application else vi.candidate_id
+
+            # Get approved questions for this job and candidate
+            questions = db.query(InterviewQuestion).filter(
+                InterviewQuestion.job_id == vi.job_id,
+                InterviewQuestion.candidate_id == candidate_id_for_questions,
+                InterviewQuestion.is_approved == True
+            ).all()
+
+            if questions:
+                actual_questions = [
+                    {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+                    for q in questions
+                ]
+                print(f"Found {len(actual_questions)} actual questions for transcript generation")
+
         transcript = generate_transcript_for_video_interview(
             video_interview_id=vi.id,
             candidate_name=candidate_name,
             interviewer_name=interviewer_name,
             job_title=job_title,
-            duration_minutes=vi.duration_minutes or 30
+            duration_minutes=vi.duration_minutes or 30,
+            actual_questions=actual_questions if actual_questions else None
         )
         vi.transcript = transcript
         vi.transcript_generated_at = datetime.utcnow()
         print(f"Transcript generated for video interview {video_id}")
     except Exception as e:
         print(f"Failed to generate transcript: {e}")
+        import traceback
+        traceback.print_exc()
 
     db.commit()
     db.refresh(vi)
-    return _build_response(vi)
+    return _build_response(vi, db)
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +501,8 @@ def get_video_transcript(
 
     # Generate transcript if not exists
     if not vi.transcript:
+        from models import InterviewQuestion, JobApplication
+
         try:
             candidate_name = None
             interviewer_name = None
@@ -461,12 +515,37 @@ def get_video_transcript(
             if vi.job:
                 job_title = vi.job.title
 
+            # Fetch actual interview questions for this candidate/job
+            actual_questions = []
+            if vi.job_id and vi.candidate_id:
+                # Try to find JobApplication for this candidate
+                application = db.query(JobApplication).filter(
+                    JobApplication.job_id == vi.job_id,
+                    JobApplication.applicant_email == vi.candidate.email if vi.candidate else None
+                ).first()
+
+                candidate_id_for_questions = application.id if application else vi.candidate_id
+
+                # Get approved questions for this job and candidate
+                questions = db.query(InterviewQuestion).filter(
+                    InterviewQuestion.job_id == vi.job_id,
+                    InterviewQuestion.candidate_id == candidate_id_for_questions,
+                    InterviewQuestion.is_approved == True
+                ).all()
+
+                if questions:
+                    actual_questions = [
+                        {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+                        for q in questions
+                    ]
+
             transcript = generate_transcript_for_video_interview(
                 video_interview_id=vi.id,
                 candidate_name=candidate_name,
                 interviewer_name=interviewer_name,
                 job_title=job_title,
-                duration_minutes=vi.duration_minutes or 30
+                duration_minutes=vi.duration_minutes or 30,
+                actual_questions=actual_questions if actual_questions else None
             )
             vi.transcript = transcript
             vi.transcript_generated_at = datetime.utcnow()

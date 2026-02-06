@@ -228,7 +228,8 @@ def generate_transcript_for_video_interview(
     candidate_name: Optional[str] = None,
     interviewer_name: Optional[str] = None,
     job_title: Optional[str] = None,
-    duration_minutes: int = 30
+    duration_minutes: int = 30,
+    actual_questions: Optional[list] = None
 ) -> str:
     """
     Generate and return transcript text for a video interview.
@@ -239,15 +240,143 @@ def generate_transcript_for_video_interview(
         interviewer_name: Optional interviewer name
         job_title: Optional job title
         duration_minutes: Duration of the interview
+        actual_questions: List of actual interview questions with sample_answer
 
     Returns:
         Formatted transcript text
     """
-    result = generate_interview_transcript(
-        candidate_name=candidate_name or f"Candidate #{video_interview_id}",
-        interviewer_name=interviewer_name or "Hiring Manager",
-        job_title=job_title or "Software Engineer",
-        duration_minutes=duration_minutes
-    )
+    # If actual questions are provided, generate transcript using those
+    if actual_questions and len(actual_questions) > 0:
+        result = generate_transcript_with_actual_questions(
+            candidate_name=candidate_name or f"Candidate #{video_interview_id}",
+            interviewer_name=interviewer_name or "Hiring Manager",
+            job_title=job_title or "Software Engineer",
+            duration_minutes=duration_minutes,
+            questions=actual_questions
+        )
+    else:
+        result = generate_interview_transcript(
+            candidate_name=candidate_name or f"Candidate #{video_interview_id}",
+            interviewer_name=interviewer_name or "Hiring Manager",
+            job_title=job_title or "Software Engineer",
+            duration_minutes=duration_minutes
+        )
 
     return result["transcript_text"]
+
+
+def generate_transcript_with_actual_questions(
+    candidate_name: str,
+    interviewer_name: str,
+    job_title: str,
+    duration_minutes: int,
+    questions: list
+) -> Dict[str, Any]:
+    """
+    Generate a transcript using actual interview questions.
+
+    Args:
+        candidate_name: Name of the candidate
+        interviewer_name: Name of the interviewer
+        job_title: Title of the job position
+        duration_minutes: Duration of the interview
+        questions: List of question dicts with question_text and sample_answer
+
+    Returns:
+        Dictionary containing transcript data
+    """
+    transcript_lines = []
+    current_time = 0
+
+    # Opening
+    transcript_lines.append({
+        "timestamp": "00:00:00",
+        "speaker": interviewer_name or "Hiring Manager",
+        "text": f"Hello {candidate_name}, thank you for joining us today. I'm excited to discuss the {job_title} position with you."
+    })
+    current_time += random.randint(5, 15)
+
+    transcript_lines.append({
+        "timestamp": f"00:00:{current_time:02d}",
+        "speaker": candidate_name or "Candidate",
+        "text": "Thank you for having me. I'm very excited about this opportunity and looking forward to our conversation."
+    })
+    current_time += random.randint(10, 20)
+
+    # Q&A Section using actual questions
+    for q in questions:
+        question_text = q.get("question_text", "Tell me about yourself")
+        sample_answer = q.get("sample_answer", "")
+
+        minutes = current_time // 60
+        seconds = current_time % 60
+
+        # Interviewer asks the question
+        transcript_lines.append({
+            "timestamp": f"00:{minutes:02d}:{seconds:02d}",
+            "speaker": interviewer_name or "Hiring Manager",
+            "text": question_text
+        })
+        current_time += random.randint(30, 60)
+
+        minutes = current_time // 60
+        seconds = current_time % 60
+
+        # Candidate answers - use sample_answer as base and add natural speech
+        if sample_answer:
+            answer = _add_natural_speech(sample_answer)
+        else:
+            # Generate a generic answer if no sample provided
+            answer = _add_natural_speech(f"That's a great question. Based on my experience, I would say that {question_text.lower().replace('?', '')} is something I have dealt with extensively in my career.")
+
+        transcript_lines.append({
+            "timestamp": f"00:{minutes:02d}:{seconds:02d}",
+            "speaker": candidate_name or "Candidate",
+            "text": answer
+        })
+        current_time += random.randint(60, 120)
+
+    # Closing
+    minutes = current_time // 60
+    seconds = current_time % 60
+
+    transcript_lines.append({
+        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
+        "speaker": interviewer_name or "Hiring Manager",
+        "text": "Do you have any questions for us?"
+    })
+    current_time += random.randint(5, 15)
+
+    minutes = current_time // 60
+    seconds = current_time % 60
+
+    transcript_lines.append({
+        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
+        "speaker": candidate_name or "Candidate",
+        "text": "Yes, I'd like to know more about the team structure and the projects I'd be working on."
+    })
+    current_time += random.randint(60, 120)
+
+    minutes = current_time // 60
+    seconds = current_time % 60
+
+    transcript_lines.append({
+        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
+        "speaker": interviewer_name or "Hiring Manager",
+        "text": f"Great question. Our team is collaborative and focused on innovation. Thank you for your time today, {candidate_name}. We'll be in touch soon."
+    })
+
+    # Format transcript as readable text
+    transcript_text = "\n\n".join([
+        f"[{line['timestamp']}] {line['speaker']}:\n{line['text']}"
+        for line in transcript_lines
+    ])
+
+    return {
+        "transcript_text": transcript_text,
+        "transcript_lines": transcript_lines,
+        "word_count": sum(len(line["text"].split()) for line in transcript_lines),
+        "duration_seconds": current_time,
+        "num_exchanges": len(transcript_lines),
+        "generated_at": datetime.utcnow().isoformat()
+    }
