@@ -594,6 +594,7 @@ class VideoInterviewResponse(BaseModel):
     job_title: Optional[str] = None
     transcript: Optional[str] = None
     transcript_generated_at: Optional[datetime] = None
+    interview_type: Optional[str] = "Both"  # AI, Manual, Both - from job settings
 
     class Config:
         from_attributes = True

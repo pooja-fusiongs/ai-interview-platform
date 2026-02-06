@@ -87,15 +87,56 @@ def get_approved_questions(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Return approved questions for a job (used by Interview page to start)."""
-    questions = (
-        db.query(InterviewQuestion)
-        .filter(
-            InterviewQuestion.job_id == job_id,
-            InterviewQuestion.is_approved == True,
+    """Return approved questions for a job (used by Interview page to start).
+
+    For candidates: Returns questions generated specifically for their application.
+    For recruiters/admins: Returns all approved questions for the job.
+    """
+    questions = []
+
+    # For candidates, find their specific questions
+    if current_user.role == UserRole.CANDIDATE:
+        # Find the candidate's JobApplication for this job
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == job_id,
+            JobApplication.applicant_email == current_user.email
+        ).first()
+
+        if application:
+            # Get questions specific to this candidate
+            questions = (
+                db.query(InterviewQuestion)
+                .filter(
+                    InterviewQuestion.job_id == job_id,
+                    InterviewQuestion.candidate_id == application.id,
+                    InterviewQuestion.is_approved == True,
+                )
+                .all()
+            )
+            print(f"📝 Found {len(questions)} approved questions for candidate application_id={application.id}")
+
+        # If no candidate-specific questions, try all approved questions for the job
+        if not questions:
+            print(f"⚠️ No candidate-specific questions found, fetching all approved questions for job")
+            questions = (
+                db.query(InterviewQuestion)
+                .filter(
+                    InterviewQuestion.job_id == job_id,
+                    InterviewQuestion.is_approved == True,
+                )
+                .all()
+            )
+    else:
+        # For recruiters/admins, return all approved questions
+        questions = (
+            db.query(InterviewQuestion)
+            .filter(
+                InterviewQuestion.job_id == job_id,
+                InterviewQuestion.is_approved == True,
+            )
+            .all()
         )
-        .all()
-    )
+
     return {
         "questions": [
             {

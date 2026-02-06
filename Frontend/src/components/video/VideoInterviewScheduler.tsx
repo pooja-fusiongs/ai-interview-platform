@@ -871,17 +871,22 @@ const VideoInterviewScheduler: React.FC = () => {
         {/* Error Snackbar */}
         <Snackbar
           open={!!error}
-          autoHideDuration={6000}
+          autoHideDuration={10000}
           onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
           <Alert
             onClose={handleCloseSnackbar}
-            severity="error"
+            severity={error.toLowerCase().includes('approve') ? 'warning' : 'error'}
             variant="filled"
             sx={{
               borderRadius: '10px',
               boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+              maxWidth: '500px',
+              '& .MuiAlert-message': {
+                fontSize: '14px',
+                lineHeight: 1.5,
+              },
             }}
           >
             {error}

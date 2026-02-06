@@ -1,15 +1,20 @@
 """
-Zoom REST API Integration using Server-to-Server OAuth.
+Video Meeting Integration - Supports Jitsi (FREE) and Zoom.
+
+Jitsi Meet: FREE, no API keys required
+Zoom: Requires paid account and API credentials
 
 Provides functions to:
-- Obtain access tokens via Zoom S2S OAuth
-- Create and delete Zoom meetings
-- Generate Meeting SDK JWT signatures for embedded clients
+- Create video meetings (Jitsi or Zoom)
+- Delete/cancel meetings
+- Generate meeting URLs
 """
 
 import requests
 import time
 import jwt  # PyJWT
+import uuid
+import re
 
 import sys
 import os
@@ -17,8 +22,48 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import config
 
+# ─────────────────────────────────────────────────────────────────────────────
+# JITSI MEET (FREE) - No API keys required!
+# ─────────────────────────────────────────────────────────────────────────────
 
-def _get_access_token():
+def create_jitsi_meeting(topic, start_time=None, duration=None):
+    """
+    Create a FREE Jitsi Meet room - no API keys needed!
+
+    Returns dict with meeting_id, join_url, host_url, passcode on success.
+    """
+    # Clean topic to create room name (remove special chars, spaces to hyphens)
+    room_name = re.sub(r'[^a-zA-Z0-9\s-]', '', topic)
+    room_name = re.sub(r'\s+', '-', room_name.strip())
+
+    # Add unique ID to prevent room name collisions
+    unique_id = uuid.uuid4().hex[:8]
+    room_name = f"{room_name}-{unique_id}"
+
+    # Jitsi Meet URL
+    join_url = f"https://meet.jit.si/{room_name}"
+
+    return {
+        "meeting_id": room_name,
+        "join_url": join_url,
+        "host_url": join_url,  # Same URL for host in Jitsi
+        "passcode": "",  # No passcode needed for Jitsi (can be set in room)
+    }
+
+
+def delete_jitsi_meeting(meeting_id):
+    """
+    Jitsi rooms auto-expire when everyone leaves.
+    No API call needed to delete.
+    """
+    return True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ZOOM (Paid) - Requires API credentials
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_zoom_access_token():
     """Get Zoom access token using Server-to-Server OAuth."""
     if not config.ZOOM_ACCOUNT_ID or not config.ZOOM_CLIENT_ID:
         return None
@@ -31,14 +76,14 @@ def _get_access_token():
     return None
 
 
-def create_zoom_meeting(topic, start_time, duration, host_email=None):
+def create_zoom_meeting_api(topic, start_time, duration, host_email=None):
     """
-    Create a Zoom meeting via the REST API.
+    Create a Zoom meeting via the REST API (requires paid Zoom account).
 
     Returns dict with meeting_id, join_url, host_url, passcode on success,
     or None on failure.
     """
-    token = _get_access_token()
+    token = _get_zoom_access_token()
     if not token:
         return None
     headers = {
@@ -73,11 +118,47 @@ def create_zoom_meeting(topic, start_time, duration, host_email=None):
     return None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN FUNCTIONS - Auto-select Jitsi (free) or Zoom (if configured)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def create_zoom_meeting(topic, start_time, duration, host_email=None):
+    """
+    Create a video meeting - uses Jitsi (FREE) by default.
+    Falls back to Zoom only if Zoom credentials are configured.
+
+    Returns dict with meeting_id, join_url, host_url, passcode.
+    """
+    # Try Zoom first if credentials are configured
+    if config.ZOOM_ACCOUNT_ID and config.ZOOM_CLIENT_ID and config.ZOOM_CLIENT_SECRET:
+        zoom_result = create_zoom_meeting_api(topic, start_time, duration, host_email)
+        if zoom_result:
+            print(f"✅ Created Zoom meeting: {zoom_result['join_url']}")
+            return zoom_result
+        print("⚠️ Zoom meeting creation failed, falling back to Jitsi")
+
+    # Use FREE Jitsi Meet
+    jitsi_result = create_jitsi_meeting(topic, start_time, duration)
+    print(f"✅ Created FREE Jitsi meeting: {jitsi_result['join_url']}")
+    return jitsi_result
+
+
 def delete_zoom_meeting(meeting_id):
-    """Delete/cancel a Zoom meeting by its meeting ID."""
-    token = _get_access_token()
+    """
+    Delete/cancel a video meeting.
+    For Jitsi: rooms auto-expire, nothing to delete.
+    For Zoom: calls Zoom API to delete.
+    """
+    # Check if it's a Jitsi meeting (contains hyphen pattern from our generation)
+    if meeting_id and not meeting_id.isdigit():
+        # Likely a Jitsi room - no API call needed
+        return True
+
+    # Try Zoom API if credentials exist
+    token = _get_zoom_access_token()
     if not token:
-        return False
+        return True  # No Zoom credentials, assume Jitsi (auto-expires)
+
     headers = {"Authorization": f"Bearer {token}"}
     try:
         resp = requests.delete(

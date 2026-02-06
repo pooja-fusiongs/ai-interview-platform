@@ -2,8 +2,14 @@ import apiClient from './api';
 
 export const videoInterviewService = {
   scheduleInterview: async (data: any) => {
-    const response = await apiClient.post('/api/video/interviews', data);
-    return response.data;
+    try {
+      const response = await apiClient.post('/api/video/interviews', data);
+      return response.data;
+    } catch (error: any) {
+      // Extract the actual error message from API response
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to schedule interview';
+      throw new Error(errorMessage);
+    }
   },
   getInterviews: async () => {
     const response = await apiClient.get('/api/video/interviews');
@@ -48,6 +54,17 @@ export const videoInterviewService = {
   uploadTranscriptAndScore: async (id: number, transcriptText: string) => {
     const response = await apiClient.post(`/api/video/interviews/${id}/upload-transcript`, {
       transcript_text: transcriptText
+    });
+    return response.data;
+  },
+  // AI Interview Methods
+  getAIInterviewQuestions: async (id: number) => {
+    const response = await apiClient.get(`/api/video/interviews/${id}/ai-questions`);
+    return response.data;
+  },
+  submitAIInterviewAnswers: async (id: number, answers: Array<{ question_id: number; answer_text: string }>) => {
+    const response = await apiClient.post(`/api/video/interviews/${id}/ai-submit`, {
+      answers: answers
     });
     return response.data;
   },

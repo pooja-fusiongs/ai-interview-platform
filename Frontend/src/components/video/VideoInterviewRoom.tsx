@@ -7,11 +7,19 @@ import {
 import {
   Videocam, ArrowBack, AccessTime,
   Description, Security, Mic, MicOff, VideocamOff, CallEnd,
-  ScreenShare, Chat, MoreVert, FiberManualRecord, VolumeUp
+  ScreenShare, Chat, MoreVert, FiberManualRecord, VolumeUp,
+  ContentCopy, Check, SmartToy, Person, Link as LinkIcon
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
+
+// Declare Jitsi types
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI: any;
+  }
+}
 
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
@@ -24,18 +32,46 @@ const VideoInterviewRoom: React.FC = () => {
   const [ending, setEnding] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
-  const [audioLevel, setAudioLevel] = useState(0);
   const [transcriptText, setTranscriptText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [scoreResult, setScoreResult] = useState<any>(null);
-  const intervalRef = useRef<NodeJS.Timer | null>(null);
-  const audioRef = useRef<NodeJS.Timer | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [jitsiLoaded, setJitsiLoaded] = useState(false);
+
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jitsiContainerRef = useRef<HTMLDivElement>(null);
+  const jitsiApiRef = useRef<any>(null);
+
+  // Load Jitsi Meet External API script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://meet.jit.si/external_api.js';
+    script.async = true;
+    script.onload = () => {
+      setJitsiLoaded(true);
+      console.log('✅ Jitsi Meet API loaded');
+    };
+    script.onerror = () => {
+      console.error('❌ Failed to load Jitsi Meet API');
+      toast.error('Failed to load video call. Please refresh the page.');
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const fetchInterview = async () => {
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
+        if (data.transcript) {
+          setTranscriptText(data.transcript);
+        }
         if (data.status === 'in_progress') {
           setIsActive(true);
           if (data.started_at) {
@@ -54,10 +90,15 @@ const VideoInterviewRoom: React.FC = () => {
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (audioRef.current) clearInterval(audioRef.current);
+      // Dispose Jitsi when component unmounts
+      if (jitsiApiRef.current) {
+        jitsiApiRef.current.dispose();
+        jitsiApiRef.current = null;
+      }
     };
   }, [videoId]);
 
+  // Timer effect
   useEffect(() => {
     if (isActive) {
       if (!intervalRef.current) {
@@ -65,25 +106,92 @@ const VideoInterviewRoom: React.FC = () => {
           setElapsed((prev) => prev + 1);
         }, 1000);
       }
-      if (!audioRef.current) {
-        audioRef.current = setInterval(() => {
-          setAudioLevel(Math.random() * 100);
-        }, 200);
-      }
     }
     return () => {
-      if (!isActive) {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        if (audioRef.current) {
-          clearInterval(audioRef.current);
-          audioRef.current = null;
-        }
+      if (!isActive && intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [isActive]);
+
+  // Initialize Jitsi when interview becomes active
+  useEffect(() => {
+    if (isActive && jitsiLoaded && jitsiContainerRef.current && !jitsiApiRef.current) {
+      initializeJitsi();
+    }
+  }, [isActive, jitsiLoaded]);
+
+  const initializeJitsi = () => {
+    if (!jitsiContainerRef.current || !window.JitsiMeetExternalAPI) {
+      console.error('Jitsi container or API not available');
+      return;
+    }
+
+    // Generate room name from interview data
+    const roomName = `Interview-${interview?.job_title?.replace(/\s+/g, '-') || 'Room'}-${videoId}`;
+
+    const domain = 'meet.jit.si';
+    const options = {
+      roomName: roomName,
+      width: '100%',
+      height: '100%',
+      parentNode: jitsiContainerRef.current,
+      userInfo: {
+        displayName: interview?.interviewer_name || 'Interviewer'
+      },
+      configOverwrite: {
+        startWithAudioMuted: false,
+        startWithVideoMuted: false,
+        prejoinPageEnabled: false,
+        disableDeepLinking: true,
+      },
+      interfaceConfigOverwrite: {
+        TOOLBAR_BUTTONS: [
+          'microphone', 'camera', 'closedcaptions', 'desktop',
+          'fullscreen', 'fodeviceselection', 'hangup', 'chat',
+          'recording', 'settings', 'raisehand', 'videoquality',
+          'tileview', 'select-background', 'mute-everyone'
+        ],
+        SHOW_JITSI_WATERMARK: false,
+        SHOW_WATERMARK_FOR_GUESTS: false,
+        SHOW_BRAND_WATERMARK: false,
+        BRAND_WATERMARK_LINK: '',
+        SHOW_POWERED_BY: false,
+        DEFAULT_BACKGROUND: '#1e293b',
+        DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
+        MOBILE_APP_PROMO: false,
+      }
+    };
+
+    try {
+      jitsiApiRef.current = new window.JitsiMeetExternalAPI(domain, options);
+
+      // Event listeners
+      jitsiApiRef.current.addListener('videoConferenceJoined', () => {
+        console.log('✅ Joined video conference');
+        toast.success('Connected to video call!');
+      });
+
+      jitsiApiRef.current.addListener('participantJoined', (participant: any) => {
+        console.log('👤 Participant joined:', participant);
+        toast.success(`${participant.displayName || 'Someone'} joined the call`);
+      });
+
+      jitsiApiRef.current.addListener('participantLeft', (participant: any) => {
+        console.log('👤 Participant left:', participant);
+      });
+
+      jitsiApiRef.current.addListener('readyToClose', () => {
+        console.log('Jitsi ready to close');
+      });
+
+      console.log('✅ Jitsi Meet initialized with room:', roomName);
+    } catch (err) {
+      console.error('Failed to initialize Jitsi:', err);
+      toast.error('Failed to start video call');
+    }
+  };
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -98,7 +206,7 @@ const VideoInterviewRoom: React.FC = () => {
       setIsActive(true);
       setElapsed(0);
       setInterview((prev: any) => ({ ...prev, status: 'in_progress' }));
-      toast.success('Interview started!');
+      toast.success('Interview started! Video call connecting...');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to start interview');
     }
@@ -107,22 +215,54 @@ const VideoInterviewRoom: React.FC = () => {
   const handleEnd = async () => {
     try {
       setEnding(true);
+
+      // Dispose Jitsi first
+      if (jitsiApiRef.current) {
+        jitsiApiRef.current.dispose();
+        jitsiApiRef.current = null;
+      }
+
       const result = await videoInterviewService.endInterview(Number(videoId));
       setIsActive(false);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (audioRef.current) {
-        clearInterval(audioRef.current);
-        audioRef.current = null;
-      }
       setInterview(result);
-      toast.success('Interview completed! You can now upload the transcript.');
+      if (result.transcript) {
+        setTranscriptText(result.transcript);
+        toast.success('Interview completed! Transcript generated. Review and upload to generate score.');
+      } else {
+        toast.success('Interview completed! Paste the transcript to generate score.');
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     } finally {
       setEnding(false);
+    }
+  };
+
+  const handleCopyTranscript = async () => {
+    if (transcriptText) {
+      try {
+        await navigator.clipboard.writeText(transcriptText);
+        setCopied(true);
+        toast.success('Transcript copied to clipboard!');
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        toast.error('Failed to copy transcript');
+      }
+    }
+  };
+
+  const handleCopyMeetingLink = async () => {
+    const roomName = `Interview-${interview?.job_title?.replace(/\s+/g, '-') || 'Room'}-${videoId}`;
+    const meetingUrl = `https://meet.jit.si/${roomName}`;
+    try {
+      await navigator.clipboard.writeText(meetingUrl);
+      toast.success('Meeting link copied! Share with candidate.');
+    } catch (err) {
+      toast.error('Failed to copy link');
     }
   };
 
@@ -140,6 +280,20 @@ const VideoInterviewRoom: React.FC = () => {
       toast.error(err.response?.data?.detail || 'Failed to upload transcript');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const toggleMic = () => {
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.executeCommand('toggleAudio');
+      setMicOn(!micOn);
+    }
+  };
+
+  const toggleCam = () => {
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.executeCommand('toggleVideo');
+      setCamOn(!camOn);
     }
   };
 
@@ -202,18 +356,25 @@ const VideoInterviewRoom: React.FC = () => {
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {isActive && (
-              <Chip
-                icon={<FiberManualRecord sx={{ fontSize: 12, color: '#ef4444 !important', animation: 'blink 1s infinite' }} />}
-                label="LIVE"
-                sx={{
-                  background: '#fef2f2',
-                  color: '#ef4444',
-                  fontWeight: 700,
-                  fontSize: '12px',
-                  border: '1px solid #fecaca',
-                  '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } }
-                }}
-              />
+              <>
+                <Chip
+                  icon={<FiberManualRecord sx={{ fontSize: 12, color: '#ef4444 !important', animation: 'blink 1s infinite' }} />}
+                  label="LIVE"
+                  sx={{
+                    background: '#fef2f2',
+                    color: '#ef4444',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    border: '1px solid #fecaca',
+                    '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } }
+                  }}
+                />
+                <Tooltip title="Copy meeting link for candidate">
+                  <IconButton onClick={handleCopyMeetingLink} sx={{ color: '#64748b' }}>
+                    <LinkIcon />
+                  </IconButton>
+                </Tooltip>
+              </>
             )}
             <Box sx={{
               background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
@@ -245,49 +406,28 @@ const VideoInterviewRoom: React.FC = () => {
               borderRadius: '20px',
               position: 'relative',
               overflow: 'hidden',
-              minHeight: '450px',
+              minHeight: '500px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
             }}>
               {isActive ? (
-                <Box sx={{ textAlign: 'center' }}>
-                  <Avatar sx={{
-                    width: 140,
-                    height: 140,
-                    fontSize: '56px',
-                    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
-                    mb: 2,
-                    boxShadow: '0 0 60px rgba(59, 130, 246, 0.4)'
-                  }}>
-                    {interview?.candidate_name?.charAt(0).toUpperCase() || 'C'}
-                  </Avatar>
-                  <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 600 }}>
-                    {interview?.candidate_name || 'Candidate'}
-                  </Typography>
-                  <Typography sx={{ color: '#94a3b8', fontSize: '14px', mt: 1 }}>
-                    Interview in progress
-                  </Typography>
-
-                  {/* Audio Level Indicator */}
-                  <Box sx={{ mt: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                    <VolumeUp sx={{ color: '#10b981', fontSize: 20 }} />
-                    <Box sx={{ width: 120, height: 6, background: '#334155', borderRadius: 3, overflow: 'hidden' }}>
-                      <Box sx={{
-                        width: `${audioLevel}%`,
-                        height: '100%',
-                        background: 'linear-gradient(90deg, #10b981, #f59e0b)',
-                        transition: 'width 0.1s ease',
-                        borderRadius: 3
-                      }} />
-                    </Box>
-                  </Box>
-                </Box>
+                // Embedded Jitsi Meet Video Call
+                <Box
+                  ref={jitsiContainerRef}
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    minHeight: '500px',
+                    '& iframe': {
+                      borderRadius: '20px',
+                    }
+                  }}
+                />
               ) : isCompleted ? (
                 <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 3 }}>
                   {scoreResult ? (
-                    // Show score results
                     <Box>
                       <Box sx={{
                         width: 80,
@@ -354,14 +494,32 @@ const VideoInterviewRoom: React.FC = () => {
                       </Button>
                     </Box>
                   ) : (
-                    // Show transcript upload form
                     <Box>
                       <Typography sx={{ color: 'white', fontSize: '20px', fontWeight: 700, mb: 1 }}>
                         Interview Completed
                       </Typography>
-                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 3 }}>
-                        Paste the interview transcript below to generate score
+                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 2 }}>
+                        {transcriptText ? 'Review the transcript below, then upload to generate score' : 'Paste the interview transcript below to generate score'}
                       </Typography>
+
+                      {transcriptText && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                          <Button
+                            size="small"
+                            startIcon={copied ? <Check sx={{ fontSize: 16 }} /> : <ContentCopy sx={{ fontSize: 16 }} />}
+                            onClick={handleCopyTranscript}
+                            sx={{
+                              color: copied ? '#10b981' : '#94a3b8',
+                              textTransform: 'none',
+                              fontSize: '12px',
+                              '&:hover': { color: '#f59e0b', background: 'rgba(245, 158, 11, 0.1)' }
+                            }}
+                          >
+                            {copied ? 'Copied!' : 'Copy Transcript'}
+                          </Button>
+                        </Box>
+                      )}
+
                       <TextField
                         multiline
                         rows={8}
@@ -375,7 +533,7 @@ const VideoInterviewRoom: React.FC = () => {
                             background: '#1e293b',
                             color: 'white',
                             borderRadius: '12px',
-                            '& fieldset': { borderColor: '#334155' },
+                            '& fieldset': { borderColor: transcriptText ? '#475569' : '#334155' },
                             '&:hover fieldset': { borderColor: '#475569' },
                             '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
                           },
@@ -422,64 +580,110 @@ const VideoInterviewRoom: React.FC = () => {
                   )}
                 </Box>
               ) : (
-                <Box sx={{ textAlign: 'center' }}>
-                  <Box sx={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: '50%',
-                    background: '#334155',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 24px'
-                  }}>
-                    <Videocam sx={{ color: '#64748b', fontSize: 48 }} />
-                  </Box>
-                  <Typography sx={{ color: '#94a3b8', fontSize: '18px' }}>
-                    Ready to start interview
+                <Box sx={{ textAlign: 'center', p: 4 }}>
+                  <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700, mb: 1 }}>
+                    {interview?.interview_type === 'Both' ? 'Select Interview Mode' :
+                     interview?.interview_type === 'AI' ? 'AI Interview' : 'Video Interview'}
                   </Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: '14px', mt: 1 }}>
-                    Click "Start Interview" to begin
+                  <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 4 }}>
+                    {interview?.interview_type === 'Both' ? 'Choose how you want to conduct this interview' :
+                     interview?.interview_type === 'AI' ? 'This job is configured for AI-powered interviews' :
+                     'This job is configured for manual video interviews'}
                   </Typography>
-                </Box>
-              )}
 
-              {/* Self View (Picture-in-Picture) */}
-              {isActive && (
-                <Box sx={{
-                  position: 'absolute',
-                  bottom: 20,
-                  right: 20,
-                  width: 180,
-                  height: 120,
-                  background: '#334155',
-                  borderRadius: '12px',
-                  border: '3px solid #475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}>
-                  <Avatar sx={{
-                    width: 50,
-                    height: 50,
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                  }}>
-                    {interview?.interviewer_name?.charAt(0).toUpperCase() || 'I'}
-                  </Avatar>
-                  <Typography sx={{
-                    position: 'absolute',
-                    bottom: 8,
-                    left: 8,
-                    color: 'white',
-                    fontSize: '11px',
-                    background: 'rgba(0,0,0,0.6)',
-                    padding: '2px 8px',
-                    borderRadius: '4px'
-                  }}>
-                    You
-                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 3, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {/* Manual Interview Card - Show if interview_type is "Manual" or "Both" */}
+                    {(interview?.interview_type === 'Manual' || interview?.interview_type === 'Both' || !interview?.interview_type) && (
+                      <Box
+                        sx={{
+                          width: 200,
+                          p: 3,
+                          background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
+                          borderRadius: '16px',
+                          border: '2px solid #334155',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            border: '2px solid #f59e0b',
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 10px 30px rgba(245, 158, 11, 0.2)'
+                          }
+                        }}
+                      >
+                        <Box sx={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto 16px'
+                        }}>
+                          <Person sx={{ color: 'white', fontSize: 32 }} />
+                        </Box>
+                        <Typography sx={{ color: 'white', fontWeight: 700, fontSize: '16px', mb: 1 }}>
+                          Video Interview
+                        </Typography>
+                        <Typography sx={{ color: '#94a3b8', fontSize: '12px', mb: 2 }}>
+                          Live video call with candidate (FREE Jitsi Meet)
+                        </Typography>
+                        <Typography sx={{ color: '#64748b', fontSize: '11px', fontStyle: 'italic' }}>
+                          Click "Start Interview" below
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* AI Interview Card - Show if interview_type is "AI" or "Both" */}
+                    {(interview?.interview_type === 'AI' || interview?.interview_type === 'Both' || !interview?.interview_type) && (
+                      <Box
+                        onClick={() => navigate(`/ai-interview/${videoId}`)}
+                        sx={{
+                          width: 200,
+                          p: 3,
+                          background: 'linear-gradient(135deg, #2d1b4e 0%, #0f172a 100%)',
+                          borderRadius: '16px',
+                          border: '2px solid #334155',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            border: '2px solid #8b5cf6',
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 10px 30px rgba(139, 92, 246, 0.2)'
+                          }
+                        }}
+                      >
+                        <Box sx={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto 16px'
+                        }}>
+                          <SmartToy sx={{ color: 'white', fontSize: 32 }} />
+                        </Box>
+                        <Typography sx={{ color: 'white', fontWeight: 700, fontSize: '16px', mb: 1 }}>
+                          AI Interview
+                        </Typography>
+                        <Typography sx={{ color: '#94a3b8', fontSize: '12px', mb: 2 }}>
+                          AI asks questions one-by-one, candidate types answers
+                        </Typography>
+                        <Chip
+                          label="Click to Start"
+                          size="small"
+                          sx={{
+                            background: 'rgba(139, 92, 246, 0.2)',
+                            color: '#a78bfa',
+                            fontWeight: 600,
+                            fontSize: '10px'
+                          }}
+                        />
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
               )}
             </Paper>
@@ -499,13 +703,15 @@ const VideoInterviewRoom: React.FC = () => {
                 <>
                   <Tooltip title={micOn ? 'Mute' : 'Unmute'}>
                     <IconButton
-                      onClick={() => setMicOn(!micOn)}
+                      onClick={toggleMic}
+                      disabled={!isActive}
                       sx={{
                         width: 56,
                         height: 56,
                         background: micOn ? '#f1f5f9' : '#fef2f2',
                         border: micOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
-                        '&:hover': { background: micOn ? '#e2e8f0' : '#fee2e2' }
+                        '&:hover': { background: micOn ? '#e2e8f0' : '#fee2e2' },
+                        '&:disabled': { opacity: 0.5 }
                       }}
                     >
                       {micOn ? <Mic sx={{ color: '#1e293b' }} /> : <MicOff sx={{ color: '#ef4444' }} />}
@@ -514,40 +720,18 @@ const VideoInterviewRoom: React.FC = () => {
 
                   <Tooltip title={camOn ? 'Turn off camera' : 'Turn on camera'}>
                     <IconButton
-                      onClick={() => setCamOn(!camOn)}
+                      onClick={toggleCam}
+                      disabled={!isActive}
                       sx={{
                         width: 56,
                         height: 56,
                         background: camOn ? '#f1f5f9' : '#fef2f2',
                         border: camOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
-                        '&:hover': { background: camOn ? '#e2e8f0' : '#fee2e2' }
+                        '&:hover': { background: camOn ? '#e2e8f0' : '#fee2e2' },
+                        '&:disabled': { opacity: 0.5 }
                       }}
                     >
                       {camOn ? <Videocam sx={{ color: '#1e293b' }} /> : <VideocamOff sx={{ color: '#ef4444' }} />}
-                    </IconButton>
-                  </Tooltip>
-
-                  <Tooltip title="Share screen">
-                    <IconButton sx={{
-                      width: 56,
-                      height: 56,
-                      background: '#f1f5f9',
-                      border: '1px solid #e2e8f0',
-                      '&:hover': { background: '#e2e8f0' }
-                    }}>
-                      <ScreenShare sx={{ color: '#1e293b' }} />
-                    </IconButton>
-                  </Tooltip>
-
-                  <Tooltip title="Chat">
-                    <IconButton sx={{
-                      width: 56,
-                      height: 56,
-                      background: '#f1f5f9',
-                      border: '1px solid #e2e8f0',
-                      '&:hover': { background: '#e2e8f0' }
-                    }}>
-                      <Chat sx={{ color: '#1e293b' }} />
                     </IconButton>
                   </Tooltip>
 
@@ -558,6 +742,7 @@ const VideoInterviewRoom: React.FC = () => {
                       variant="contained"
                       startIcon={<Videocam />}
                       onClick={handleStart}
+                      disabled={!jitsiLoaded}
                       sx={{
                         background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                         padding: '14px 36px',
@@ -569,10 +754,13 @@ const VideoInterviewRoom: React.FC = () => {
                         '&:hover': {
                           background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                           boxShadow: '0 6px 20px rgba(16, 185, 129, 0.5)'
+                        },
+                        '&:disabled': {
+                          background: '#94a3b8'
                         }
                       }}
                     >
-                      Start Interview
+                      {jitsiLoaded ? 'Start Interview' : 'Loading...'}
                     </Button>
                   ) : (
                     <Button
@@ -597,18 +785,6 @@ const VideoInterviewRoom: React.FC = () => {
                       {ending ? 'Ending...' : 'End Interview'}
                     </Button>
                   )}
-
-                  <Tooltip title="More options">
-                    <IconButton sx={{
-                      width: 56,
-                      height: 56,
-                      background: '#f1f5f9',
-                      border: '1px solid #e2e8f0',
-                      '&:hover': { background: '#e2e8f0' }
-                    }}>
-                      <MoreVert sx={{ color: '#1e293b' }} />
-                    </IconButton>
-                  </Tooltip>
                 </>
               )}
             </Paper>
@@ -637,7 +813,7 @@ const VideoInterviewRoom: React.FC = () => {
                   </Typography>
                   <Typography sx={{ color: '#64748b', fontSize: '12px' }}>Candidate</Typography>
                 </Box>
-                {isActive && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />}
+                {isActive && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b' }} />}
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
@@ -653,6 +829,41 @@ const VideoInterviewRoom: React.FC = () => {
                 {isActive && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />}
               </Box>
             </Paper>
+
+            {/* Meeting Link */}
+            {isActive && (
+              <Paper sx={{
+                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                borderRadius: '16px',
+                padding: '20px',
+                border: '1px solid #bfdbfe'
+              }}>
+                <Typography sx={{ color: '#1e40af', fontWeight: 700, fontSize: '14px', mb: 1 }}>
+                  📎 Share Meeting Link
+                </Typography>
+                <Typography sx={{ color: '#3b82f6', fontSize: '12px', mb: 2 }}>
+                  Send this link to the candidate to join:
+                </Typography>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<ContentCopy />}
+                  onClick={handleCopyMeetingLink}
+                  sx={{
+                    borderColor: '#3b82f6',
+                    color: '#3b82f6',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    '&:hover': {
+                      background: '#3b82f6',
+                      color: 'white'
+                    }
+                  }}
+                >
+                  Copy Meeting Link
+                </Button>
+              </Paper>
+            )}
 
             {/* Interview Info */}
             <Paper sx={{
@@ -739,38 +950,6 @@ const VideoInterviewRoom: React.FC = () => {
                 </Button>
               </Box>
             </Paper>
-
-            {/* Transcript Status */}
-            {isCompleted && (
-              <Paper sx={{
-                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
-                borderRadius: '16px',
-                padding: '20px',
-                border: '1px solid #a7f3d0'
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Box sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '12px',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Description sx={{ color: 'white', fontSize: 24 }} />
-                  </Box>
-                  <Box>
-                    <Typography sx={{ color: '#065f46', fontWeight: 700, fontSize: '15px' }}>
-                      Transcript Ready
-                    </Typography>
-                    <Typography sx={{ color: '#047857', fontSize: '13px' }}>
-                      Click to view full transcript
-                    </Typography>
-                  </Box>
-                </Box>
-              </Paper>
-            )}
           </Box>
         </Box>
       </Box>

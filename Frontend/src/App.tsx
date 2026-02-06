@@ -40,6 +40,7 @@ import VideoInterviewList from './components/video/VideoInterviewList'
 import VideoInterviewRoom from './components/video/VideoInterviewRoom'
 import VideoInterviewDetail from './components/video/VideoInterviewDetail'
 import CandidateVideoConsent from './components/video/CandidateVideoConsent'
+import AIInterviewRoom from './components/video/AIInterviewRoom'
 
 // Fraud Detection Components
 import FraudDashboard from './components/fraud/FraudDashboard'
@@ -372,6 +373,13 @@ function App(): JSX.Element {
               <ProtectedRoute>
                 <RoleProtectedRoute allowedRoles={['candidate']}>
                   <CandidateVideoConsent />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/ai-interview/:videoId" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin', 'candidate']}>
+                  <AIInterviewRoom />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />

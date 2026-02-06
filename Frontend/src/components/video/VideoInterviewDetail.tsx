@@ -451,8 +451,29 @@ const VideoInterviewDetail: React.FC = () => {
                     padding: '20px',
                     maxHeight: '400px',
                     overflow: 'auto',
-                    border: '1px solid #e2e8f0'
+                    border: '1px solid #e2e8f0',
+                    position: 'relative'
                   }}>
+                    {/* Copy Button */}
+                    <Tooltip title="Copy Transcript">
+                      <IconButton
+                        onClick={() => copyToClipboard(transcript)}
+                        sx={{
+                          position: 'absolute',
+                          top: 12,
+                          right: 12,
+                          background: 'white',
+                          border: '1px solid #e2e8f0',
+                          '&:hover': {
+                            background: '#f59e0b',
+                            color: 'white',
+                            borderColor: '#f59e0b'
+                          }
+                        }}
+                      >
+                        <ContentCopy sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Tooltip>
                     <Typography
                       component="pre"
                       sx={{
@@ -462,7 +483,8 @@ const VideoInterviewDetail: React.FC = () => {
                         lineHeight: 1.8,
                         whiteSpace: 'pre-wrap',
                         wordWrap: 'break-word',
-                        margin: 0
+                        margin: 0,
+                        paddingRight: '40px' // Space for copy button
                       }}
                     >
                       {transcript}
