@@ -25,6 +25,8 @@ from models import (
     VideoInterviewStatus,
     FraudAnalysis,
     UserRole,
+    InterviewSession,
+    InterviewAnswer,
 )
 from schemas import (
     VideoInterviewCreate,
@@ -47,6 +49,7 @@ router = APIRouter(tags=["Video Interviews"])
 def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewResponse:
     """Build a VideoInterviewResponse from an ORM object with joined names."""
     candidate_name = None
+    application = None
 
     # Try to get name from JobApplication first (more accurate)
     if db and vi.candidate:
@@ -68,6 +71,57 @@ def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewRes
     job_title = vi.job.title if vi.job else None
     interview_type = vi.job.interview_type if vi.job else "Both"
 
+    # Fetch score data from InterviewSession
+    overall_score = None
+    recommendation = None
+    strengths = None
+    weaknesses = None
+    per_question_scores = None
+    interview_session_id = None
+
+    if db:
+        # Try to find the InterviewSession for this interview
+        candidate_id_for_session = application.id if application else vi.candidate_id
+
+        session = db.query(InterviewSession).filter(
+            InterviewSession.job_id == vi.job_id,
+            InterviewSession.application_id == candidate_id_for_session
+        ).first()
+
+        # Fallback: try with candidate_id directly
+        if not session:
+            session = db.query(InterviewSession).filter(
+                InterviewSession.job_id == vi.job_id,
+                InterviewSession.candidate_id == vi.candidate_id
+            ).first()
+
+        if session and session.overall_score is not None:
+            interview_session_id = session.id  # Store session ID for Results page navigation
+            overall_score = session.overall_score
+            recommendation = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation) if session.recommendation else None
+            strengths = session.strengths
+            weaknesses = session.weaknesses
+
+            # Fetch per-question scores
+            answers = db.query(InterviewAnswer).filter(
+                InterviewAnswer.session_id == session.id
+            ).all()
+
+            if answers:
+                per_question_scores = [
+                    {
+                        "question_id": ans.question_id,
+                        "score": ans.score,
+                        "relevance_score": ans.relevance_score,
+                        "completeness_score": ans.completeness_score,
+                        "accuracy_score": ans.accuracy_score,
+                        "clarity_score": ans.clarity_score,
+                        "feedback": ans.feedback,
+                        "extracted_answer": ans.answer_text
+                    }
+                    for ans in answers
+                ]
+
     return VideoInterviewResponse(
         id=vi.id,
         session_id=vi.session_id,
@@ -88,6 +142,12 @@ def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewRes
         transcript=vi.transcript,
         transcript_generated_at=vi.transcript_generated_at,
         interview_type=interview_type,
+        overall_score=overall_score,
+        recommendation=recommendation,
+        strengths=strengths,
+        weaknesses=weaknesses,
+        per_question_scores=per_question_scores,
+        interview_session_id=interview_session_id,
     )
 
 
@@ -1146,14 +1206,6 @@ def upload_transcript_and_score(
                 llm_result = None
 
         if llm_result:
-            score_result = {
-                "overall_score": llm_result.get("overall_score", 0),
-                "recommendation": llm_result.get("recommendation", ""),
-                "strengths": llm_result.get("strengths", ""),
-                "weaknesses": llm_result.get("weaknesses", ""),
-                "per_question": llm_result.get("per_question", [])
-            }
-
             # Create or update interview session for storing scores
             session = db.query(InterviewSession).filter(
                 InterviewSession.job_id == vi.job_id,
@@ -1179,6 +1231,16 @@ def upload_transcript_and_score(
             session.weaknesses = llm_result.get("weaknesses", "")
             session.status = InterviewSessionStatus.SCORED
             session.completed_at = datetime.utcnow()
+
+            # Build score_result with session ID for frontend navigation
+            score_result = {
+                "overall_score": llm_result.get("overall_score", 0),
+                "recommendation": llm_result.get("recommendation", ""),
+                "strengths": llm_result.get("strengths", ""),
+                "weaknesses": llm_result.get("weaknesses", ""),
+                "per_question": llm_result.get("per_question", []),
+                "interview_session_id": session.id  # For navigating to Results page
+            }
 
             # Save per-question answers with extracted answers from transcript
             for pq in llm_result.get("per_question", []):

@@ -17,7 +17,7 @@ import {
   TextField,
   InputAdornment,
   Button,
-  Pagination,
+  TablePagination,
   CircularProgress
 } from '@mui/material';
 import {
@@ -60,8 +60,8 @@ const ExpertReview: React.FC = () => {
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [rowsPerPage] = useState(5);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   
   // Sorting state
   const [sortField, setSortField] = useState<string>('');
@@ -311,12 +311,17 @@ const ExpertReview: React.FC = () => {
   }, [filteredQuestionSets, sortField, sortDirection]);
 
   const paginatedData = sortedQuestionSets.slice(
-    (page - 1) * rowsPerPage,
-    page * rowsPerPage
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
   );
 
-  const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
   };
 
   const getStatusChip = (status: string) => {
@@ -357,7 +362,7 @@ const ExpertReview: React.FC = () => {
             variant="outlined"
             size="small"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
             slotProps={{
               input: {
                 startAdornment: (
@@ -612,23 +617,28 @@ const ExpertReview: React.FC = () => {
         </Paper>
 
         {/* Pagination */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-          <Pagination
-            count={Math.ceil(sortedQuestionSets.length / rowsPerPage)}
-            page={page}
-            onChange={handlePageChange}
-            color="primary"
-            sx={{
-              '& .MuiPaginationItem-root': {
-                borderRadius: 1,
-              },
-              '& .Mui-selected': {
-                backgroundColor: '#1976d2 !important',
-                color: 'white',
-              },
-            }}
-          />
-        </Box>
+        <TablePagination
+          rowsPerPageOptions={[5, 10, 25, 50]}
+          component="div"
+          count={sortedQuestionSets.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          sx={{
+            flexShrink: 0,
+            borderTop: '1px solid #e2e8f0',
+            backgroundColor: '#fff',
+            borderRadius: '0 0 8px 8px',
+            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+              color: '#64748b',
+              fontWeight: 500,
+            },
+            '.MuiTablePagination-select': {
+              fontWeight: 500,
+            },
+          }}
+        />
       </Box>
     </Navigation>
   );

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Chip, CircularProgress, Alert,
   TextField, Button, IconButton, Tooltip, Avatar, Divider,
-  LinearProgress
+  // LinearProgress
 } from '@mui/material';
 import {
   ArrowBack,
@@ -20,16 +20,14 @@ import {
   Cancel,
   CheckCircle,
   Description,
-  Refresh,
   CloudUpload,
   Assessment,
-  Star
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 
-const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
+const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactElement }> = {
   scheduled: { color: '#3b82f6', bg: '#eff6ff', icon: <CalendarMonth sx={{ fontSize: 18 }} /> },
   in_progress: { color: '#f59e0b', bg: '#fffbeb', icon: <PlayArrow sx={{ fontSize: 18 }} /> },
   completed: { color: '#10b981', bg: '#ecfdf5', icon: <CheckCircle sx={{ fontSize: 18 }} /> },
@@ -45,7 +43,6 @@ const VideoInterviewDetail: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [transcript, setTranscript] = useState<string | null>(null);
-  const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcriptText, setTranscriptText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [scoreResult, setScoreResult] = useState<any>(null);
@@ -61,6 +58,17 @@ const VideoInterviewDetail: React.FC = () => {
         if (data.transcript) {
           setTranscript(data.transcript);
         }
+        // Check if interview already has a score (after refresh)
+        if (data.overall_score !== null && data.overall_score !== undefined) {
+          setScoreResult({
+            overall_score: data.overall_score,
+            recommendation: data.recommendation || 'next_round',
+            strengths: data.strengths || '',
+            weaknesses: data.weaknesses || '',
+            per_question: data.per_question_scores || [],
+            interview_session_id: data.interview_session_id
+          });
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load interview details.');
       } finally {
@@ -70,18 +78,18 @@ const VideoInterviewDetail: React.FC = () => {
     if (videoId) fetchInterview();
   }, [videoId]);
 
-  const fetchTranscript = async () => {
-    try {
-      setTranscriptLoading(true);
-      const data = await videoInterviewService.getTranscript(Number(videoId));
-      setTranscript(data.transcript);
-      toast.success('Transcript loaded successfully');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to load transcript');
-    } finally {
-      setTranscriptLoading(false);
-    }
-  };
+  // const fetchTranscript = async () => {
+  //   try {
+  //     setTranscriptLoading(true);
+  //     const data = await videoInterviewService.getTranscript(Number(videoId));
+  //     setTranscript(data.transcript);
+  //     toast.success('Transcript loaded successfully');
+  //   } catch (err: any) {
+  //     toast.error(err.response?.data?.detail || 'Failed to load transcript');
+  //   } finally {
+  //     setTranscriptLoading(false);
+  //   }
+  // };
 
   const handleUploadTranscript = async () => {
     if (!transcriptText.trim()) {
@@ -661,7 +669,7 @@ const VideoInterviewDetail: React.FC = () => {
                 )}
               </Box>
 
-              {/* Score Results Section */}
+              {/* Score Generated - View Result Button */}
               {scoreResult && (
                 <Box sx={{
                   background: 'white',
@@ -669,14 +677,9 @@ const VideoInterviewDetail: React.FC = () => {
                   border: '1px solid #e2e8f0',
                   overflow: 'hidden'
                 }}>
-                  {/* Score Header */}
                   <Box sx={{
-                    background: scoreResult.recommendation === 'select'
-                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                      : scoreResult.recommendation === 'next_round'
-                      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                      : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    padding: '24px',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    padding: '32px',
                     color: 'white',
                     textAlign: 'center'
                   }}>
@@ -691,115 +694,35 @@ const VideoInterviewDetail: React.FC = () => {
                       margin: '0 auto 16px',
                       border: '3px solid rgba(255,255,255,0.3)'
                     }}>
-                      <Typography sx={{ fontSize: '28px', fontWeight: 700 }}>
-                        {Math.round(scoreResult.overall_score * 10)}%
-                      </Typography>
+                      <CheckCircle sx={{ fontSize: 40 }} />
                     </Box>
-                    <Typography sx={{ fontSize: '20px', fontWeight: 700, mb: 1 }}>
-                      Interview Score
+                    <Typography sx={{ fontSize: '22px', fontWeight: 700, mb: 1 }}>
+                      Score Generated Successfully!
                     </Typography>
-                    <Chip
-                      icon={<Star sx={{ color: 'white !important' }} />}
-                      label={scoreResult.recommendation?.replace('_', ' ').toUpperCase() || 'N/A'}
+                    <Typography sx={{ fontSize: '14px', opacity: 0.9, mb: 3 }}>
+                      Interview has been scored and results are available
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<Assessment />}
+                      onClick={() => navigate(scoreResult.interview_session_id ? `/results?session=${scoreResult.interview_session_id}` : '/results')}
                       sx={{
-                        background: 'rgba(255,255,255,0.2)',
-                        color: 'white',
+                        background: 'white',
+                        color: '#059669',
+                        padding: '14px 32px',
+                        borderRadius: '12px',
                         fontWeight: 700,
-                        fontSize: '13px',
-                        '& .MuiChip-icon': { color: 'white' }
+                        fontSize: '16px',
+                        textTransform: 'none',
+                        boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+                        '&:hover': {
+                          background: '#f0fdf4',
+                          boxShadow: '0 6px 20px rgba(0,0,0,0.2)'
+                        }
                       }}
-                    />
-                  </Box>
-
-                  <Box sx={{ padding: '24px' }}>
-                    {/* Strengths & Weaknesses */}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 3, mb: 3 }}>
-                      <Box sx={{
-                        background: '#ecfdf5',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        border: '1px solid #a7f3d0'
-                      }}>
-                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#059669', mb: 1 }}>
-                          Strengths
-                        </Typography>
-                        <Typography sx={{ fontSize: '13px', color: '#047857', lineHeight: 1.6 }}>
-                          {scoreResult.strengths || 'N/A'}
-                        </Typography>
-                      </Box>
-                      <Box sx={{
-                        background: '#fef2f2',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        border: '1px solid #fecaca'
-                      }}>
-                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#dc2626', mb: 1 }}>
-                          Areas for Improvement
-                        </Typography>
-                        <Typography sx={{ fontSize: '13px', color: '#b91c1c', lineHeight: 1.6 }}>
-                          {scoreResult.weaknesses || 'N/A'}
-                        </Typography>
-                      </Box>
-                    </Box>
-
-                    {/* Per Question Scores */}
-                    {scoreResult.per_question && scoreResult.per_question.length > 0 && (
-                      <Box>
-                        <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Assessment sx={{ color: '#8b5cf6' }} />
-                          Question-wise Analysis
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {scoreResult.per_question.map((pq: any, index: number) => (
-                            <Box key={pq.question_id || index} sx={{
-                              background: '#f8fafc',
-                              borderRadius: '12px',
-                              padding: '16px',
-                              border: '1px solid #e2e8f0'
-                            }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
-                                  Question {index + 1}
-                                </Typography>
-                                <Chip
-                                  label={`${Math.round(pq.score * 10)}%`}
-                                  size="small"
-                                  sx={{
-                                    background: pq.score >= 7 ? '#ecfdf5' : pq.score >= 5 ? '#fffbeb' : '#fef2f2',
-                                    color: pq.score >= 7 ? '#059669' : pq.score >= 5 ? '#d97706' : '#dc2626',
-                                    fontWeight: 700
-                                  }}
-                                />
-                              </Box>
-                              <LinearProgress
-                                variant="determinate"
-                                value={pq.score * 10}
-                                sx={{
-                                  height: 6,
-                                  borderRadius: 3,
-                                  mb: 1,
-                                  backgroundColor: '#e2e8f0',
-                                  '& .MuiLinearProgress-bar': {
-                                    background: pq.score >= 7 ? '#10b981' : pq.score >= 5 ? '#f59e0b' : '#ef4444',
-                                    borderRadius: 3
-                                  }
-                                }}
-                              />
-                              {pq.extracted_answer && (
-                                <Typography sx={{ fontSize: '12px', color: '#64748b', mb: 1 }}>
-                                  <strong>Answer:</strong> {pq.extracted_answer.substring(0, 150)}...
-                                </Typography>
-                              )}
-                              {pq.feedback && (
-                                <Typography sx={{ fontSize: '12px', color: '#475569', fontStyle: 'italic' }}>
-                                  {pq.feedback}
-                                </Typography>
-                              )}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
-                    )}
+                    >
+                      View Result
+                    </Button>
                   </Box>
                 </Box>
               )}

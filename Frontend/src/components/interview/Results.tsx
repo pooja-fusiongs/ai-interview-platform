@@ -9,7 +9,14 @@ import {
   Button,
   LinearProgress,
   Avatar,
+  TextField,
+  InputAdornment,
+  TablePagination,
+  FormControl,
+  Select,
+  MenuItem,
 } from '@mui/material'
+import SearchIcon from '@mui/icons-material/Search'
 import Navigation from '../layout/sidebar'
 import { interviewService, InterviewSession, InterviewListItem } from '../../services/interviewService'
 
@@ -21,18 +28,39 @@ const Results = () => {
   const [selectedSession, setSelectedSession] = useState<InterviewSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Search and Filter state
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 8
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+
+  // Filter sessions based on search and filter
+  const filteredSessions = sessions.filter((s) => {
+    const matchesSearch =
+      (s.candidate_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.job_title || '').toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesFilter = filterStatus === 'all' || s.recommendation === filterStatus
+
+    return matchesSearch && matchesFilter
+  })
+
   // Calculate pagination
-  const totalPages = Math.ceil(sessions.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const paginatedSessions = sessions.slice(startIndex, endIndex) 
-  const handlePageChange = (_event: React.ChangeEvent<unknown> | null, value: number) => {
-    if (value >= 1 && value <= totalPages) {
-      setCurrentPage(value)
-    }
+  const paginatedSessions = filteredSessions.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  )
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10))
+    setPage(0)
   }
   useEffect(() => {
     loadData()
@@ -47,7 +75,7 @@ const Results = () => {
       const list = await interviewService.listInterviews()
       setSessions(list)
       // Reset to first page when data loads
-      setCurrentPage(1)
+      setPage(0)
     } catch (err: any) {
       console.error('Error loading results:', err)
       setError('Failed to load interview results. Make sure you are logged in.')
@@ -117,7 +145,7 @@ const Results = () => {
           <Button
             onClick={() => {
               setSelectedSession(null)
-              setCurrentPage(1) // Reset to first page when going back to list
+              setPage(0) // Reset to first page when going back to list
             }}
             sx={{
               alignSelf: 'flex-start',
@@ -150,9 +178,13 @@ const Results = () => {
               </Typography>
             </Box>
             <Chip
-              icon={<i className={rec.icon} style={{ fontSize: 12, color: rec.color }}></i>}
-              label={rec.label}
-              sx={{ fontWeight: 700, fontSize: '12px', backgroundColor: rec.bg, color: rec.color, height: '30px', '& .MuiChip-icon': { marginLeft: '8px' } }}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className={rec.icon} style={{ fontSize: 12 }}></i>
+                  {rec.label}
+                </Box>
+              }
+              sx={{ fontWeight: 700, fontSize: '12px', backgroundColor: rec.bg, color: rec.color, height: '30px' }}
             />
           </Box>
 
@@ -413,7 +445,64 @@ const Results = () => {
             <i className="fas fa-chart-bar" style={{ color: '#f59e0b', fontSize: 14 }}></i>
             <Typography sx={{ fontSize: { xs: '14px', md: '16px' }, fontWeight: 600, color: '#1e293b' }}>Interviews Result</Typography>
           </Box>
+        </Box>
 
+        {/* Search and Filter */}
+        <Box sx={{
+          padding: { xs: '12px 16px', md: '16px 24px' },
+          borderBottom: '1px solid #f1f5f9',
+          display: 'flex',
+          gap: 2,
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' }
+        }}>
+          <TextField
+            placeholder="Search by name or job title..."
+            variant="outlined"
+            size="small"
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: '#9ca3af', fontSize: 20 }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              flex: 1,
+              minWidth: { xs: '100%', sm: 250 },
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#fff',
+                borderRadius: '8px',
+                '& fieldset': { borderColor: '#e2e8f0' },
+                '&:hover fieldset': { borderColor: '#f59e0b' },
+                '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
+              }
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <Select
+              value={filterStatus}
+              onChange={(e) => { setFilterStatus(e.target.value); setPage(0); }}
+              displayEmpty
+              sx={{
+                backgroundColor: '#fff',
+                borderRadius: '8px',
+                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+              }}
+            >
+              <MenuItem value="all">All Status</MenuItem>
+              <MenuItem value="select">Selected</MenuItem>
+              <MenuItem value="next_round">Next Round</MenuItem>
+              <MenuItem value="reject">Rejected</MenuItem>
+            </Select>
+          </FormControl>
+          <Typography sx={{ fontSize: '13px', color: '#64748b', alignSelf: 'center' }}>
+            {filteredSessions.length} result{filteredSessions.length !== 1 ? 's' : ''}
+          </Typography>
         </Box>
 
         <CardContent sx={{
@@ -429,10 +518,10 @@ const Results = () => {
             </Box>
           )}
 
-          {sessions.length === 0 ? (
-            <Box sx={{ 
-              textAlign: 'center', 
-              padding: '40px 0', 
+          {filteredSessions.length === 0 ? (
+            <Box sx={{
+              textAlign: 'center',
+              padding: '40px 0',
               color: '#94a3b8',
               flex: 1,
               display: 'flex',
@@ -441,10 +530,14 @@ const Results = () => {
               justifyContent: 'center'
             }}>
               <Box sx={{ fontSize: '40px', mb: '12px', opacity: 0.4 }}>
-                <i className="fas fa-inbox"></i>
+                <i className={sessions.length === 0 ? "fas fa-inbox" : "fas fa-search"}></i>
               </Box>
-              <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>No interview results yet</Typography>
-              <Typography sx={{ fontSize: '12px', mt: '4px' }}>Complete an interview to see results here.</Typography>
+              <Typography sx={{ fontSize: '14px', fontWeight: 500 }}>
+                {sessions.length === 0 ? 'No interview results yet' : 'No results found'}
+              </Typography>
+              <Typography sx={{ fontSize: '12px', mt: '4px' }}>
+                {sessions.length === 0 ? 'Complete an interview to see results here.' : 'Try adjusting your search or filter criteria.'}
+              </Typography>
             </Box>
           ) : (
             <Box sx={{
@@ -539,121 +632,28 @@ const Results = () => {
         </CardContent>
       </Card>
       
-      {/* Fixed Pagination at Bottom */}
-      {sessions.length > itemsPerPage && (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          gap: '12px', 
-          // mt: '20px',
-          backgroundColor: '#f8fafc',
-          paddingTop: '16px'
-        }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '12px',
-          }}>
-            {/* Previous Button */}
-            <Button
-              onClick={() => handlePageChange(null, currentPage - 1)}
-              disabled={currentPage === 1}
-              sx={{
-                minWidth: '36px',
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                padding: 0,
-                color: currentPage === 1 ? '#cbd5e1' : '#64748b',
-                '&:hover': {
-                  backgroundColor: currentPage === 1 ? 'transparent' : '#f1f5f9',
-                },
-                '&:disabled': {
-                  color: '#cbd5e1',
-                },
-              }}
-            >
-              <i className="fas fa-chevron-left" style={{ fontSize: '12px' }} />
-            </Button>
-
-            {/* Page Numbers */}
-            {Array.from({ length: totalPages }, (_, index) => {
-              const pageNumber = index + 1
-              const isCurrentPage = pageNumber === currentPage
-              
-              // Show first page, last page, current page, and pages around current
-              const showPage = 
-                pageNumber === 1 || 
-                pageNumber === totalPages || 
-                (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
-              
-              if (!showPage) {
-                // Show ellipsis for gaps
-                if (pageNumber === currentPage - 2 || pageNumber === currentPage + 2) {
-                  return (
-                    <Box key={`ellipsis-${pageNumber}`} sx={{ 
-                      color: '#cbd5e1', 
-                      fontSize: '14px',
-                      padding: '0 4px'
-                    }}>
-                      ...
-                    </Box>
-                  )
-                }
-                return null
-              }
-
-              return (
-                <Button
-                  key={pageNumber}
-                  onClick={() => handlePageChange(null, pageNumber)}
-                  sx={{
-                    minWidth: '36px',
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    padding: 0,
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    backgroundColor: isCurrentPage ? '#6366f1' : 'transparent',
-                    color: isCurrentPage ? 'white' : '#64748b',
-                    '&:hover': {
-                      backgroundColor: isCurrentPage ? '#5b5bd6' : '#f1f5f9',
-                    },
-                  }}
-                >
-                  {pageNumber}
-                </Button>
-              )
-            })}
-
-            {/* Next Button */}
-            <Button
-              onClick={() => handlePageChange(null, currentPage + 1)}
-              disabled={currentPage === totalPages}
-              sx={{
-                minWidth: '36px',
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                padding: 0,
-                color: currentPage === totalPages ? '#cbd5e1' : '#64748b',
-                '&:hover': {
-                  backgroundColor: currentPage === totalPages ? 'transparent' : '#f1f5f9',
-                },
-                '&:disabled': {
-                  color: '#cbd5e1',
-                },
-              }}
-            >
-              <i className="fas fa-chevron-right" style={{ fontSize: '12px' }} />
-            </Button>
-          </Box>
-          
-         
-        </Box>
-      )}
+      {/* TablePagination */}
+      <TablePagination
+        rowsPerPageOptions={[5, 10, 25, 50]}
+        component="div"
+        count={filteredSessions.length}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        sx={{
+          flexShrink: 0,
+          borderTop: '1px solid #e2e8f0',
+          backgroundColor: '#fff',
+          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+            color: '#64748b',
+            fontWeight: 500,
+          },
+          '.MuiTablePagination-select': {
+            fontWeight: 500,
+          },
+        }}
+      />
     </Box>
   )
 

@@ -595,6 +595,13 @@ class VideoInterviewResponse(BaseModel):
     transcript: Optional[str] = None
     transcript_generated_at: Optional[datetime] = None
     interview_type: Optional[str] = "Both"  # AI, Manual, Both - from job settings
+    # Score fields (from InterviewSession)
+    overall_score: Optional[float] = None
+    recommendation: Optional[str] = None
+    strengths: Optional[str] = None
+    weaknesses: Optional[str] = None
+    per_question_scores: Optional[List[dict]] = None
+    interview_session_id: Optional[int] = None  # ID to navigate to Results page
 
     class Config:
         from_attributes = True

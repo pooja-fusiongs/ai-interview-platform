@@ -57,6 +57,10 @@ export const videoInterviewService = {
     });
     return response.data;
   },
+  updateNotes: async (id: number, notes: string) => {
+    const response = await apiClient.patch(`/api/video/interviews/${id}/notes`, { notes });
+    return response.data;
+  },
   // AI Interview Methods
   getAIInterviewQuestions: async (id: number) => {
     const response = await apiClient.get(`/api/video/interviews/${id}/ai-questions`);
