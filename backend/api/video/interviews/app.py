@@ -425,6 +425,49 @@ def cancel_video_interview(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /api/video/interviews/data/all  -- Delete all video interview data
+# ---------------------------------------------------------------------------
+
+@router.delete("/api/video/interviews/data/all")
+def delete_all_video_interview_data(
+    current_user: User = Depends(
+        require_any_role([UserRole.ADMIN])
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete ALL video interview data including related fraud analyses.
+    ADMIN ONLY - Use with caution!
+    """
+    try:
+        # Count records before deletion
+        video_count = db.query(VideoInterview).count()
+        fraud_count = db.query(FraudAnalysis).count()
+        
+        # Delete related fraud analyses first (foreign key constraint)
+        db.query(FraudAnalysis).delete()
+        
+        # Delete all video interviews
+        db.query(VideoInterview).delete()
+        
+        db.commit()
+        
+        return {
+            "message": "All video interview data deleted successfully",
+            "deleted": {
+                "video_interviews": video_count,
+                "fraud_analyses": fraud_count
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete video interview data: {str(e)}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # POST /api/video/interviews/{video_id}/start  -- Mark as started
 # ---------------------------------------------------------------------------
 
