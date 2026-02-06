@@ -9,12 +9,25 @@ import re
 from typing import List, Dict, Any, Optional
 import config
 
+# Global client instance
+_gemini_client = None
 
-def _get_model():
-    """Initialize and return the Gemini model."""
-    import google.generativeai as genai
-    genai.configure(api_key=config.GEMINI_API_KEY)
-    return genai.GenerativeModel("gemini-1.5-flash")
+def _get_client():
+    """Initialize and return the Gemini client (new google-genai package)."""
+    global _gemini_client
+    if _gemini_client is None:
+        from google import genai
+        _gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
+    return _gemini_client
+
+def _generate_content(prompt: str) -> str:
+    """Generate content using Gemini API with gemini-2.0-flash model."""
+    client = _get_client()
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=prompt
+    )
+    return response.text
 
 
 def _extract_json(text: str) -> Any:
@@ -93,9 +106,8 @@ Respond ONLY with a JSON array in this exact format:
 ]"""
 
     try:
-        model = _get_model()
-        response = model.generate_content(prompt)
-        questions = _extract_json(response.text)
+        response_text = _generate_content(prompt)
+        questions = _extract_json(response_text)
 
         if not questions or not isinstance(questions, list):
             print(f"Gemini returned invalid format, falling back")
@@ -218,6 +230,94 @@ def _manual_parse_transcript(
     return result if result else existing_results
 
 
+def _fallback_scoring(
+    transcript_text: str,
+    questions_with_answers: List[Dict[str, str]]
+) -> Dict[str, Any]:
+    """
+    Fallback scoring when Gemini API fails (quota exceeded, etc.)
+    Uses rule-based scoring with transcript parsing.
+    """
+    print(f"\n{'='*60}")
+    print(f"🔄 [fallback_scoring] Using rule-based scoring...")
+    print(f"   - Questions: {len(questions_with_answers)}")
+    print(f"   - Transcript length: {len(transcript_text)} chars")
+    
+    # Parse transcript to extract Q&A pairs
+    per_question = _manual_parse_transcript(transcript_text, questions_with_answers, [])
+    
+    # Calculate scores based on answer length and presence
+    total_score = 0
+    for pq in per_question:
+        answer = pq.get("extracted_answer", "")
+        
+        if "not found" in answer.lower():
+            # Question not answered
+            pq["score"] = 2.0
+            pq["relevance_score"] = 2.0
+            pq["completeness_score"] = 2.0
+            pq["accuracy_score"] = 2.0
+            pq["clarity_score"] = 2.0
+            pq["feedback"] = "Question not answered in the interview"
+        else:
+            # Score based on answer length (simple heuristic)
+            word_count = len(answer.split())
+            
+            if word_count < 10:
+                base_score = 4.0
+                feedback = "Answer is too brief"
+            elif word_count < 30:
+                base_score = 6.0
+                feedback = "Answer is adequate but could be more detailed"
+            elif word_count < 60:
+                base_score = 7.5
+                feedback = "Good answer with reasonable detail"
+            else:
+                base_score = 8.0
+                feedback = "Comprehensive answer with good detail"
+            
+            pq["score"] = base_score
+            pq["relevance_score"] = base_score
+            pq["completeness_score"] = base_score - 0.5
+            pq["accuracy_score"] = base_score
+            pq["clarity_score"] = base_score + 0.5
+            pq["feedback"] = feedback + " (rule-based scoring)"
+        
+        total_score += pq["score"]
+    
+    # Calculate overall score
+    overall_score = total_score / len(per_question) if per_question else 5.0
+    
+    # Determine recommendation
+    if overall_score >= 7.5:
+        recommendation = "next_round"
+        strengths = "Candidate provided detailed answers to most questions"
+        weaknesses = "Some answers could be more comprehensive"
+    elif overall_score >= 5.0:
+        recommendation = "next_round"
+        strengths = "Candidate answered most questions adequately"
+        weaknesses = "Several answers lacked depth and detail"
+    else:
+        recommendation = "reject"
+        strengths = "Candidate attempted to answer questions"
+        weaknesses = "Most answers were too brief or missing key details"
+    
+    result = {
+        "per_question": per_question,
+        "overall_score": round(overall_score, 1),
+        "recommendation": recommendation,
+        "strengths": strengths + " (Note: AI scoring unavailable, using rule-based scoring)",
+        "weaknesses": weaknesses + " (Note: AI scoring unavailable, using rule-based scoring)"
+    }
+    
+    print(f"✅ [fallback_scoring] Scoring completed")
+    print(f"   Overall Score: {result['overall_score']}")
+    print(f"   Recommendation: {result['recommendation']}")
+    print(f"{'='*60}\n")
+    
+    return result
+
+
 def score_transcript_with_gemini(
     transcript_text: str,
     questions_with_answers: List[Dict[str, str]]
@@ -332,15 +432,14 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
 
     try:
         print(f"🤖 [score_transcript] Calling Gemini API...")
-        model = _get_model()
-        print(f"🤖 [score_transcript] Model initialized, generating content...")
-        response = model.generate_content(prompt)
+        print(f"🤖 [score_transcript] Using gemini-2.0-flash model...")
+        response_text = _generate_content(prompt)
         print(f"🤖 [score_transcript] Got response, extracting JSON...")
-        result = _extract_json(response.text)
+        result = _extract_json(response_text)
 
         if not result or not isinstance(result, dict):
             print(f"❌ [score_transcript] Invalid format returned")
-            print(f"   Response text (first 500 chars): {response.text[:500] if response.text else 'EMPTY'}")
+            print(f"   Response text (first 500 chars): {response_text[:500] if response_text else 'EMPTY'}")
             return None
 
         print(f"✅ [score_transcript] JSON extracted successfully!")
@@ -405,7 +504,21 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
         print(f"\n❌❌❌ [score_transcript] EXCEPTION OCCURRED ❌❌❌")
         print(f"   Error type: {type(e).__name__}")
         print(f"   Error message: {str(e)}")
-        print(f"   Full traceback:")
-        traceback.print_exc()
-        print(f"{'='*60}\n")
-        return None
+        
+        # Check if it's a quota error
+        error_msg = str(e).lower()
+        is_quota_error = '429' in error_msg or 'quota' in error_msg or 'resource_exhausted' in error_msg
+        
+        if is_quota_error:
+            print(f"   ⚠️ QUOTA EXCEEDED - Using fallback scoring")
+            print(f"   Full traceback:")
+            traceback.print_exc()
+            print(f"{'='*60}\n")
+            
+            # Return fallback scoring
+            return _fallback_scoring(transcript_text, questions_with_answers)
+        else:
+            print(f"   Full traceback:")
+            traceback.print_exc()
+            print(f"{'='*60}\n")
+            return None

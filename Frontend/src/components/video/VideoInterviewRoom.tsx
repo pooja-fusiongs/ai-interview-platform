@@ -318,12 +318,14 @@ const VideoInterviewRoom: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px 24px',
+          padding: { xs: '12px 16px', sm: '16px 24px' },
           background: 'white',
           borderBottom: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          flexWrap: 'wrap',
+          gap: { xs: 2, sm: 0 }
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
             <IconButton
               onClick={() => navigate('/video-interviews')}
               sx={{
@@ -335,16 +337,16 @@ const VideoInterviewRoom: React.FC = () => {
               <ArrowBack />
             </IconButton>
             <Box>
-              <Typography sx={{ color: '#1e293b', fontWeight: 700, fontSize: '18px' }}>
+              <Typography sx={{ color: '#1e293b', fontWeight: 700, fontSize: { xs: '14px', sm: '18px' } }}>
                 {interview?.job_title || 'Video Interview'}
               </Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '13px' }}>
+              <Typography sx={{ color: '#64748b', fontSize: { xs: '11px', sm: '13px' } }}>
                 {interview?.candidate_name || 'Candidate'} • Interview #{videoId}
               </Typography>
             </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
             {isActive && (
               <>
                 <Chip
@@ -368,14 +370,14 @@ const VideoInterviewRoom: React.FC = () => {
             <Box sx={{
               background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
               borderRadius: '10px',
-              padding: '10px 20px',
+              padding: { xs: '8px 12px', sm: '10px 20px' },
               display: 'flex',
               alignItems: 'center',
               gap: 1,
               boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)'
             }}>
-              <AccessTime sx={{ color: 'white', fontSize: 20 }} />
-              <Typography sx={{ color: 'white', fontFamily: 'monospace', fontWeight: 700, fontSize: '20px' }}>
+              <AccessTime sx={{ color: 'white', fontSize: { xs: 16, sm: 20 } }} />
+              <Typography sx={{ color: 'white', fontFamily: 'monospace', fontWeight: 700, fontSize: { xs: '16px', sm: '20px' } }}>
                 {formatTime(elapsed)}
               </Typography>
             </Box>
@@ -385,17 +387,17 @@ const VideoInterviewRoom: React.FC = () => {
         {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
 
         {/* Main Content */}
-        <Box sx={{ flex: 1, display: 'flex', padding: '20px', gap: 3 }}>
+        <Box sx={{ flex: 1, display: 'flex', padding: { xs: '12px', sm: '20px' }, gap: { xs: 2, sm: 3 }, flexDirection: { xs: 'column', lg: 'row' } }}>
           {/* Video Area */}
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* Main Video */}
             <Paper sx={{
               flex: 1,
               background: '#1e293b',
-              borderRadius: '20px',
+              borderRadius: { xs: '12px', sm: '20px' },
               position: 'relative',
               overflow: 'hidden',
-              minHeight: '500px',
+              minHeight: { xs: '300px', sm: '400px', md: '500px' },
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -446,18 +448,18 @@ const VideoInterviewRoom: React.FC = () => {
                   </Button>
                 </Box>
               ) : (
-                <Box sx={{ textAlign: 'center', p: 4 }}>
-                  <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700, mb: 1 }}>
+                <Box sx={{ textAlign: 'center', p: { xs: 2, sm: 4 } }}>
+                  <Typography sx={{ color: 'white', fontSize: { xs: '18px', sm: '24px' }, fontWeight: 700, mb: 1 }}>
                     Select Interview Mode
                   </Typography>
-                  <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 4 }}>
+                  <Typography sx={{ color: '#94a3b8', fontSize: { xs: '12px', sm: '14px' }, mb: { xs: 2, sm: 4 } }}>
                     Choose how you want to conduct this interview
                   </Typography>
 
-                  <Box sx={{ display: 'flex', gap: 3, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', gap: { xs: 2, sm: 3 }, justifyContent: 'center', flexWrap: 'wrap' }}>
                     {/* Video Interview Card */}
                     <Box sx={{
-                      width: 200, p: 3,
+                      width: { xs: 160, sm: 200 }, p: { xs: 2, sm: 3 },
                       background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
                       borderRadius: '16px', border: '2px solid #334155',
                       cursor: 'pointer', transition: 'all 0.3s',
@@ -484,7 +486,7 @@ const VideoInterviewRoom: React.FC = () => {
                     <Box
                       onClick={() => navigate(`/ai-interview/${videoId}`)}
                       sx={{
-                        width: 200, p: 3,
+                        width: { xs: 160, sm: 200 }, p: { xs: 2, sm: 3 },
                         background: 'linear-gradient(135deg, #2d1b4e 0%, #0f172a 100%)',
                         borderRadius: '16px', border: '2px solid #334155',
                         cursor: 'pointer', transition: 'all 0.3s',
@@ -514,9 +516,9 @@ const VideoInterviewRoom: React.FC = () => {
 
             {/* Control Bar */}
             <Paper sx={{
-              background: 'white', borderRadius: '16px', padding: '16px 24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
+              background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '12px 16px', sm: '16px 24px' },
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 1, sm: 2 },
+              boxShadow: '0 4px 20px rgba(0,0,0,0.08)', flexWrap: 'wrap'
             }}>
               {!isCompleted && (
                 <>
@@ -525,7 +527,7 @@ const VideoInterviewRoom: React.FC = () => {
                       onClick={toggleMic}
                       disabled={!isActive || !callJoined}
                       sx={{
-                        width: 56, height: 56,
+                        width: { xs: 44, sm: 56 }, height: { xs: 44, sm: 56 },
                         background: micOn ? '#f1f5f9' : '#fef2f2',
                         border: micOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
                         '&:hover': { background: micOn ? '#e2e8f0' : '#fee2e2' },
@@ -541,7 +543,7 @@ const VideoInterviewRoom: React.FC = () => {
                       onClick={toggleCam}
                       disabled={!isActive || !callJoined}
                       sx={{
-                        width: 56, height: 56,
+                        width: { xs: 44, sm: 56 }, height: { xs: 44, sm: 56 },
                         background: camOn ? '#f1f5f9' : '#fef2f2',
                         border: camOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
                         '&:hover': { background: camOn ? '#e2e8f0' : '#fee2e2' },
@@ -552,7 +554,7 @@ const VideoInterviewRoom: React.FC = () => {
                     </IconButton>
                   </Tooltip>
 
-                  <Divider orientation="vertical" sx={{ height: 40, mx: 1 }} />
+                  <Divider orientation="vertical" sx={{ height: { xs: 30, sm: 40 }, mx: { xs: 0.5, sm: 1 }, display: { xs: 'none', sm: 'block' } }} />
 
                   {!isActive ? (
                     <Button
@@ -562,8 +564,8 @@ const VideoInterviewRoom: React.FC = () => {
                       disabled={!dailyLoaded}
                       sx={{
                         background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                        padding: '14px 36px', borderRadius: '28px',
-                        fontWeight: 600, fontSize: '15px', textTransform: 'none',
+                        padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
+                        fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
                         boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
                         '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
                         '&:disabled': { background: '#94a3b8' }
@@ -579,8 +581,8 @@ const VideoInterviewRoom: React.FC = () => {
                       disabled={ending}
                       sx={{
                         background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                        padding: '14px 36px', borderRadius: '28px',
-                        fontWeight: 600, fontSize: '15px', textTransform: 'none',
+                        padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
+                        fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
                         boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
                         '&:hover': { background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' }
                       }}
@@ -594,9 +596,9 @@ const VideoInterviewRoom: React.FC = () => {
           </Box>
 
           {/* Sidebar */}
-          <Box sx={{ width: 340, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Box sx={{ width: { xs: '100%', lg: 340 }, display: 'flex', flexDirection: 'column', gap: { xs: 2, sm: 3 } }}>
             {/* Participants */}
-            <Paper sx={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+            <Paper sx={{ background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '16px', sm: '20px' }, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
               <Typography sx={{ color: '#64748b', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', mb: 2 }}>
                 Participants
               </Typography>

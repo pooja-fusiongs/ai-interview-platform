@@ -333,19 +333,25 @@ const ExpertReview: React.FC = () => {
 
   return (
     <Navigation>
-      <Box sx={{ p: 3, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
         {/* Header */}
-        <Box sx={{ mb: 3 }}>
-          <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
+        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+          <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
             AI Generated Questions
           </Typography>
-          <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
+          <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b' }}>
             Review and approve AI-generated interview questions for candidates
           </Typography>
         </Box>
 
         {/* Search and Filter */}
-        <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
+        <Box sx={{
+          display: 'flex',
+          gap: { xs: 1, sm: 2 },
+          mb: { xs: 2, sm: 3 },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' }
+        }}>
           <TextField
             placeholder="Search here..."
             variant="outlined"
@@ -361,8 +367,9 @@ const ExpertReview: React.FC = () => {
                 ),
               },
             }}
-            sx={{ 
-              minWidth: 300,
+            sx={{
+              minWidth: { xs: '100%', sm: 300 },
+              flex: { xs: 1, sm: 'none' },
               '& .MuiOutlinedInput-root': {
                 backgroundColor: '#fff',
                 borderRadius: 2
@@ -372,11 +379,12 @@ const ExpertReview: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<FilterIcon />}
-            sx={{ 
+            sx={{
               borderColor: '#ff9800',
               color: '#ff9800',
               borderRadius: 2,
               textTransform: 'none',
+              width: { xs: '100%', sm: 'auto' },
               '&:hover': {
                 borderColor: '#f57c00',
                 backgroundColor: '#fff3e0'
@@ -389,7 +397,7 @@ const ExpertReview: React.FC = () => {
 
         {/* Table */}
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-          <TableContainer>
+          <TableContainer sx={{ overflowX: 'auto' }}>
             <Table>
               <TableHead>
                 <TableRow sx={{ backgroundColor: '#fafafa' }}>

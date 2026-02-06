@@ -939,10 +939,11 @@ const Candidates = () => {
                     border: '1px solid #e2e8f0',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                     overflowX: 'auto',
-                    background: 'white'
+                    background: 'white',
+                    WebkitOverflowScrolling: 'touch'
                   }}
                 >
-                  <Table size="small">
+                  <Table size="small" sx={{ minWidth: 800 }}>
                     <TableHead>
                       <TableRow sx={{ background: '#f8fafc' }}>
                         <TableCell

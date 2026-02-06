@@ -241,7 +241,7 @@ const VideoInterviewDetail: React.FC = () => {
               }}>
                 <Box sx={{
                   background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  padding: '24px',
+                  padding: { xs: '16px', sm: '20px', md: '24px' },
                   color: 'white'
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -267,8 +267,8 @@ const VideoInterviewDetail: React.FC = () => {
                   </Box>
                 </Box>
 
-                <Box sx={{ padding: '24px' }}>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 3 }}>
+                <Box sx={{ padding: { xs: '16px', sm: '20px', md: '24px' } }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 2, sm: 3 } }}>
                     {/* Date */}
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                       <Box sx={{
@@ -412,7 +412,7 @@ const VideoInterviewDetail: React.FC = () => {
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                padding: '24px'
+                padding: { xs: '16px', sm: '20px', md: '24px' }
               }}>
                 <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <i className="fas fa-sticky-note" style={{ color: '#f59e0b' }}></i>
@@ -460,10 +460,10 @@ const VideoInterviewDetail: React.FC = () => {
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                padding: '24px'
+                padding: { xs: '16px', sm: '20px', md: '24px' }
               }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                  <Typography sx={{ fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Description sx={{ color: '#8b5cf6' }} />
                     Interview Transcript
                   </Typography>
@@ -520,7 +520,7 @@ const VideoInterviewDetail: React.FC = () => {
                         <Button
                           variant="contained"
                           fullWidth
-                          startIcon={uploading ? <CircularProgress size={18} sx={{ color: 'white' }} /> : <Refresh />}
+                          startIcon={uploading ? <CircularProgress size={18} sx={{ color: 'white' }} /> : <CloudUpload />}
                           onClick={async () => {
                             try {
                               setUploading(true);
@@ -552,7 +552,7 @@ const VideoInterviewDetail: React.FC = () => {
                             }
                           }}
                         >
-                          {uploading ? 'Generating Score...' : 'Retry Generate Score'}
+                          {uploading ? 'Uploading...' : 'Upload & Generate Score'}
                         </Button>
                         <Button
                           variant="outlined"
