@@ -122,6 +122,13 @@ const VideoInterviewRoom: React.FC = () => {
     }
   }, [isActive, jitsiLoaded]);
 
+  // Generate consistent room name - used by both Jitsi and copy link
+  const getMeetingRoomName = () => {
+    // Use a simple, consistent format: InterviewRoom-{videoId}
+    // This avoids issues with special characters in job titles
+    return `InterviewRoom-${videoId}`;
+  };
+
   const initializeJitsi = () => {
     if (!jitsiContainerRef.current || !window.JitsiMeetExternalAPI) {
       console.error('Jitsi container or API not available');
@@ -129,7 +136,7 @@ const VideoInterviewRoom: React.FC = () => {
     }
 
     // Generate room name from interview data
-    const roomName = `Interview-${interview?.job_title?.replace(/\s+/g, '-') || 'Room'}-${videoId}`;
+    const roomName = getMeetingRoomName();
 
     const domain = 'meet.jit.si';
     const options = {
@@ -187,6 +194,7 @@ const VideoInterviewRoom: React.FC = () => {
       });
 
       console.log('✅ Jitsi Meet initialized with room:', roomName);
+      console.log('📎 Meeting URL:', `https://meet.jit.si/${roomName}`);
     } catch (err) {
       console.error('Failed to initialize Jitsi:', err);
       toast.error('Failed to start video call');
@@ -256,11 +264,11 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const handleCopyMeetingLink = async () => {
-    const roomName = `Interview-${interview?.job_title?.replace(/\s+/g, '-') || 'Room'}-${videoId}`;
+    const roomName = getMeetingRoomName();
     const meetingUrl = `https://meet.jit.si/${roomName}`;
     try {
       await navigator.clipboard.writeText(meetingUrl);
-      toast.success('Meeting link copied! Share with candidate.');
+      toast.success(`Meeting link copied: ${meetingUrl}`);
     } catch (err) {
       toast.error('Failed to copy link');
     }
@@ -841,9 +849,26 @@ const VideoInterviewRoom: React.FC = () => {
                 <Typography sx={{ color: '#1e40af', fontWeight: 700, fontSize: '14px', mb: 1 }}>
                   📎 Share Meeting Link
                 </Typography>
-                <Typography sx={{ color: '#3b82f6', fontSize: '12px', mb: 2 }}>
-                  Send this link to the candidate to join:
+                <Typography sx={{ color: '#3b82f6', fontSize: '12px', mb: 1 }}>
+                  Send this EXACT link to the candidate:
                 </Typography>
+                <Box sx={{
+                  background: 'white',
+                  borderRadius: '8px',
+                  p: 1.5,
+                  mb: 2,
+                  border: '1px solid #93c5fd',
+                  wordBreak: 'break-all'
+                }}>
+                  <Typography sx={{
+                    color: '#1e40af',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                    fontWeight: 600
+                  }}>
+                    https://meet.jit.si/{getMeetingRoomName()}
+                  </Typography>
+                </Box>
                 <Button
                   fullWidth
                   variant="outlined"
