@@ -124,20 +124,19 @@ def schedule_video_interview(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Validate candidate exists - try User first, then JobApplication
-    candidate = db.query(User).filter(User.id == body.candidate_id).first()
-    application_id = None
+    # Validate candidate - check JobApplication FIRST (frontend sends JobApplication IDs)
+    application = db.query(JobApplication).filter(
+        JobApplication.id == body.candidate_id
+    ).first()
 
-    if not candidate:
-        # candidate_id might be a JobApplication ID - look it up
-        application = db.query(JobApplication).filter(
-            JobApplication.id == body.candidate_id
-        ).first()
+    candidate = None
+    candidate_name_for_email = None
+    candidate_email_for_notification = None
 
-        if not application:
-            raise HTTPException(status_code=404, detail="Candidate not found")
-
-        application_id = application.id
+    if application:
+        # Found JobApplication - use its info for email
+        candidate_name_for_email = application.applicant_name
+        candidate_email_for_notification = application.applicant_email
 
         # Find or create User for this candidate
         candidate = db.query(User).filter(User.email == application.applicant_email).first()
@@ -153,9 +152,16 @@ def schedule_video_interview(
             )
             db.add(candidate)
             db.flush()  # Get the ID
+    else:
+        # No JobApplication found - try finding User directly (for backward compatibility)
+        candidate = db.query(User).filter(User.id == body.candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        candidate_name_for_email = candidate.full_name or candidate.username
+        candidate_email_for_notification = candidate.email
 
     # Attempt to create a Zoom meeting
-    topic = f"Interview: {job.title} - {candidate.full_name or candidate.username}"
+    topic = f"Interview: {job.title} - {candidate_name_for_email}"
     zoom_data = create_zoom_meeting(
         topic=topic,
         start_time=body.scheduled_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -184,21 +190,22 @@ def schedule_video_interview(
 
     # Send email notification to candidate
     try:
-        candidate_email = candidate.email
-        candidate_name = candidate.full_name or candidate.username
         interview_date = body.scheduled_at.strftime("%B %d, %Y")
         interview_time = body.scheduled_at.strftime("%I:%M %p")
-        meeting_url = vi.zoom_meeting_url
+
+        # Use video-room URL instead of Zoom meeting URL
+        frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
+        meeting_url = f"{frontend_url}/video-room/{vi.id}"
 
         send_interview_notification(
-            candidate_email=candidate_email,
-            candidate_name=candidate_name,
+            candidate_email=candidate_email_for_notification,
+            candidate_name=candidate_name_for_email,
             job_title=job.title,
             interview_date=interview_date,
             interview_time=interview_time,
             meeting_url=meeting_url
         )
-        print(f"📧 Interview notification sent to {candidate_email}")
+        print(f"📧 Interview notification sent to {candidate_email_for_notification}")
     except Exception as e:
         print(f"⚠️ Failed to send email notification: {e}")
 
