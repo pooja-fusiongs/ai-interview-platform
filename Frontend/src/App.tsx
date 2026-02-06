@@ -209,10 +209,10 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
             
-            {/* AI Questions - Domain Expert, Admin */}
+            {/* AI Questions - Recruiter, Domain Expert, Admin */}
             <Route path="/ai-questions" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['domain_expert', 'admin']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
                   <AIQuestionGeneration />
                 </RoleProtectedRoute>
               </ProtectedRoute>

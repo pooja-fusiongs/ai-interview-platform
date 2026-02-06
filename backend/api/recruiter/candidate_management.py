@@ -211,10 +211,16 @@ def get_job_candidates(
             QuestionGenerationSession.candidate_id == app.id
         ).first()
 
-        has_questions = q_session is not None
+        # Check if actual questions exist in the database (not just the session)
+        actual_questions_count = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == job_id,
+            InterviewQuestion.candidate_id == app.id
+        ).count()
+
+        has_questions = actual_questions_count > 0
         questions_status = "none"
         question_session_id = None
-        if q_session:
+        if q_session and has_questions:
             question_session_id = q_session.id
             if q_session.expert_review_status == "completed":
                 questions_status = "approved"
@@ -222,6 +228,9 @@ def get_job_candidates(
                 questions_status = "generated"
             else:
                 questions_status = "pending"
+        elif q_session and not has_questions:
+            # Session exists but no questions - generation may have failed
+            questions_status = "failed"
 
         # Interview/transcript/scoring status
         interview = db.query(InterviewSession).filter(
