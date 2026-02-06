@@ -111,7 +111,7 @@ const Results = () => {
     const sc = scoreColor(selectedSession.overall_score)
 
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: '14px', md: '20px' } }}>
     {/* Back button */}
         {sessions.length > 1 && (
           <Button
@@ -123,9 +123,9 @@ const Results = () => {
               alignSelf: 'flex-start',
               textTransform: 'none',
               fontWeight: 600,
-              fontSize: '13px',
+              fontSize: { xs: '12px', md: '13px' },
               color: '#64748b',
-              padding: '6px 14px',
+              padding: { xs: '6px 10px', md: '6px 14px' },
               borderRadius: '8px',
               border: '1px solid #e2e8f0',
               '&:hover': { background: '#f8fafc' },
@@ -137,7 +137,7 @@ const Results = () => {
 
         {/* Score overview card */}
         <Card sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Box sx={{ padding: { xs: '14px 16px', md: '20px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <Box sx={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#f59e0b,#d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px' }}>
               <i className="fas fa-chart-bar"></i>
             </Box>
@@ -156,15 +156,15 @@ const Results = () => {
             />
           </Box>
 
-          <CardContent sx={{ padding: '24px', }}>
+          <CardContent sx={{ padding: { xs: '16px', md: '24px' } }}>
             {/* Top row: score + candidate info */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, gap: '24px', mb: '24px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, gap: { xs: '16px', md: '24px' }, mb: { xs: '16px', md: '24px' } }}>
               {/* Score circle */}
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 <Box
                   sx={{
-                    width: 120,
-                    height: 120,
+                    width: { xs: 100, md: 120 },
+                    height: { xs: 100, md: 120 },
                     borderRadius: '50%',
                     border: `6px solid ${sc.bg}`,
                     display: 'flex',
@@ -174,12 +174,12 @@ const Results = () => {
                     background: '#fff',
                   }}
                 >
-                  <Typography sx={{ fontSize: '32px', fontWeight: 800, color: sc.text, lineHeight: 1 }}>
+                  <Typography sx={{ fontSize: { xs: '26px', md: '32px' }, fontWeight: 800, color: sc.text, lineHeight: 1 }}>
                     {selectedSession.overall_score != null ? selectedSession.overall_score.toFixed(1) : '--'}
                   </Typography>
-                  <Typography sx={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500 }}>out of 10</Typography>
+                  <Typography sx={{ fontSize: { xs: '10px', md: '12px' }, color: '#94a3b8', fontWeight: 500 }}>out of 10</Typography>
                 </Box>
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: sc.text, mt: '8px' }}>
+                <Typography sx={{ fontSize: { xs: '12px', md: '13px' }, fontWeight: 600, color: sc.text, mt: '8px' }}>
                   {selectedSession.overall_score != null && selectedSession.overall_score >= 7.5
                     ? 'Excellent'
                     : selectedSession.overall_score != null && selectedSession.overall_score >= 5
@@ -234,16 +234,15 @@ const Results = () => {
 
         {/* Per-question breakdown */}
         {selectedSession.answers && selectedSession.answers.length > 0 && (
-          <Card sx={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <Box sx={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Card sx={{ borderRadius: { xs: '12px', md: '16px' }, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            <Box sx={{ padding: { xs: '12px 16px', md: '16px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <i className="fas fa-list-ol" style={{ color: '#f59e0b', fontSize: 14 }}></i>
-              <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>
+              <Typography sx={{ fontSize: { xs: '14px', md: '15px' }, fontWeight: 600, color: '#1e293b' }}>
                 Answer Breakdown
               </Typography>
             </Box>
-            <CardContent sx={{ 
-              padding: '16px 24px',
-              // maxHeight: '400px',
+            <CardContent sx={{
+              padding: { xs: '12px 16px', md: '16px 24px' },
               overflowY: 'auto',
               '&::-webkit-scrollbar': {
                 width: '6px',
@@ -315,7 +314,7 @@ const Results = () => {
 
                     {/* Dimension bars */}
                     {answer.relevance_score != null && (
-                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', sm: 'repeat(4,1fr)' }, gap: { xs: '10px', sm: '12px' } }}>
                         {[
                           { label: 'Relevance', value: answer.relevance_score },
                           { label: 'Completeness', value: answer.completeness_score },
@@ -361,14 +360,14 @@ const Results = () => {
         )}
 
         {/* Integrity check */}
-        <Card sx={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Card sx={{ borderRadius: { xs: '12px', md: '16px' }, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+          <Box sx={{ padding: { xs: '12px 16px', md: '16px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fas fa-shield-alt" style={{ color: '#f59e0b', fontSize: 14 }}></i>
-            <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>
+            <Typography sx={{ fontSize: { xs: '14px', md: '15px' }, fontWeight: 600, color: '#1e293b' }}>
               Integrity Check
             </Typography>
           </Box>
-          <CardContent sx={{ padding: '16px 24px' }}>
+          <CardContent sx={{ padding: { xs: '12px 16px', md: '16px 24px' } }}>
             {[
               { label: 'Voice Consistency', icon: 'fas fa-microphone' },
               { label: 'Lip/Body Movement', icon: 'fas fa-user-check' },
@@ -392,15 +391,15 @@ const Results = () => {
 
   // ─── List View ───────────────────────────────────────────────────────────────
   const renderList = () => (
-    <Box sx={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      height: 'calc(100vh - 120px)', // Fixed height
-      minHeight: '600px' ,
-      overflow:"hidden"
+    <Box sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: { xs: 'auto', md: 'calc(100vh - 120px)' },
+      minHeight: { xs: 'auto', md: '600px' },
+      overflow: "hidden"
     }}>
       <Card sx={{
-        borderRadius: '16px',
+        borderRadius: { xs: '12px', md: '16px' },
         border: '1px solid #e2e8f0',
         overflow: 'hidden',
         boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
@@ -409,16 +408,16 @@ const Results = () => {
         flexDirection: 'column',
         minHeight: 0
       }}>
-        <Box sx={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ padding: { xs: '12px 16px', md: '16px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fas fa-chart-bar" style={{ color: '#f59e0b', fontSize: 14 }}></i>
-            <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b' }}> Interviews Result</Typography>
+            <Typography sx={{ fontSize: { xs: '14px', md: '16px' }, fontWeight: 600, color: '#1e293b' }}>Interviews Result</Typography>
           </Box>
-          
+
         </Box>
-        
+
         <CardContent sx={{
-          padding: '16px 24px',
+          padding: { xs: '12px 16px', md: '16px 24px' },
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
@@ -475,30 +474,32 @@ const Results = () => {
                     onClick={() => viewSession(s.id)}
                     sx={{
                       display: 'flex',
-                      alignItems: 'center',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      alignItems: { xs: 'flex-start', sm: 'center' },
                       justifyContent: 'space-between',
-                      padding: '16px 0',
+                      padding: { xs: '12px 0', md: '16px 0' },
+                      gap: { xs: '10px', sm: 0 },
                       borderBottom: '1px solid #f1f5f9',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
-                      '&:hover': { background: '#fefce8', margin: '0 -24px', padding: '16px 24px', borderRadius: '10px' },
+                      '&:hover': { background: '#fefce8', margin: { xs: '0 -16px', md: '0 -24px' }, padding: { xs: '12px 16px', md: '16px 24px' }, borderRadius: '10px' },
                       '&:last-child': { borderBottom: 'none' },
                     }}
                   >
                     {/* Left */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
-                      <Avatar sx={{ width: 42, height: 42, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: '15px' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' }, flex: 1, minWidth: 0, width: '100%' }}>
+                      <Avatar sx={{ width: { xs: 36, md: 42 }, height: { xs: 36, md: 42 }, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: { xs: '13px', md: '15px' } }}>
                         <i className="fas fa-user"></i>
                       </Avatar>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography sx={{ fontSize: { xs: '13px', md: '14px' }, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {s.candidate_name || 'Candidate'}
                         </Typography>
-                        <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                        <Typography sx={{ fontSize: { xs: '11px', md: '12px' }, color: '#64748b' }}>
                           {s.job_title || 'Position'} &middot; {s.answered_questions}/{s.total_questions} answered
                         </Typography>
                         {s.completed_at && (
-                          <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
+                          <Typography sx={{ fontSize: { xs: '10px', md: '11px' }, color: '#94a3b8' }}>
                             {new Date(s.completed_at).toLocaleDateString()}
                           </Typography>
                         )}
@@ -506,10 +507,10 @@ const Results = () => {
                     </Box>
 
                     {/* Right: score + rec */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', md: '12px' }, flexShrink: 0, width: { xs: '100%', sm: 'auto' }, justifyContent: { xs: 'flex-end', sm: 'flex-start' }, pl: { xs: '46px', sm: 0 } }}>
                       {s.overall_score != null && (
-                        <Box sx={{ width: 48, height: 48, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                          <Typography sx={{ fontSize: '16px', fontWeight: 800, color: sc.text, lineHeight: 1 }}>
+                        <Box sx={{ width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 }, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                          <Typography sx={{ fontSize: { xs: '14px', md: '16px' }, fontWeight: 800, color: sc.text, lineHeight: 1 }}>
                             {s.overall_score.toFixed(1)}
                           </Typography>
                           <Typography sx={{ fontSize: '9px', color: sc.text, opacity: 0.7 }}>/10</Typography>
@@ -521,10 +522,10 @@ const Results = () => {
                           size="small"
                           sx={{
                             fontWeight: 600,
-                            fontSize: '11px',
+                            fontSize: { xs: '10px', md: '11px' },
                             backgroundColor: rec.bg,
                             color: rec.color,
-                            height: '26px',
+                            height: { xs: '22px', md: '26px' },
                           }}
                         />
                       )}
@@ -661,7 +662,7 @@ const Results = () => {
   return (
     <Navigation noScroll={!selectedSession}>
       <Box sx={{
-        padding: '24px',
+        padding: { xs: '12px', sm: '16px', md: '24px' },
         background: '#f8fafc',
         minHeight: selectedSession ? 'auto' : '900px',
         overflow: 'hidden',

@@ -484,10 +484,17 @@ const Jobs = () => {
 
   return (
     <Navigation>
-      <Box sx={{ padding: '20px', background: '#f8f9fa', minHeight: '100vh' }}>
-        {/* Header with Search, Filter, and Add Job in one line */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '15px' }}>
-          <Box>
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8f9fa', minHeight: '100vh' }}>
+        {/* Header with Search, Filter, and Add Job */}
+        <Box sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          marginBottom: { xs: '16px', md: '20px' },
+          gap: { xs: '12px', sm: '15px' }
+        }}>
+          <Box sx={{ width: { xs: '100%', sm: 'auto' } }}>
             {/* Search */}
             <TextField
               placeholder="Search by job title..."
@@ -495,8 +502,9 @@ const Jobs = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               variant="outlined"
               size="small"
+              fullWidth
               sx={{
-                minWidth: '300px',
+                minWidth: { xs: 'auto', sm: '250px', md: '300px' },
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '8px',
                   backgroundColor: 'white'
@@ -513,8 +521,8 @@ const Jobs = () => {
               }}
             />
           </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, justifyContent: 'flex-end' }}>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', sm: '15px' }, justifyContent: { xs: 'space-between', sm: 'flex-end' } }}>
              
             {/* Add Job Button - Only for Recruiters and Admins */}
             <CanCreateJob>
@@ -526,13 +534,14 @@ const Jobs = () => {
                 color: '#f59e0b',
                 border: '2px solid #f59e0b',
                 borderRadius: '10px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                minWidth: '120px',
+                gap: { xs: '4px', sm: '8px' },
+                minWidth: { xs: 'auto', sm: '120px' },
+                padding: { xs: '8px 12px', sm: '8px 16px' },
                 '&:hover': {
                   background: 'rgba(245, 158, 11, 0.1)',
                   borderColor: '#f59e0b',
@@ -541,7 +550,7 @@ const Jobs = () => {
                 }
               }}
               >
-                <i className="fas fa-plus"></i> Add Job
+                <i className="fas fa-plus"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Add Job</Box><Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Add</Box>
               </Button>
             </CanCreateJob>
             
@@ -554,13 +563,14 @@ const Jobs = () => {
             color: '#64748b',
             border: '2px solid #e2e8f0',
             borderRadius: '10px',
-            fontSize: '14px',
+            fontSize: { xs: '12px', sm: '14px' },
             fontWeight: 600,
             textTransform: 'none',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '8px',
-            minWidth: '100px',
+            gap: { xs: '4px', sm: '8px' },
+            minWidth: { xs: 'auto', sm: '100px' },
+            padding: { xs: '8px 12px', sm: '8px 16px' },
             position: 'relative',
             '&:hover': {
               borderColor: '#f59e0b',
@@ -647,11 +657,11 @@ const Jobs = () => {
             </Button>
           </Box>
         ) : (
-          <Box sx={{ display: "grid", gridTemplateColumns: { sm: "1fr 1fr ", lg: "1fr 1fr 1fr" }, gap: "10px" }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" }, gap: { xs: "12px", sm: "10px" } }}>
             {filteredJobs.map((job) => (
-            <Box key={job.id} sx={{ marginBottom: '50px' }}>
+            <Box key={job.id} sx={{ marginBottom: { xs: '16px', sm: '30px', md: '50px' } }}>
               <Card sx={{
-                padding: '20px',
+                padding: { xs: '14px', sm: '18px', md: '20px' },
                 borderRadius: '12px',
                 border: '1px solid #e9ecef',
                 height: '100%',
@@ -664,70 +674,73 @@ const Jobs = () => {
                 transition: 'all 0.3s ease'
               }}>
                 {/* Job Header */}
-                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
-                  <Box sx={{ 
-                    backgroundColor: job.color, 
-                    marginRight: '12px',
-                    width: 40,
-                    height: 40,
+                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: { xs: '12px', md: '15px' } }}>
+                  <Box sx={{
+                    backgroundColor: job.color,
+                    marginRight: { xs: '10px', md: '12px' },
+                    width: { xs: 36, md: 40 },
+                    height: { xs: 36, md: 40 },
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    <i className={job.icon} style={{ fontSize: '18px', color: 'white' }}></i>
+                    <i className={job.icon} style={{ fontSize: '16px', color: 'white' }}></i>
                   </Box>
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px', marginBottom: '2px' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: { xs: '14px', sm: '15px', md: '16px' }, marginBottom: '2px' }}>
                       {job.title}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: '#6c757d', fontSize: '14px' }}>
+                    <Typography variant="body2" sx={{ color: '#6c757d', fontSize: { xs: '12px', md: '14px' } }}>
                       {job.company}
                     </Typography>
                   </Box>
                 </Box>
 
                 {/* Job Details */}
-                <Box sx={{ marginBottom: '15px' }}>
-                  <Typography variant="body2" sx={{ color: '#6c757d', fontSize: '14px', marginBottom: '8px' }}>
+                <Box sx={{ marginBottom: { xs: '12px', md: '15px' } }}>
+                  <Typography variant="body2" sx={{ color: '#6c757d', fontSize: { xs: '12px', md: '14px' }, marginBottom: '8px' }}>
                     📍 {job.location} • {getWorkMode(job)}
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                    <Chip 
-                      label={getJobType(job)} 
-                      size="small" 
-                      sx={{ 
+                  <Box sx={{ display: 'flex', gap: { xs: '4px', sm: '8px' }, marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <Chip
+                      label={getJobType(job)}
+                      size="small"
+                      sx={{
                         backgroundColor: '#e3f2fd',
                         color: '#1976d2',
-                        fontSize: '12px'
-                      }} 
+                        fontSize: { xs: '10px', sm: '12px' },
+                        height: { xs: '22px', sm: '24px' }
+                      }}
                     />
-                    <Chip 
-                      label={job.status} 
-                      size="small" 
-                      sx={{ 
+                    <Chip
+                      label={job.status}
+                      size="small"
+                      sx={{
                         backgroundColor: job.status === 'Open' ? '#e8f5e8' : job.status === 'Closed' ? '#ffebee' : '#fff3e0',
                         color: job.status === 'Open' ? '#2e7d32' : job.status === 'Closed' ? '#c62828' : '#ef6c00',
-                        fontSize: '12px'
-                      }} 
+                        fontSize: { xs: '10px', sm: '12px' },
+                        height: { xs: '22px', sm: '24px' }
+                      }}
                     />
-                    <Chip 
-                      label={getExperienceLevel(job)} 
-                      size="small" 
-                      sx={{ 
+                    <Chip
+                      label={getExperienceLevel(job)}
+                      size="small"
+                      sx={{
                         backgroundColor: '#f3e8ff',
                         color: '#7c3aed',
-                        fontSize: '12px'
-                      }} 
+                        fontSize: { xs: '10px', sm: '12px' },
+                        height: { xs: '22px', sm: '24px' }
+                      }}
                     />
                   </Box>
                 </Box>
 
                 {/* Description */}
-                <Typography variant="body2" sx={{ 
-                  color: '#495057', 
-                  fontSize: '14px',
-                  marginBottom: '15px',
+                <Typography variant="body2" sx={{
+                  color: '#495057',
+                  fontSize: { xs: '12px', md: '14px' },
+                  marginBottom: { xs: '12px', md: '15px' },
                   flex: 1,
                   display: '-webkit-box',
                   WebkitLineClamp: 3,
@@ -738,24 +751,24 @@ const Jobs = () => {
                 </Typography>
 
                 {/* Salary and Time */}
-                <Box sx={{ marginBottom: '15px' }}>
-                  <Typography variant="body2" sx={{ 
-                    color: '#28a745', 
+                <Box sx={{ marginBottom: { xs: '12px', md: '15px' } }}>
+                  <Typography variant="body2" sx={{
+                    color: '#28a745',
                     fontWeight: 600,
-                    fontSize: '14px',
+                    fontSize: { xs: '12px', md: '14px' },
                     marginBottom: '4px'
                   }}>
                     {job.salary}
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#6c757d', fontSize: '12px' }}>
+                  <Typography variant="body2" sx={{ color: '#6c757d', fontSize: { xs: '11px', md: '12px' } }}>
                     {job.postedTime}
                   </Typography>
                 </Box>
 
                 {/* Action Buttons */}
-                <Box sx={{ display: 'flex', gap: '8px' }}>
-                  <Button 
-                    variant="outlined" 
+                <Box sx={{ display: 'flex', gap: { xs: '6px', sm: '8px' } }}>
+                  <Button
+                    variant="outlined"
                     size="small"
                     onClick={() => handleViewJobDetails(job)}
                    sx={{
@@ -763,9 +776,9 @@ const Jobs = () => {
                   background: 'white',
                   color: '#64748b',
                   border: '2px solid #e2e8f0',
-                  padding: '10px 16px',
+                  padding: { xs: '8px 10px', sm: '10px 16px' },
                   borderRadius: '8px',
-                  fontSize: '14px',
+                  fontSize: { xs: '12px', sm: '14px' },
                   fontWeight: 600,
                   textTransform: 'none',
                   '&:hover': {
@@ -774,7 +787,8 @@ const Jobs = () => {
                   }
                 }}
                   >
-                    View Details
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>View Details</Box>
+                    <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Details</Box>
                   </Button>
                   <CanApplyJobs fallback={
                     <Button 
@@ -870,8 +884,10 @@ const Jobs = () => {
           slotProps={{
             paper: {
               sx: {
-                borderRadius: '20px',
-                maxHeight: '85vh',
+                borderRadius: { xs: '12px', md: '20px' },
+                maxHeight: { xs: '90vh', md: '85vh' },
+                margin: { xs: '12px', md: '32px' },
+                width: { xs: 'calc(100% - 24px)', md: 'auto' },
                 background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)',
                 boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
                 border: '1px solid rgba(245, 158, 11, 0.1)'
@@ -879,7 +895,7 @@ const Jobs = () => {
             }
           }}
         >
-          <DialogTitle sx={{ padding: '32px 32px 0 32px' }}>
+          <DialogTitle sx={{ padding: { xs: '16px 16px 0 16px', md: '32px 32px 0 32px' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <Box sx={{
@@ -923,7 +939,7 @@ const Jobs = () => {
             </Box>
           </DialogTitle>
 
-          <DialogContent sx={{ padding: '32px', paddingTop: '24px' }}>
+          <DialogContent sx={{ padding: { xs: '16px', md: '32px' }, paddingTop: { xs: '16px', md: '24px' } }}>
             {/* Filter Categories */}
             <Box sx={{ marginBottom: '32px' }}>
               <Typography sx={{ 
@@ -1339,9 +1355,10 @@ const Jobs = () => {
             )}
           </DialogContent>
 
-          <DialogActions sx={{ 
-            padding: '24px 32px 32px 32px', 
-            gap: '16px',
+          <DialogActions sx={{
+            padding: { xs: '16px', md: '24px 32px 32px 32px' },
+            gap: { xs: '8px', md: '16px' },
+            flexDirection: { xs: 'column', sm: 'row' },
             background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)',
             borderTop: '2px solid #f1f5f9'
           }}>
@@ -1351,14 +1368,15 @@ const Jobs = () => {
                 color: '#64748b',
                 backgroundColor: 'white',
                 border: '2px solid #e2e8f0',
-                padding: '12px 24px',
+                padding: { xs: '10px 16px', md: '12px 24px' },
                 borderRadius: '12px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', md: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
-                minWidth: '120px',
-                '&:hover': { 
-                  borderColor: '#f59e0b', 
+                minWidth: { xs: '100%', sm: '120px' },
+                order: { xs: 2, sm: 1 },
+                '&:hover': {
+                  borderColor: '#f59e0b',
                   backgroundColor: 'rgba(245, 158, 11, 0.05)',
                   color: '#f59e0b',
                   transform: 'translateY(-1px)',
@@ -1375,14 +1393,15 @@ const Jobs = () => {
               sx={{
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: 'white',
-                padding: '12px 32px',
+                padding: { xs: '10px 16px', md: '12px 32px' },
                 borderRadius: '12px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', md: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
-                minWidth: '140px',
+                minWidth: { xs: '100%', sm: '140px' },
+                order: { xs: 1, sm: 2 },
                 boxShadow: '0 8px 25px rgba(245, 158, 11, 0.3)',
-                '&:hover': { 
+                '&:hover': {
                   background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 12px 35px rgba(245, 158, 11, 0.4)'

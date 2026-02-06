@@ -262,7 +262,7 @@ const AdminAuditLog: React.FC = () => {
         <Card sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
           <CardContent sx={{ p: '0 !important' }}>
             {/* Table Header */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 140px 100px 100px 120px', gap: 2, p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <Box sx={{ display: { xs: 'none', md: 'grid' }, gridTemplateColumns: '1fr 140px 100px 100px 120px', gap: 2, p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Activity</Typography>
               <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Action</Typography>
               <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>User</Typography>
@@ -274,7 +274,7 @@ const AdminAuditLog: React.FC = () => {
             {loading ? (
               <Box sx={{ p: 2 }}>
                 {[1, 2, 3, 4, 5].map(i => (
-                  <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 140px 100px 100px 120px', gap: 2, py: 2, borderBottom: '1px solid #f1f5f9' }}>
+                  <Box key={i} sx={{ display: { xs: 'block', md: 'grid' }, gridTemplateColumns: '1fr 140px 100px 100px 120px', gap: 2, py: 2, borderBottom: '1px solid #f1f5f9' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Skeleton variant="circular" width={36} height={36} />
                       <Box sx={{ flex: 1 }}>
@@ -307,9 +307,10 @@ const AdminAuditLog: React.FC = () => {
                     <Box
                       key={log.id || idx}
                       sx={{
-                        display: 'grid',
+                        display: { xs: 'flex', md: 'grid' },
+                        flexDirection: { xs: 'column', md: 'row' },
                         gridTemplateColumns: '1fr 140px 100px 100px 120px',
-                        gap: 2,
+                        gap: { xs: 1.5, md: 2 },
                         p: 2,
                         borderBottom: idx < logs.length - 1 ? '1px solid #f1f5f9' : 'none',
                         '&:hover': { bgcolor: '#f8fafc' },

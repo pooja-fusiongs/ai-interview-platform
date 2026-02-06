@@ -58,13 +58,13 @@ const ATSJobMappings: React.FC = () => {
 
   return (
     <Naivgation>
-      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
-        <Typography variant="h4" sx={{ mb: 3 }}>ATS Field Mappings</Typography>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: '12px', sm: 2, md: 3 }, overflow: 'auto', bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+        <Typography variant="h4" sx={{ mb: { xs: 2, md: 3 }, fontSize: { xs: '20px', sm: '24px', md: '28px' }, fontWeight: 600 }}>ATS Field Mappings</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-        <Typography variant="h6" sx={{ mb: 1 }}>Job Mappings</Typography>
-        <TableContainer component={Paper} sx={{ mb: 4 }}>
-          <Table>
+        <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '16px', md: '18px' } }}>Job Mappings</Typography>
+        <TableContainer component={Paper} sx={{ mb: { xs: 3, md: 4 }, overflowX: 'auto' }}>
+          <Table sx={{ minWidth: { xs: 400, md: 'auto' } }}
             <TableHead>
               <TableRow>
                 <TableCell>ATS Job ID</TableCell>
@@ -91,9 +91,9 @@ const ATSJobMappings: React.FC = () => {
 
         <Divider sx={{ my: 2 }} />
 
-        <Typography variant="h6" sx={{ mb: 1 }}>Candidate Mappings</Typography>
-        <TableContainer component={Paper}>
-          <Table>
+        <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '16px', md: '18px' } }}>Candidate Mappings</Typography>
+        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: { xs: 400, md: 'auto' } }}
             <TableHead>
               <TableRow>
                 <TableCell>ATS Candidate ID</TableCell>

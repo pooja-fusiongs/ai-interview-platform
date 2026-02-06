@@ -12,6 +12,7 @@ import {
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Declare Daily.co types
 declare global {
@@ -23,6 +24,7 @@ declare global {
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [interview, setInterview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -174,10 +176,20 @@ const VideoInterviewRoom: React.FC = () => {
         toast.error('Video call error. Please try again.');
       });
 
+      // Determine username based on current user's role
+      let displayName = 'Participant';
+      if (user?.role === 'candidate') {
+        // Candidate joining - show candidate name
+        displayName = interview?.candidate_name || user?.name || 'Candidate';
+      } else {
+        // Recruiter/Admin joining - show interviewer name
+        displayName = interview?.interviewer_name || user?.name || 'Interviewer';
+      }
+
       // Join the meeting
       await dailyCallRef.current.join({
         url: meetingUrl,
-        userName: interview?.interviewer_name || 'Interviewer',
+        userName: displayName,
       });
 
       console.log('✅ Daily.co call initialized');

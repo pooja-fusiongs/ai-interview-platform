@@ -136,10 +136,10 @@ const VideoInterviewDetail: React.FC = () => {
       <Box sx={{
         minHeight: '100vh',
         background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)',
-        padding: '24px'
+        padding: { xs: '12px', sm: '16px', md: '24px' }
       }}>
         {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 3, gap: { xs: 2, sm: 0 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton
               onClick={() => navigate('/video-interviews')}
@@ -152,7 +152,7 @@ const VideoInterviewDetail: React.FC = () => {
               <ArrowBack sx={{ color: '#64748b' }} />
             </IconButton>
             <Box>
-              <Typography sx={{ fontSize: '28px', fontWeight: 700, color: '#1e293b' }}>
+              <Typography sx={{ fontSize: { xs: '22px', sm: '24px', md: '28px' }, fontWeight: 700, color: '#1e293b' }}>
                 Interview Details
               </Typography>
               <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
@@ -420,7 +420,7 @@ const VideoInterviewDetail: React.FC = () => {
                     <Description sx={{ color: '#8b5cf6' }} />
                     Interview Transcript
                   </Typography>
-                  {!transcript && (
+                  {!transcript && status === 'completed' && (
                     <Button
                       variant="outlined"
                       size="small"

@@ -72,16 +72,16 @@ const FeedbackDetail: React.FC = () => {
 
   return (
     <Naivgation>
-      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
-        <Typography variant="h4" sx={{ mb: 3 }}>Feedback Detail #{feedbackId}</Typography>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: '12px', sm: 2, md: 3 }, overflow: 'auto', bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+        <Typography variant="h4" sx={{ mb: { xs: 2, md: 3 }, fontSize: { xs: '20px', sm: '24px', md: '28px' }, fontWeight: 600 }}>Feedback Detail #{feedbackId}</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {feedback && (
           <>
-            <Paper sx={{ p: 3, mb: 3 }}>
+            <Paper sx={{ p: { xs: 2, md: 3 }, mb: { xs: 2, md: 3 } }}>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={4}><Typography color="text.secondary">Candidate ID: <strong>{feedback.candidate_id}</strong></Typography></Grid>
-                <Grid item xs={4}><Typography color="text.secondary">Job ID: <strong>{feedback.job_id}</strong></Typography></Grid>
-                <Grid item xs={4}><Typography color="text.secondary">Hire Date: <strong>{new Date(feedback.hire_date).toLocaleDateString()}</strong></Typography></Grid>
+                <Grid item xs={12} sm={4}><Typography color="text.secondary" sx={{ fontSize: { xs: '13px', md: '14px' } }}>Candidate ID: <strong>{feedback.candidate_id}</strong></Typography></Grid>
+                <Grid item xs={12} sm={4}><Typography color="text.secondary" sx={{ fontSize: { xs: '13px', md: '14px' } }}>Job ID: <strong>{feedback.job_id}</strong></Typography></Grid>
+                <Grid item xs={12} sm={4}><Typography color="text.secondary" sx={{ fontSize: { xs: '13px', md: '14px' } }}>Hire Date: <strong>{new Date(feedback.hire_date).toLocaleDateString()}</strong></Typography></Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
               <Typography variant="h6" sx={{ mb: 2 }}>Performance Scores</Typography>
@@ -91,8 +91,8 @@ const FeedbackDetail: React.FC = () => {
               <ScoreBar label="Communication" value={feedback.communication} />
               <ScoreBar label="Leadership" value={feedback.leadership} />
             </Paper>
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Qualitative Feedback</Typography>
+            <Paper sx={{ p: { xs: 2, md: 3 }, mb: { xs: 2, md: 3 } }}>
+              <Typography variant="h6" sx={{ mb: 2, fontSize: { xs: '16px', md: '18px' } }}>Qualitative Feedback</Typography>
               <Typography variant="subtitle2" color="primary">Strengths</Typography>
               <Typography sx={{ mb: 2 }}>{feedback.strengths || 'Not provided'}</Typography>
               <Typography variant="subtitle2" color="primary">Areas for Improvement</Typography>
@@ -100,9 +100,9 @@ const FeedbackDetail: React.FC = () => {
               <Typography variant="subtitle2" color="primary">Additional Comments</Typography>
               <Typography>{feedback.comments || 'Not provided'}</Typography>
             </Paper>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Employment Status</Typography>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Paper sx={{ p: { xs: 2, md: 3 } }}>
+              <Typography variant="h6" sx={{ mb: 2, fontSize: { xs: '16px', md: '18px' } }}>Employment Status</Typography>
+              <Box sx={{ display: 'flex', gap: { xs: 1, md: 2 }, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Chip label={feedback.still_employed ? 'Currently Employed' : 'No Longer Employed'} color={feedback.still_employed ? 'success' : 'default'} />
                 {!feedback.still_employed && feedback.left_reason && (
                   <Chip label={`Reason: ${feedback.left_reason}`} variant="outlined" />

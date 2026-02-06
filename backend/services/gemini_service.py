@@ -124,6 +124,97 @@ Respond ONLY with a JSON array in this exact format:
         return None
 
 
+def _manual_parse_transcript(
+    transcript_text: str,
+    questions: List[Dict[str, str]],
+    existing_results: List[Dict]
+) -> List[Dict]:
+    """
+    Manually parse transcript to extract answers for each question.
+    Falls back when Gemini returns duplicate answers.
+    """
+    # Parse transcript into lines
+    lines = transcript_text.strip().split('\n')
+    qa_pairs = []
+
+    current_speaker = None
+    current_text = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Try to extract speaker and text
+        # Format: [00:00:00] Speaker: text
+        match = re.match(r'\[?\d{2}:\d{2}(?::\d{2})?\]?\s*([^:]+):\s*(.*)', line)
+        if match:
+            if current_speaker and current_text:
+                qa_pairs.append({
+                    "speaker": current_speaker.lower(),
+                    "text": ' '.join(current_text)
+                })
+            current_speaker = match.group(1).strip()
+            current_text = [match.group(2).strip()] if match.group(2).strip() else []
+        elif current_speaker:
+            current_text.append(line)
+
+    if current_speaker and current_text:
+        qa_pairs.append({
+            "speaker": current_speaker.lower(),
+            "text": ' '.join(current_text)
+        })
+
+    # Now match questions to answers
+    result = []
+    for i, q in enumerate(questions):
+        q_id = q.get("question_id")
+        q_text = q.get("question_text", "").lower()
+        q_words = set(q_text.split()[:5])  # First 5 words for matching
+
+        # Find best matching question in transcript
+        best_answer = None
+        best_score = 0
+
+        for j, pair in enumerate(qa_pairs):
+            if "interviewer" in pair["speaker"] or "hiring" in pair["speaker"] or "manager" in pair["speaker"]:
+                # This is a question - check if it matches
+                pair_words = set(pair["text"].lower().split()[:8])
+                overlap = len(q_words & pair_words)
+
+                if overlap >= 2 and j + 1 < len(qa_pairs):
+                    # Next entry should be the candidate's answer
+                    next_pair = qa_pairs[j + 1]
+                    if "candidate" in next_pair["speaker"] or "interviewee" in next_pair["speaker"] or next_pair["speaker"] != pair["speaker"]:
+                        if overlap > best_score:
+                            best_score = overlap
+                            best_answer = next_pair["text"][:500]  # Limit length
+
+        # Update existing result or create new
+        existing = next((r for r in existing_results if r.get("question_id") == q_id), None)
+        if existing:
+            # If existing is a duplicate and we found a better answer, update it
+            if best_answer and existing.get("extracted_answer", "").startswith("[Duplicate"):
+                existing["extracted_answer"] = best_answer
+            # If no answer exists, use best_answer
+            elif best_answer and not existing.get("extracted_answer"):
+                existing["extracted_answer"] = best_answer
+            result.append(existing)
+        else:
+            result.append({
+                "question_id": q_id,
+                "extracted_answer": best_answer or "Answer not found in transcript",
+                "score": 5.0,
+                "relevance_score": 5.0,
+                "completeness_score": 5.0,
+                "accuracy_score": 5.0,
+                "clarity_score": 5.0,
+                "feedback": "Manually extracted from transcript"
+            })
+
+    return result if result else existing_results
+
+
 def score_transcript_with_gemini(
     transcript_text: str,
     questions_with_answers: List[Dict[str, str]]
@@ -243,27 +334,38 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
 
         # Validate and clean extracted answers - ensure they are unique per question
         per_question = result.get("per_question", [])
-        seen_answers = set()
+        seen_answers = {}
+        duplicate_count = 0
+
         for pq in per_question:
             extracted = pq.get("extracted_answer", "")
+            q_id = pq.get("question_id")
+
             # Clean up the extracted answer
             if extracted:
                 # Remove timestamps and speaker labels if accidentally included
                 cleaned = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', extracted)
-                cleaned = re.sub(r'(Hiring Manager|Interviewer|Manager):', '', cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r'(Hiring Manager|Interviewer|Manager|Candidate):', '', cleaned, flags=re.IGNORECASE)
                 cleaned = cleaned.strip()
 
-                # Check if this answer is a duplicate or too similar to previous ones
-                answer_key = cleaned[:100].lower() if cleaned else ""
-                if answer_key in seen_answers and len(per_question) > 1:
-                    print(f"⚠️ Duplicate answer detected for question {pq.get('question_id')}, marking as not found")
-                    pq["extracted_answer"] = "Answer could not be uniquely extracted from transcript"
+                # Check if this answer is a duplicate
+                answer_key = cleaned[:80].lower() if cleaned else ""
+                if answer_key and answer_key in seen_answers:
+                    duplicate_count += 1
+                    print(f"⚠️ Duplicate answer for Q{q_id}, same as Q{seen_answers[answer_key]}")
+                    pq["extracted_answer"] = f"[Duplicate - see Q{seen_answers[answer_key]}] {cleaned[:100]}..."
                 else:
                     pq["extracted_answer"] = cleaned if cleaned else extracted
                     if answer_key:
-                        seen_answers.add(answer_key)
+                        seen_answers[answer_key] = q_id
             else:
                 pq["extracted_answer"] = "No answer found in transcript"
+
+        # If too many duplicates, try manual parsing from transcript
+        if duplicate_count >= len(per_question) // 2:
+            print(f"⚠️ {duplicate_count} duplicates found, attempting manual transcript parsing...")
+            per_question = _manual_parse_transcript(transcript_text, questions_with_answers, per_question)
+            result["per_question"] = per_question
 
         # Normalize recommendation
         rec = result.get("recommendation", "reject").lower()

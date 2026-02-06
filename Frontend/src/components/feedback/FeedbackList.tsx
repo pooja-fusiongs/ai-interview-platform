@@ -253,12 +253,12 @@ const FeedbackList: React.FC = () => {
         sx={{
           minHeight: '100vh',
           background: 'linear-gradient(180deg, #F8F9FB 0%, #EEF2F6 100%)',
-          padding: '24px',
+          padding: { xs: '12px', sm: '16px', md: '24px' },
         }}
       >
         {/* Page Header */}
-        <Box sx={{ mb: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <Box sx={{ mb: { xs: '16px', md: '24px' }, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'stretch', md: 'flex-start' }, justifyContent: 'space-between', gap: { xs: '12px', md: 0 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' } }}>
             <Box
               sx={{
                 width: 52,
@@ -289,7 +289,7 @@ const FeedbackList: React.FC = () => {
               </Typography>
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', sm: '12px' }, flexWrap: 'wrap' }}>
             <TextField
               placeholder="Search by candidate or job..."
               size="small"
@@ -303,7 +303,8 @@ const FeedbackList: React.FC = () => {
                 ),
               }}
               sx={{
-                width: 280,
+                width: { xs: '100%', sm: 200, md: 280 },
+                flex: { xs: 1, sm: 'none' },
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '10px',
                   backgroundColor: '#fff',
@@ -364,7 +365,7 @@ const FeedbackList: React.FC = () => {
         {/* Advanced Filters */}
         {showFilters && (
           <Fade in>
-            <Box sx={{ display: 'flex', gap: '12px', mb: '20px', p: '16px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+            <Box sx={{ display: 'flex', gap: { xs: '8px', sm: '12px' }, mb: '20px', p: { xs: '12px', md: '16px' }, backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
               <TextField
                 label="Job ID"
                 size="small"
@@ -589,8 +590,8 @@ const FeedbackList: React.FC = () => {
 
           {/* Table */}
           {loading ? (
-            <TableContainer>
-              <Table>
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: '#f8fafc' }}>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>ID</TableCell>
@@ -611,8 +612,8 @@ const FeedbackList: React.FC = () => {
             <EmptyState />
           ) : (
             <>
-              <TableContainer>
-                <Table>
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
                   <TableHead>
                     <TableRow sx={{ backgroundColor: '#f8fafc' }}>
                       <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>ID</TableCell>

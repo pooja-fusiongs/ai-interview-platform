@@ -169,9 +169,9 @@ const ConsentManager: React.FC = () => {
 
   return (
     <Navigation>
-      <Box sx={{ padding: '24px', background: '#f8fafc', minHeight: '100%' }}>
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '24px' }, background: '#f8fafc', minHeight: '100%' }}>
         {/* Page Header */}
-        <Box sx={{ mb: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box sx={{ mb: { xs: '16px', md: '24px' }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'flex-start' }, gap: { xs: '12px', sm: 0 } }}>
           <Box>
             <Typography sx={{ fontSize: '22px', fontWeight: 700, color: '#1e293b' }}>
               <i className="fas fa-shield-alt" style={{ color: '#7c3aed', marginRight: 10 }}></i>
@@ -436,8 +436,10 @@ const ConsentManager: React.FC = () => {
                       key={consent.id}
                       sx={{
                         display: 'flex',
-                        alignItems: 'center',
-                        padding: '18px 24px',
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        alignItems: { xs: 'flex-start', sm: 'center' },
+                        padding: { xs: '14px 16px', md: '18px 24px' },
+                        gap: { xs: '12px', sm: 0 },
                         borderBottom: index < consents.length - 1 ? '1px solid #f1f5f9' : 'none',
                         transition: 'background 0.15s',
                         '&:hover': { background: '#fafafa' },
@@ -577,9 +579,10 @@ const ConsentManager: React.FC = () => {
         onClose={() => setRevokeDialogOpen(false)}
         PaperProps={{
           sx: {
-            borderRadius: '16px',
+            borderRadius: { xs: '12px', md: '16px' },
             maxWidth: '420px',
             width: '100%',
+            margin: { xs: '12px', md: '32px' },
           },
         }}
       >
@@ -670,9 +673,10 @@ const ConsentManager: React.FC = () => {
         }}
         PaperProps={{
           sx: {
-            borderRadius: '16px',
+            borderRadius: { xs: '12px', md: '16px' },
             maxWidth: '500px',
             width: '100%',
+            margin: { xs: '12px', md: '32px' },
           },
         }}
       >

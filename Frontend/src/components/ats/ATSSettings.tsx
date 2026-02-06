@@ -269,12 +269,12 @@ const ATSSettings: React.FC = () => {
         sx={{
           minHeight: '100vh',
           background: 'linear-gradient(180deg, #F8F9FB 0%, #EEF2F6 100%)',
-          padding: '24px',
+          padding: { xs: '12px', sm: '16px', md: '24px' },
         }}
       >
         {/* Page Header */}
-        <Box sx={{ mb: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <Box sx={{ mb: { xs: '16px', md: '24px' }, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'stretch', md: 'flex-start' }, justifyContent: 'space-between', gap: { xs: '12px', md: 0 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' } }}>
             <Box
               sx={{
                 width: 52,
@@ -305,7 +305,7 @@ const ATSSettings: React.FC = () => {
               </Typography>
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', gap: '12px' }}>
+          <Box sx={{ display: 'flex', gap: { xs: '8px', md: '12px' }, justifyContent: { xs: 'flex-end', md: 'flex-start' } }}>
             <Tooltip title="Refresh" arrow>
               <IconButton
                 onClick={() => fetchConnections(true)}

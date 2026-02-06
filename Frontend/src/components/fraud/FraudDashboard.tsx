@@ -298,12 +298,12 @@ const FraudDashboard: React.FC = () => {
         sx={{
           minHeight: '100vh',
           background: 'linear-gradient(180deg, #F8F9FB 0%, #EEF2F6 100%)',
-          padding: '24px',
+          padding: { xs: '12px', sm: '16px', md: '24px' },
         }}
       >
         {/* Page Header */}
-        <Box sx={{ mb: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <Box sx={{ mb: { xs: '16px', md: '24px' }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'flex-start' }, justifyContent: 'space-between', gap: { xs: '12px', sm: 0 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' } }}>
             <Box
               sx={{
                 width: 52,
@@ -552,11 +552,13 @@ const FraudDashboard: React.FC = () => {
               {/* Table Header */}
               <Box
                 sx={{
-                  padding: '18px 24px',
+                  padding: { xs: '14px 16px', md: '18px 24px' },
                   borderBottom: '1px solid #e5e7eb',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: { xs: '12px', md: 0 },
                   background: 'linear-gradient(180deg, #fff 0%, #fafbfc 100%)',
                 }}
               >
@@ -612,8 +614,8 @@ const FraudDashboard: React.FC = () => {
               {flagged.length === 0 ? (
                 <EmptyState />
               ) : (
-                <TableContainer>
-                  <Table>
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table sx={{ minWidth: { xs: 700, md: 'auto' } }}>
                     <TableHead>
                       <TableRow sx={{ backgroundColor: '#f8fafc' }}>
                         {['Interview', 'Candidate', 'Trust Score', 'Flags', 'Analyzed', 'Action'].map(

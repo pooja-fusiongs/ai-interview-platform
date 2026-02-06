@@ -163,7 +163,7 @@ const Dashboard = () => {
   ]
 
   const renderOverview = () => (
-    <Box sx={{ padding: '20px', background: '#f8fafc', minHeight: '100%' }}>
+    <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', minHeight: '100%' }}>
       {/* Stats Cards */}
       <Box
         sx={{
@@ -173,16 +173,16 @@ const Dashboard = () => {
             sm: "repeat(2, 1fr)",
             md: "repeat(4, 1fr)",
           },
-          gap: "16px",
-          marginBottom: "20px",
+          gap: { xs: "12px", md: "16px" },
+          marginBottom: { xs: "16px", md: "20px" },
         }}
       >
         {statsConfig.map((stat, index) => (
           <Card
             key={index}
             sx={{
-              padding: "16px",
-              borderRadius: "12px",
+              padding: { xs: "12px", md: "16px" },
+              borderRadius: { xs: "10px", md: "12px" },
               border: "1px solid #e2e8f0",
               display: "flex",
               alignItems: "center",
@@ -198,9 +198,9 @@ const Dashboard = () => {
           >
             <Box
               sx={{
-                width: 48,
-                height: 48,
-                borderRadius: "10px",
+                width: { xs: 40, md: 48 },
+                height: { xs: 40, md: 48 },
+                borderRadius: { xs: "8px", md: "10px" },
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -226,7 +226,7 @@ const Dashboard = () => {
               ) : (
                 <Typography
                   sx={{
-                    fontSize: "24px",
+                    fontSize: { xs: "20px", md: "24px" },
                     fontWeight: 700,
                     color: "#1e293b",
                     lineHeight: 1.2,
@@ -250,7 +250,7 @@ const Dashboard = () => {
       </Box>
 
       {/* Two Column Layout */}
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: "16px", mb: "16px" }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: { xs: "12px", md: "16px" }, mb: { xs: "12px", md: "16px" } }}>
         {/* Recent Jobs */}
         <Card sx={{
           borderRadius: '12px',

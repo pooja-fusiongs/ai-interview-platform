@@ -10,7 +10,9 @@ import {
   Dialog,
   DialogContent,
   IconButton,
-  Chip
+  Chip,
+  useMediaQuery,
+  useTheme
 } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import DescriptionIcon from '@mui/icons-material/Description'
@@ -26,6 +28,8 @@ interface JobCreationFormProps {
 }
 
 const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobCreate }) => {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [activeStep, setActiveStep] = useState<number>(0)
   const [newSkill, setNewSkill] = useState<string>('')
   const [showSkillInput, setShowSkillInput] = useState<boolean>(false)
@@ -166,7 +170,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
     switch (activeStep) {
       case 0:
         return (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: '16px', sm: '24px' } }}>
             {/* Job Title */}
             <Box>
               <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
@@ -197,7 +201,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             </Box>
 
             {/* Department & Experience - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: '16px', sm: '16px' } }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Department *
@@ -257,7 +261,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             </Box>
 
             {/* Location & Work Mode - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: '16px', sm: '16px' } }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Location *
@@ -316,21 +320,22 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
               <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '12px' }}>
                 Employment Type *
               </Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: '1fr 1fr 1fr' }, gap: { xs: '8px', sm: '12px' } }}>
                 {['Full-time', 'Contract', 'Part-time'].map((type) => (
                   <Button
                     key={type}
                     onClick={() => handleInputChange('employmentType', type)}
                     sx={{
-                      padding: '12px 16px',
+                      padding: { xs: '10px 8px', sm: '12px 16px' },
                       borderRadius: '8px',
                       border: '2px solid',
                       borderColor: jobData.employmentType === type ? '#f59e0b' : '#e2e8f0',
                       backgroundColor: jobData.employmentType === type ? 'rgba(245, 158, 11, 0.1)' : 'white',
                       color: jobData.employmentType === type ? '#f59e0b' : '#64748b',
-                      fontSize: '14px',
+                      fontSize: { xs: '12px', sm: '14px' },
                       fontWeight: 600,
                       textTransform: 'none',
+                      minWidth: 'auto',
                       '&:hover': {
                         borderColor: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)'
@@ -347,7 +352,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
 
       case 1:
         return (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: '16px', sm: '24px' } }}>
             {/* Job Summary */}
             <Box>
               <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
@@ -537,9 +542,9 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
 
       case 2:
         return (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: '16px', sm: '24px' } }}>
             {/* Number of Openings & Interview Type - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Number of Openings *
@@ -597,7 +602,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             </Box>
 
             {/* Experience Level & Number of Questions */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Experience Level *
@@ -684,12 +689,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
 
             {/* AI Configuration */}
             <Box sx={{
-              padding: '20px',
+              padding: { xs: '16px', sm: '20px' },
               backgroundColor: 'rgba(245, 158, 11, 0.1)',
               borderRadius: '8px',
               border: '1px solid #fed7aa'
             }}>
-              <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '16px' }}>
+              <Typography sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 700, color: '#1e293b', marginBottom: { xs: '12px', sm: '16px' } }}>
                 AI Configuration (Static for Prototype)
               </Typography>
               
@@ -732,12 +737,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
 
             {/* Job Summary Preview */}
             <Box sx={{
-              padding: '20px',
+              padding: { xs: '16px', sm: '20px' },
               backgroundColor: 'rgba(245, 158, 11, 0.1)',
               borderRadius: '8px',
               border: '1px solid #fed7aa'
             }}>
-              <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '16px' }}>
+              <Typography sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 700, color: '#1e293b', marginBottom: { xs: '12px', sm: '16px' } }}>
                 Job Summary
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -792,12 +797,16 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
       open={open}
       onClose={onClose}
       maxWidth={false}
+      fullScreen={isMobile}
       slotProps={{
         paper: {
           sx: {
-            width: '700px',
-            height: '900px',
-            borderRadius: '16px',
+            width: { xs: '100%', sm: '95%', md: '700px' },
+            maxWidth: { xs: '100%', sm: '95%', md: '700px' },
+            height: { xs: '100%', sm: '90vh', md: '900px' },
+            maxHeight: { xs: '100%', sm: '90vh' },
+            borderRadius: { xs: 0, sm: '16px' },
+            margin: { xs: 0, sm: '16px' },
             overflow: 'hidden'
           }
         }
@@ -805,7 +814,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
     >
       {/* Header */}
       <Box sx={{
-        padding: '20px 24px',
+        padding: { xs: '16px', sm: '20px 24px' },
         borderBottom: '1px solid #e2e8f0',
         backgroundColor: 'white',
         display: 'flex',
@@ -813,10 +822,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
         justifyContent: 'space-between'
       }}>
         <Box>
-          <Typography sx={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>
+          <Typography sx={{ fontSize: { xs: '18px', sm: '20px' }, fontWeight: 700, color: '#1e293b' }}>
             Create New Job
           </Typography>
-          <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
+          <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b' }}>
             {steps[activeStep]}
           </Typography>
         </Box>
@@ -832,34 +841,34 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
       </Box>
 
       {/* Step Navigation */}
-      <Box sx={{ padding: '0 24px', backgroundColor: 'white' }}>
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          paddingY: '20px', 
-          maxWidth: '450px', 
-          margin: '0 auto', 
+      <Box sx={{ padding: { xs: '0 12px', sm: '0 24px' }, backgroundColor: 'white' }}>
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingY: { xs: '12px', sm: '20px' },
+          maxWidth: { xs: '100%', sm: '450px' },
+          margin: '0 auto',
           position: 'relative',
-          paddingX: '20px'
+          paddingX: { xs: '10px', sm: '20px' }
         }}>
           {/* Background Line */}
           <Box sx={{
             position: 'absolute',
-            top: '45px',
-            left: '45px',
-            right: '45px',
+            top: { xs: '32px', sm: '45px' },
+            left: { xs: '35px', sm: '45px' },
+            right: { xs: '35px', sm: '45px' },
             height: '3px',
             backgroundColor: '#e2e8f0',
             zIndex: 1,
             borderRadius: '2px'
           }} />
-          
+
           {/* Progress Line */}
           <Box sx={{
             position: 'absolute',
-            top: '45px',
-            left: '45px',
+            top: { xs: '32px', sm: '45px' },
+            left: { xs: '35px', sm: '45px' },
             width: `calc(${(activeStep / (steps.length - 1)) * 100}% - 0px)`,
             height: '3px',
             backgroundColor: '#f59e0b',
@@ -869,57 +878,57 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
           }} />
 
           {steps.map((step, index) => (
-            <Box key={index} sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              position: 'relative', 
+            <Box key={index} sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              position: 'relative',
               zIndex: 2,
               flex: 1,
-              maxWidth: '120px'
+              maxWidth: { xs: '80px', sm: '120px' }
             }}>
               {/* Step Circle with Icon */}
               <Box sx={{
-                width: 50,
-                height: 50,
+                width: { xs: 40, sm: 50 },
+                height: { xs: 40, sm: 50 },
                 borderRadius: '50%',
                 backgroundColor: index <= activeStep ? '#f59e0b' : '#e2e8f0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: '12px',
+                marginBottom: { xs: '8px', sm: '12px' },
                 transition: 'all 0.3s ease',
                 border: index === activeStep ? '3px solid rgba(245, 158, 11, 0.3)' : 'none',
                 boxShadow: index === activeStep ? '0 0 0 6px rgba(245, 158, 11, 0.1)' : 'none'
               }}>
                 {index === 0 && (
-                  <WorkIcon sx={{ 
-                    color: index <= activeStep ? 'white' : '#94a3b8', 
-                    fontSize: '22px' 
+                  <WorkIcon sx={{
+                    color: index <= activeStep ? 'white' : '#94a3b8',
+                    fontSize: { xs: '18px', sm: '22px' }
                   }} />
                 )}
                 {index === 1 && (
-                  <DescriptionIcon sx={{ 
-                    color: index <= activeStep ? 'white' : '#94a3b8', 
-                    fontSize: '22px' 
+                  <DescriptionIcon sx={{
+                    color: index <= activeStep ? 'white' : '#94a3b8',
+                    fontSize: { xs: '18px', sm: '22px' }
                   }} />
                 )}
                 {index === 2 && (
-                  <InterviewIcon sx={{ 
-                    color: index <= activeStep ? 'white' : '#94a3b8', 
-                    fontSize: '22px' 
+                  <InterviewIcon sx={{
+                    color: index <= activeStep ? 'white' : '#94a3b8',
+                    fontSize: { xs: '18px', sm: '22px' }
                   }} />
                 )}
               </Box>
-              
+
               {/* Step Label */}
               <Typography sx={{
-                fontSize: '11px',
+                fontSize: { xs: '9px', sm: '11px' },
                 fontWeight: index === activeStep ? 700 : 500,
                 color: index <= activeStep ? '#f59e0b' : '#94a3b8',
                 textAlign: 'center',
                 lineHeight: 1.2,
-                maxWidth: '100px',
+                maxWidth: { xs: '70px', sm: '100px' },
                 wordWrap: 'break-word'
               }}>
                 {step}
@@ -931,7 +940,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
 
       {/* Content */}
       <DialogContent sx={{
-        padding: '24px',
+        padding: { xs: '16px', sm: '24px' },
         backgroundColor: '#f8fafc',
         flex: 1,
         overflow: 'auto'
@@ -941,12 +950,13 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
 
       {/* Footer */}
       <Box sx={{
-        padding: '20px 24px',
+        padding: { xs: '12px 16px', sm: '20px 24px' },
         backgroundColor: 'white',
         borderTop: '1px solid #e2e8f0',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        gap: { xs: '8px', sm: '12px' }
       }}>
         <Button
           onClick={handleBack}
@@ -955,11 +965,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             color: '#64748b',
             backgroundColor: 'white',
             border: '1px solid #e2e8f0',
-            padding: '10px 20px',
+            padding: { xs: '8px 12px', sm: '10px 20px' },
             borderRadius: '8px',
-            fontSize: '14px',
+            fontSize: { xs: '12px', sm: '14px' },
             fontWeight: 600,
             textTransform: 'none',
+            minWidth: { xs: 'auto', sm: '100px' },
             '&:hover': { borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' },
             '&:disabled': { color: '#9ca3af', borderColor: '#f3f4f6' }
           }}
@@ -967,18 +978,19 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
           Previous
         </Button>
 
-        <Box sx={{ display: 'flex', gap: '12px' }}>
+        <Box sx={{ display: 'flex', gap: { xs: '8px', sm: '12px' } }}>
           <Button
             onClick={onClose}
             sx={{
               color: '#64748b',
               backgroundColor: 'white',
               border: '1px solid #e2e8f0',
-              padding: '10px 20px',
+              padding: { xs: '8px 12px', sm: '10px 20px' },
               borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: { xs: '12px', sm: '14px' },
               fontWeight: 600,
               textTransform: 'none',
+              minWidth: { xs: 'auto', sm: '80px' },
               '&:hover': { borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' }
             }}
           >
@@ -991,11 +1003,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
               sx={{
                 backgroundColor: '#f59e0b',
                 color: 'white',
-                padding: '10px 24px',
+                padding: { xs: '8px 16px', sm: '10px 24px' },
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
+                minWidth: { xs: 'auto', sm: '100px' },
                 '&:hover': { backgroundColor: '#d97706' }
               }}
             >
@@ -1007,11 +1020,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
               sx={{
                 backgroundColor: '#f59e0b',
                 color: 'white',
-                padding: '10px 20px',
+                padding: { xs: '8px 16px', sm: '10px 20px' },
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
+                minWidth: { xs: 'auto', sm: '80px' },
                 '&:hover': { backgroundColor: '#d97706' }
               }}
             >

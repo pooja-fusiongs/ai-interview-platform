@@ -452,9 +452,17 @@ const Candidates = () => {
 
   return (
     <Navigation>
-      <Box sx={{ padding: '20px', background: '#f8fafc', height: '100%' }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '20px', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ flex: 1, minWidth: 260, maxWidth: 420 }}>
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', height: '100%' }}>
+        <Box sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          flexWrap: 'wrap',
+          gap: { xs: '12px', md: '16px' },
+          marginBottom: { xs: '16px', md: '20px' },
+          alignItems: { xs: 'stretch', md: 'center' },
+          justifyContent: 'space-between'
+        }}>
+          <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 260 }, maxWidth: { xs: '100%', md: 420 } }}>
             <TextField
               fullWidth
               placeholder="Search candidates"
@@ -473,7 +481,7 @@ const Candidates = () => {
                   }
                 },
                 '& .MuiOutlinedInput-input': {
-                  padding: '14px 16px',
+                  padding: { xs: '12px 14px', md: '14px 16px' },
                   fontSize: '14px'
                 }
               }}
@@ -487,21 +495,23 @@ const Candidates = () => {
             />
           </Box>
 
-          <Box sx={{ display: 'flex', gap: '16px' }}>
+          <Box sx={{ display: 'flex', gap: { xs: '8px', sm: '12px', md: '16px' }, flexWrap: 'wrap', justifyContent: { xs: 'space-between', md: 'flex-end' } }}>
             <Button
               onClick={refreshCandidates}
               sx={{
                 background: 'white',
                 color: '#64748b',
                 border: '2px solid #e2e8f0',
-                padding: '12px 20px',
+                padding: { xs: '10px 12px', sm: '10px 16px', md: '12px 20px' },
                 borderRadius: '10px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '13px', md: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: { xs: '4px', sm: '8px' },
+                flex: { xs: 1, sm: 'none' },
+                minWidth: { xs: 'auto', sm: 'auto' },
                 '&:hover': {
                   borderColor: '#10b981',
                   color: '#10b981',
@@ -510,7 +520,7 @@ const Candidates = () => {
                 }
               }}
             >
-              <i className="fas fa-sync-alt"></i> Refresh
+              <i className="fas fa-sync-alt"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Refresh</Box>
             </Button>
             <Button
               onClick={handleOpenFilter}
@@ -518,14 +528,15 @@ const Candidates = () => {
                 background: 'white',
                 color: '#64748b',
                 border: '2px solid #e2e8f0',
-                padding: '12px 20px',
+                padding: { xs: '10px 12px', sm: '10px 16px', md: '12px 20px' },
                 borderRadius: '10px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '13px', md: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: { xs: '4px', sm: '8px' },
+                flex: { xs: 1, sm: 'none' },
                 '&:hover': {
                   borderColor: '#f59e0b',
                   color: '#f59e0b',
@@ -534,7 +545,7 @@ const Candidates = () => {
                 }
               }}
             >
-              <i className="fas fa-filter"></i> Filter Candidates
+              <i className="fas fa-filter"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Filter</Box>
             </Button>
             <Button
               onClick={handleOpenExport}
@@ -542,14 +553,15 @@ const Candidates = () => {
                 background: 'white',
                 color: '#64748b',
                 border: '2px solid #e2e8f0',
-                padding: '12px 20px',
+                padding: { xs: '10px 12px', sm: '10px 16px', md: '12px 20px' },
                 borderRadius: '10px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '13px', md: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: { xs: '4px', sm: '8px' },
+                flex: { xs: 1, sm: 'none' },
                 '&:hover': {
                   borderColor: '#f59e0b',
                   color: '#f59e0b',
@@ -558,7 +570,7 @@ const Candidates = () => {
                 }
               }}
             >
-              <i className="fas fa-download"></i> View
+              <i className="fas fa-download"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>View</Box>
             </Button>
           </Box>
         </Box>
@@ -566,9 +578,9 @@ const Candidates = () => {
         {/* Candidates Stats */}
         <Box sx={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-          marginBottom: '20px'
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+          gap: { xs: '10px', sm: '12px', md: '16px' },
+          marginBottom: { xs: '16px', md: '20px' }
         }}>
           {[
             { number: candidates.length.toString(), label: 'Total Candidates' },
@@ -577,16 +589,16 @@ const Candidates = () => {
             { number: candidates.filter(c => c.status === 'active').length.toString(), label: 'Active' }
           ].map((stat, index) => (
             <Card key={index} sx={{
-              padding: '24px',
+              padding: { xs: '16px', sm: '20px', md: '24px' },
               borderRadius: '12px',
               border: '1px solid #e2e8f0',
               textAlign: 'center',
               boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
             }}>
-              <Typography sx={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b', marginBottom: '8px' }}>
+              <Typography sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, fontWeight: 700, color: '#f59e0b', marginBottom: { xs: '4px', md: '8px' } }}>
                 {stat.number}
               </Typography>
-              <Typography sx={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>
+              <Typography sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, color: '#64748b', fontWeight: 500 }}>
                 {stat.label}
               </Typography>
             </Card>
@@ -633,11 +645,11 @@ const Candidates = () => {
                     gridTemplateColumns: {
                       xs: '1fr',
                       sm: 'repeat(2, minmax(0, 1fr))',
-                      md: 'repeat(3, minmax(0, 1fr))',
-                      lg: 'repeat(4, minmax(0, 1fr))',
+                      md: 'repeat(2, minmax(0, 1fr))',
+                      lg: 'repeat(3, minmax(0, 1fr))',
                       xl: 'repeat(4, minmax(0, 1fr))'
                     },
-                    gap: '16px'
+                    gap: { xs: '12px', sm: '14px', md: '16px' }
                   }}
                 >
                   {sortedCandidates.map((candidate) => (
@@ -646,11 +658,10 @@ const Candidates = () => {
                         position: 'relative',
                         borderRadius: '12px',
                         border: '1px solid #e2e8f0',
-                        padding: '20px',
+                        padding: { xs: '14px', sm: '16px', md: '20px' },
                         transition: 'all 0.3s ease',
                         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                         '&:hover': {
-                          // transform: 'translateY(-2px)',
                           boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)'
                         }
                       }}>
@@ -878,7 +889,7 @@ const Candidates = () => {
                     borderRadius: '12px',
                     border: '1px solid #e2e8f0',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                    overflow: 'hidden',
+                    overflowX: 'auto',
                     background: 'white'
                   }}
                 >
@@ -1098,24 +1109,26 @@ const Candidates = () => {
         )}
 
         {/* Professional Job Selection Dialog */}
-        <Dialog 
-          open={isJobSelectOpen} 
-          onClose={() => setIsJobSelectOpen(false)} 
-          maxWidth="sm" 
+        <Dialog
+          open={isJobSelectOpen}
+          onClose={() => setIsJobSelectOpen(false)}
+          maxWidth="sm"
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: '16px',
+              borderRadius: { xs: '12px', md: '16px' },
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
-              border: '1px solid #e2e8f0'
+              border: '1px solid #e2e8f0',
+              margin: { xs: '12px', md: '32px' },
+              maxHeight: { xs: '90vh', md: '85vh' }
             }
           }}
         >
           <DialogTitle sx={{
             background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
             color: 'white',
-            padding: '24px 32px',
-            borderRadius: '16px 16px 0 0',
+            padding: { xs: '16px 20px', md: '24px 32px' },
+            borderRadius: { xs: '12px 12px 0 0', md: '16px 16px 0 0' },
             display: 'flex',
             alignItems: 'center',
             gap: '12px'
@@ -1140,8 +1153,7 @@ const Candidates = () => {
             </Box>
           </DialogTitle>
           
-          <DialogContent sx={{ padding: '32px' }}>
-           
+          <DialogContent sx={{ padding: { xs: '20px', md: '32px' } }}>
 
             {/* Job Selection */}
             <Box>
@@ -1226,13 +1238,14 @@ const Candidates = () => {
             </Box>
           </DialogContent>
           
-          <DialogActions sx={{ 
-            padding: '24px 32px 32px 32px', 
-            gap: '12px',
+          <DialogActions sx={{
+            padding: { xs: '16px 20px 20px 20px', md: '24px 32px 32px 32px' },
+            gap: { xs: '8px', md: '12px' },
+            flexDirection: { xs: 'column', sm: 'row' },
             background: '#fafbfc',
-            borderRadius: '0 0 16px 16px'
+            borderRadius: { xs: '0 0 12px 12px', md: '0 0 16px 16px' }
           }}>
-            <Button 
+            <Button
               onClick={() => {
                 setIsJobSelectOpen(false);
                 setSelectedJobId('');
@@ -1242,8 +1255,10 @@ const Candidates = () => {
                 color: '#64748b',
                 textTransform: 'none',
                 fontWeight: 600,
-                padding: '10px 24px',
+                padding: { xs: '10px 20px', md: '10px 24px' },
                 borderRadius: '10px',
+                width: { xs: '100%', sm: 'auto' },
+                order: { xs: 2, sm: 1 },
                 '&:hover': {
                   background: '#f1f5f9'
                 }
@@ -1251,16 +1266,18 @@ const Candidates = () => {
             >
               Cancel
             </Button>
-            <Button 
-              onClick={handleJobSelectConfirm} 
-              variant="contained" 
+            <Button
+              onClick={handleJobSelectConfirm}
+              variant="contained"
               disabled={!selectedJobId || jobs.length === 0}
               sx={{
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 textTransform: 'none',
                 fontWeight: 600,
-                padding: '10px 32px',
+                padding: { xs: '10px 20px', md: '10px 32px' },
                 borderRadius: '10px',
+                width: { xs: '100%', sm: 'auto' },
+                order: { xs: 1, sm: 2 },
                 boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)',
                 '&:hover': {
                   background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
@@ -1279,24 +1296,26 @@ const Candidates = () => {
         </Dialog>
 
         {/* Professional Transcript Upload Dialog */}
-        <Dialog 
-          open={isTranscriptUploadOpen} 
-          onClose={() => setIsTranscriptUploadOpen(false)} 
-          maxWidth="md" 
+        <Dialog
+          open={isTranscriptUploadOpen}
+          onClose={() => setIsTranscriptUploadOpen(false)}
+          maxWidth="md"
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: '16px',
+              borderRadius: { xs: '12px', md: '16px' },
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
-              border: '1px solid #e2e8f0'
+              border: '1px solid #e2e8f0',
+              margin: { xs: '12px', md: '32px' },
+              maxHeight: { xs: '90vh', md: '85vh' }
             }
           }}
         >
           <DialogTitle sx={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
-            padding: '24px 32px',
-            borderRadius: '16px 16px 0 0',
+            padding: { xs: '16px 20px', md: '24px 32px' },
+            borderRadius: { xs: '12px 12px 0 0', md: '16px 16px 0 0' },
             display: 'flex',
             alignItems: 'center',
             gap: '12px'
@@ -1321,11 +1340,10 @@ const Candidates = () => {
             </Box>
           </DialogTitle>
           
-          <DialogContent sx={{ padding: '32px' }}>
-           
+          <DialogContent sx={{ padding: { xs: '20px', md: '32px' } }}>
 
             {/* Upload Options */}
-            <Box sx={{ marginBottom: '24px' }}>
+            <Box sx={{ marginBottom: { xs: '20px', md: '24px' } }}>
               <Typography sx={{ 
                 fontSize: '16px', 
                 fontWeight: 600, 
@@ -1538,13 +1556,14 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             )}
           </DialogContent>
           
-          <DialogActions sx={{ 
-            padding: '24px 32px 32px 32px', 
-            gap: '12px',
+          <DialogActions sx={{
+            padding: { xs: '16px 20px 20px 20px', md: '24px 32px 32px 32px' },
+            gap: { xs: '8px', md: '12px' },
+            flexDirection: { xs: 'column', sm: 'row' },
             background: '#fafbfc',
-            borderRadius: '0 0 16px 16px'
+            borderRadius: { xs: '0 0 12px 12px', md: '0 0 16px 16px' }
           }}>
-            <Button 
+            <Button
               onClick={() => {
                 setIsTranscriptUploadOpen(false);
                 setTranscriptText('');
@@ -1553,8 +1572,10 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 color: '#64748b',
                 textTransform: 'none',
                 fontWeight: 600,
-                padding: '10px 24px',
+                padding: { xs: '10px 20px', md: '10px 24px' },
                 borderRadius: '10px',
+                width: { xs: '100%', sm: 'auto' },
+                order: { xs: 2, sm: 1 },
                 '&:hover': {
                   background: '#f1f5f9'
                 }
@@ -1562,16 +1583,18 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             >
               Cancel
             </Button>
-            <Button 
-              onClick={handleTranscriptSubmit} 
-              variant="contained" 
+            <Button
+              onClick={handleTranscriptSubmit}
+              variant="contained"
               disabled={actionLoading}
               sx={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 textTransform: 'none',
                 fontWeight: 600,
-                padding: '10px 32px',
+                padding: { xs: '10px 20px', md: '10px 32px' },
                 borderRadius: '10px',
+                width: { xs: '100%', sm: 'auto' },
+                order: { xs: 1, sm: 2 },
                 boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
                 '&:hover': {
                   background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
@@ -1606,18 +1629,20 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: '16px'
+              borderRadius: { xs: '12px', md: '16px' },
+              margin: { xs: '12px', md: '32px' }
             }
           }}
         >
           <DialogTitle sx={{
-            fontSize: '20px',
+            fontSize: { xs: '18px', md: '20px' },
             fontWeight: 700,
-            color: '#1e293b'
+            color: '#1e293b',
+            padding: { xs: '16px 20px', md: '20px 24px' }
           }}>
             Filter Candidates
           </DialogTitle>
-          <DialogContent>
+          <DialogContent sx={{ padding: { xs: '0 20px', md: '0 24px' } }}>
             <Box sx={{ marginBottom: '24px' }}>
               <Typography variant="h6" sx={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
                 Status
@@ -1739,8 +1764,10 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: '12px',
-              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.12)'
+              borderRadius: { xs: '12px', md: '12px' },
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.12)',
+              margin: { xs: '12px', md: '32px' },
+              maxHeight: { xs: '90vh', md: '85vh' }
             }
           }}
         >
@@ -1790,8 +1817,8 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 </Box>
 
                 {/* Status Row */}
-                <Box sx={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
-                  <Box sx={{ flex: 1, background: '#f8fafc', padding: '12px 16px', borderRadius: '8px' }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: '10px', sm: '16px' }, marginBottom: '20px' }}>
+                  <Box sx={{ flex: 1, background: '#f8fafc', padding: { xs: '10px 14px', md: '12px 16px' }, borderRadius: '8px' }}>
                     <Typography sx={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Status</Typography>
                     <Chip
                       size="small"

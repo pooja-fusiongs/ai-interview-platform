@@ -116,7 +116,7 @@ const SignUp = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: { xs: 'column', md: 'row' } }}>
       {/* Left Side - Form */}
       <Box sx={{
         flex: 1,
@@ -124,18 +124,19 @@ const SignUp = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '60px 40px'
+        padding: { xs: '30px 20px', sm: '40px 30px', md: '60px 40px' },
+        minHeight: { xs: '100vh', md: 'auto' }
       }}>
-        <Box sx={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
+        <Box sx={{ width: '100%', maxWidth: { xs: '100%', sm: 400 }, textAlign: 'center' }}>
           {/* Profile Avatar */}
           <Box sx={{
-            display: 'flex',
+            display: { xs: 'none', sm: 'flex' },
             justifyContent: 'center',
-            marginBottom: '20px'
+            marginBottom: { xs: '12px', md: '20px' }
           }}>
             <Box sx={{
-              width: 120,
-              height: 120,
+              width: { xs: 80, md: 120 },
+              height: { xs: 80, md: 120 },
               background: 'linear-gradient(135deg, #e8f4fd 0%, #d1e7dd 100%)',
               borderRadius: '50%',
               display: 'flex',
@@ -174,9 +175,9 @@ const SignUp = () => {
           </Box>
 
           {/* Sign Up Title */}
-          <Box sx={{ marginBottom: '20px', textAlign: 'left' }}>
+          <Box sx={{ marginBottom: { xs: '16px', md: '20px' }, textAlign: 'left' }}>
             <Typography variant="h2" sx={{
-              fontSize: '36px',
+              fontSize: { xs: '26px', sm: '30px', md: '36px' },
               fontWeight: 600,
               color: '#2c3e50',
               margin: '0 0 10px 0'
@@ -202,14 +203,14 @@ const SignUp = () => {
             {/* Full Name Field */}
             <Box sx={{
               position: 'relative',
-              marginBottom: '25px',
+              marginBottom: { xs: '16px', md: '25px' },
               display: 'flex',
               alignItems: 'center',
-              gap: '15px'
+              gap: { xs: '10px', md: '15px' }
             }}>
               <Box sx={{
-                width: 50,
-                height: 50,
+                width: { xs: 40, md: 50 },
+                height: { xs: 40, md: 50 },
                 background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
                 borderRadius: '50%',
                 display: 'flex',
@@ -258,14 +259,14 @@ const SignUp = () => {
             {/* Email Field */}
             <Box sx={{
               position: 'relative',
-              marginBottom: '25px',
+              marginBottom: { xs: '16px', md: '25px' },
               display: 'flex',
               alignItems: 'center',
-              gap: '15px'
+              gap: { xs: '10px', md: '15px' }
             }}>
               <Box sx={{
-                width: 50,
-                height: 50,
+                width: { xs: 40, md: 50 },
+                height: { xs: 40, md: 50 },
                 background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
                 borderRadius: '50%',
                 display: 'flex',
@@ -315,14 +316,14 @@ const SignUp = () => {
             {/* Role Selector */}
             <Box sx={{
               position: 'relative',
-              marginBottom: '25px',
+              marginBottom: { xs: '16px', md: '25px' },
               display: 'flex',
               alignItems: 'center',
-              gap: '15px'
+              gap: { xs: '10px', md: '15px' }
             }}>
               <Box sx={{
-                width: 50,
-                height: 50,
+                width: { xs: 40, md: 50 },
+                height: { xs: 40, md: 50 },
                 background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
                 borderRadius: '50%',
                 display: 'flex',
@@ -373,14 +374,14 @@ const SignUp = () => {
             {/* Password Field */}
             <Box sx={{
               position: 'relative',
-              marginBottom: '25px',
+              marginBottom: { xs: '16px', md: '25px' },
               display: 'flex',
               alignItems: 'center',
-              gap: '15px'
+              gap: { xs: '10px', md: '15px' }
             }}>
               <Box sx={{
-                width: 50,
-                height: 50,
+                width: { xs: 40, md: 50 },
+                height: { xs: 40, md: 50 },
                 background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
                 borderRadius: '50%',
                 display: 'flex',
@@ -453,14 +454,14 @@ const SignUp = () => {
             {/* Confirm Password Field */}
             <Box sx={{
               position: 'relative',
-              marginBottom: '25px',
+              marginBottom: { xs: '16px', md: '25px' },
               display: 'flex',
               alignItems: 'center',
-              gap: '15px'
+              gap: { xs: '10px', md: '15px' }
             }}>
               <Box sx={{
-                width: 50,
-                height: 50,
+                width: { xs: 40, md: 50 },
+                height: { xs: 40, md: 50 },
                 background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
                 borderRadius: '50%',
                 display: 'flex',
@@ -589,11 +590,11 @@ const SignUp = () => {
         </Box>
       </Box>
 
-      {/* Right Side - Image */}
+      {/* Right Side - Image (Hidden on mobile/tablet) */}
       <Box sx={{
         flex: 1,
         background: 'linear-gradient(135deg, #fef5e7 0%, #fed7aa 100%)',
-        display: 'flex',
+        display: { xs: 'none', md: 'flex' },
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',

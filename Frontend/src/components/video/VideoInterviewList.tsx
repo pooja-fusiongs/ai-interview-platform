@@ -130,10 +130,17 @@ const VideoInterviewList: React.FC = () => {
 
   return (
     <Navigation>
-      <Box sx={{ padding: '20px', background: '#f8fafc', minHeight: '100vh' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b' }}>Video Interviews</Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', minHeight: '100vh' }}>
+        <Box sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', md: 'center' },
+          gap: { xs: 2, md: 0 },
+          mb: 2
+        }}>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b', fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Video Interviews</Typography>
+          <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Filter Button */}
             <Badge badgeContent={activeFilterCount} color="warning">
               <Button
@@ -261,7 +268,8 @@ const VideoInterviewList: React.FC = () => {
               value={searchQuery}
               onChange={handleSearchChange}
               sx={{
-                width: 250,
+                width: { xs: '100%', sm: 200, md: 250 },
+                flex: { xs: 1, sm: 'none' },
                 backgroundColor: '#fff',
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '8px',
@@ -284,8 +292,8 @@ const VideoInterviewList: React.FC = () => {
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
         ) : (
-          <Paper sx={{ width: '100%', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 180px)' }}>
-            <TableContainer sx={{ flex: 1 }}>
+          <Paper sx={{ width: '100%', display: 'flex', flexDirection: 'column', maxHeight: { xs: 'calc(100vh - 220px)', md: 'calc(100vh - 180px)' }, overflow: 'hidden' }}>
+            <TableContainer sx={{ flex: 1, overflowX: 'auto' }}>
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>

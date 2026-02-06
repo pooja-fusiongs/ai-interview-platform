@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -64,6 +65,8 @@ const DURATION_OPTIONS = [
 ];
 
 const VideoInterviewScheduler: React.FC = () => {
+  const navigate = useNavigate();
+
   // Form state
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
@@ -265,15 +268,22 @@ const VideoInterviewScheduler: React.FC = () => {
         duration_minutes: duration,
       });
       setSuccess(result);
-      // Reset form on success
-      setSelectedJob(null);
-      setSelectedCandidate(null);
-      setSelectedDate(null);
-      setSelectedTime(dayjs().hour(0).minute(0));
-      setDuration(45);
-      setTouched({ job: false, candidate: false, scheduledAt: false });
+      // Redirect to video interviews list on success
+      setTimeout(() => {
+        navigate('/video-interviews');
+      }, 1500);
     } catch (err: any) {
-      setError(err.message || 'Failed to schedule interview. Please try again.');
+      const errorMsg = err.message || 'Failed to schedule interview. Please try again.';
+      setError(errorMsg);
+
+      // Check if error is about questions not approved
+      const lowerMsg = errorMsg.toLowerCase();
+      if (lowerMsg.includes('approve') || lowerMsg.includes('question')) {
+        // Redirect to manage candidates page after showing error
+        setTimeout(() => {
+          navigate(`/recruiter-candidates?jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}`);
+        }, 2500);
+      }
     } finally {
       setLoading(false);
     }
@@ -344,33 +354,34 @@ const VideoInterviewScheduler: React.FC = () => {
         sx={{
           minHeight: '100vh',
           background: '#F8F9FB',
-          padding: '32px 24px',
+          padding: { xs: '16px 12px', sm: '24px 20px', md: '32px 24px' },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
         }}
       >
         {/* Page Header */}
-        <Box sx={{ width: '100%', maxWidth: 520, mb: '28px' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', mb: '6px' }}>
+        <Box sx={{ width: '100%', maxWidth: 520, mb: { xs: '20px', md: '28px' } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' }, mb: '6px' }}>
             <Box
               sx={{
-                width: 44,
-                height: 44,
+                width: { xs: 38, md: 44 },
+                height: { xs: 38, md: 44 },
                 borderRadius: '12px',
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)',
+                flexShrink: 0,
               }}
             >
-              <i className="fas fa-video" style={{ color: '#fff', fontSize: '18px' }} />
+              <i className="fas fa-video" style={{ color: '#fff', fontSize: '16px' }} />
             </Box>
             <Box>
               <Typography
                 sx={{
-                  fontSize: '22px',
+                  fontSize: { xs: '18px', sm: '20px', md: '22px' },
                   fontWeight: 700,
                   color: '#1e293b',
                   letterSpacing: '-0.02em',
@@ -378,7 +389,7 @@ const VideoInterviewScheduler: React.FC = () => {
               >
                 Schedule Interview
               </Typography>
-              <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
+              <Typography sx={{ fontSize: { xs: '12px', md: '14px' }, color: '#64748b' }}>
                 Set up a video interview with your candidate
               </Typography>
             </Box>
@@ -396,7 +407,7 @@ const VideoInterviewScheduler: React.FC = () => {
             overflow: 'visible',
           }}
         >
-          <CardContent sx={{ padding: '28px 28px 32px' }}>
+          <CardContent sx={{ padding: { xs: '16px 16px 20px', sm: '20px 22px 26px', md: '28px 28px 32px' } }}>
             <form onSubmit={handleSubmit}>
               {/* Job Selection */}
               <Box sx={{ mb: '22px' }}>

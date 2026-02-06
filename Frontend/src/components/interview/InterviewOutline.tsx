@@ -222,6 +222,10 @@ const InterviewOutline: React.FC = () => {
 
             if (failCount === 0) {
                 toast.success(`All ${successCount} questions approved successfully!`);
+                // Redirect to video interviews after approval
+                setTimeout(() => {
+                    navigate('/video-interviews');
+                }, 1500);
             } else {
                 toast.success(`${successCount} questions approved, ${failCount} failed.`);
             }

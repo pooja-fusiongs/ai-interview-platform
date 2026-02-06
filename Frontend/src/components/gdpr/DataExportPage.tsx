@@ -55,8 +55,8 @@ const DataExportPage: React.FC = () => {
 
   return (
     <Naivgation>
-      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
-        <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>Data Export</Typography>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: '12px', sm: 2, md: 3 }, overflow: 'auto', bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+        <Typography variant="h4" sx={{ mb: 1, fontWeight: 600, fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Data Export</Typography>
         <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
           Request a copy of all your personal data in JSON format (GDPR Article 20).
         </Typography>
@@ -67,8 +67,8 @@ const DataExportPage: React.FC = () => {
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
         ) : (
-          <TableContainer component={Paper} elevation={2}>
-            <Table>
+          <TableContainer component={Paper} elevation={2} sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: { xs: 600, md: 'auto' } }}
               <TableHead>
                 <TableRow sx={{ bgcolor: '#fafafa' }}>
                   <TableCell><strong>Request ID</strong></TableCell>

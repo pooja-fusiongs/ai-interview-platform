@@ -295,19 +295,20 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   }
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       display: 'flex',
-      height: '100vh',
+      flexDirection: { xs: 'column', lg: 'row' },
+      minHeight: '100vh',
       background: '#f8fafc'
     }}>
       {/* Main Content Area */}
-      <Box sx={{ 
+      <Box sx={{
         flex: 1,
-        padding: '24px 32px',
+        padding: { xs: '12px', sm: '16px', md: '24px 32px' },
         overflow: 'auto',
-        maxWidth: 'calc(100% - 320px)',
-        m:"20px",
-        borderRadius:"20px",
+        maxWidth: { xs: '100%', lg: 'calc(100% - 320px)' },
+        m: { xs: '8px', sm: '12px', md: '20px' },
+        borderRadius: { xs: '12px', md: '20px' },
         background: '#fff',border:"1px solid #fff",
         '&::-webkit-scrollbar': {
           width: '6px'
@@ -371,7 +372,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           borderRadius: '16px'
         }}>
           <Typography variant="h3" sx={{
-            fontSize: '36px',
+            fontSize: { xs: '24px', sm: '28px', md: '36px' },
             fontWeight: 700,
             color: '#1e293b',
             marginBottom: '16px'
@@ -593,10 +594,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             )}
           </Box>
 
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(4, 1fr)', 
-            gap: '16px',
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+            gap: { xs: '8px', sm: '12px', md: '16px' },
             marginBottom: '20px'
           }}>
             <Box sx={{ 
@@ -676,10 +677,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             Interview Configuration
           </Typography>
           
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(2, 1fr)', 
-            gap: '20px',
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+            gap: { xs: '12px', md: '20px' },
             marginBottom: '20px'
           }}>
             <Box>
@@ -947,13 +948,16 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
       {/* Right Sidebar */}
       <Box sx={{
-        width: 320,
+        width: { xs: '100%', lg: 320 },
         background: 'white',
-        borderLeft: '1px solid #e2e8f0',
-        padding: '24px',
-        mt:"20px",
+        borderLeft: { xs: 'none', lg: '1px solid #e2e8f0' },
+        borderTop: { xs: '1px solid #e2e8f0', lg: 'none' },
+        padding: { xs: '16px', md: '24px' },
+        mt: { xs: '0', lg: '20px' },
+        mb: { xs: '8px', lg: 0 },
+        mx: { xs: '8px', sm: '12px', lg: 0 },
         overflow: 'auto',
-        borderRadius:"10px",
+        borderRadius: { xs: '12px', lg: '10px' },
         '&::-webkit-scrollbar': {
           width: '6px'
         },

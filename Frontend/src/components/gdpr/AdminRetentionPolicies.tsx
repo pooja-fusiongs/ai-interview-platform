@@ -201,7 +201,7 @@ const AdminRetentionPolicies: React.FC = () => {
         <Card sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
           <CardContent sx={{ p: '0 !important' }}>
             {/* Table Header */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 100px', gap: 2, p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <Box sx={{ display: { xs: 'none', md: 'grid' }, gridTemplateColumns: '1fr 120px 120px 100px 100px', gap: 2, p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Data Type</Typography>
               <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Retention</Typography>
               <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Action</Typography>
@@ -213,7 +213,7 @@ const AdminRetentionPolicies: React.FC = () => {
             {loading ? (
               <Box sx={{ p: 2 }}>
                 {[1, 2, 3, 4].map(i => (
-                  <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 100px', gap: 2, py: 2, borderBottom: '1px solid #f1f5f9' }}>
+                  <Box key={i} sx={{ display: { xs: 'flex', md: 'grid' }, flexDirection: 'column', gridTemplateColumns: '1fr 120px 120px 100px 100px', gap: 2, py: 2, borderBottom: '1px solid #f1f5f9' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Skeleton variant="rounded" width={40} height={40} sx={{ borderRadius: '10px' }} />
                       <Skeleton variant="text" width="60%" height={24} />
@@ -257,9 +257,10 @@ const AdminRetentionPolicies: React.FC = () => {
                     <Box
                       key={policy.id || idx}
                       sx={{
-                        display: 'grid',
+                        display: { xs: 'flex', md: 'grid' },
+                        flexDirection: { xs: 'column', md: 'row' },
                         gridTemplateColumns: '1fr 120px 120px 100px 100px',
-                        gap: 2,
+                        gap: { xs: 1.5, md: 2 },
                         p: 2,
                         borderBottom: idx < policies.length - 1 ? '1px solid #f1f5f9' : 'none',
                         '&:hover': { bgcolor: '#f8fafc' },
@@ -338,9 +339,10 @@ const AdminRetentionPolicies: React.FC = () => {
           onClose={() => setDialogOpen(false)}
           PaperProps={{
             sx: {
-              borderRadius: '16px',
+              borderRadius: { xs: '12px', md: '16px' },
               width: '100%',
               maxWidth: '400px',
+              margin: { xs: '12px', md: '32px' },
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
             },
           }}

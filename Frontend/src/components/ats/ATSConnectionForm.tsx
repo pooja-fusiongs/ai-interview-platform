@@ -192,9 +192,10 @@ const ATSConnectionForm: React.FC<ATSConnectionFormProps> = ({ open, onClose, on
       fullWidth
       PaperProps={{
         sx: {
-          borderRadius: '20px',
+          borderRadius: { xs: '12px', md: '20px' },
           overflow: 'hidden',
           maxHeight: '90vh',
+          margin: { xs: '12px', md: '32px' },
         },
       }}
     >

@@ -58,13 +58,13 @@ const AdminDeletionRequests: React.FC = () => {
 
   return (
     <Naivgation>
-      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
-        <Typography variant="h4" sx={{ mb: 3, fontWeight: 600 }}>Deletion Requests</Typography>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: '12px', sm: 2, md: 3 }, overflow: 'auto', bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+        <Typography variant="h4" sx={{ mb: { xs: 2, md: 3 }, fontWeight: 600, fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Deletion Requests</Typography>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
         ) : (
-          <TableContainer component={Paper} elevation={2}>
-            <Table>
+          <TableContainer component={Paper} elevation={2} sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: { xs: 700, md: 'auto' } }}
               <TableHead>
                 <TableRow sx={{ bgcolor: '#fafafa' }}>
                   <TableCell><strong>Request ID</strong></TableCell>
@@ -98,7 +98,7 @@ const AdminDeletionRequests: React.FC = () => {
             </Table>
           </TableContainer>
         )}
-        <Dialog open={!!selected} onClose={() => setSelected(null)} maxWidth="sm" fullWidth>
+        <Dialog open={!!selected} onClose={() => setSelected(null)} maxWidth="sm" fullWidth PaperProps={{ sx: { margin: { xs: '12px', md: '32px' }, maxHeight: { xs: '90vh', md: '85vh' }, borderRadius: { xs: '12px', md: '16px' } } }}>
           <DialogTitle>Process Deletion Request</DialogTitle>
           <DialogContent>
             {selected && (

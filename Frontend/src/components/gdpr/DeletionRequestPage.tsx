@@ -29,8 +29,8 @@ const DeletionRequestPage: React.FC = () => {
 
   return (
     <Naivgation>
-      <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
-        <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>Data Deletion Request</Typography>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: '12px', sm: 2, md: 3 }, overflow: 'auto', bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+        <Typography variant="h4" sx={{ mb: 1, fontWeight: 600, fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Data Deletion Request</Typography>
         <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
           Request the deletion of all your personal data (GDPR Article 17 - Right to Erasure).
         </Typography>
@@ -57,7 +57,7 @@ const DeletionRequestPage: React.FC = () => {
             </Button>
           </Paper>
         )}
-        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { margin: { xs: '12px', md: '32px' }, borderRadius: { xs: '12px', md: '16px' } } }}>
           <DialogTitle>Confirm Deletion Request</DialogTitle>
           <DialogContent>
             <Typography variant="body2" sx={{ mb: 2 }}>
