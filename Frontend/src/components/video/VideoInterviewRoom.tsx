@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   Videocam, ArrowBack, AccessTime,
-  Description, Security, Mic, MicOff, VideocamOff, CallEnd,
+  Description, Security, 
   Check, SmartToy, Person, Link as LinkIcon, ContentCopy
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
@@ -30,9 +30,6 @@ const VideoInterviewRoom: React.FC = () => {
   const [error, setError] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [ending, setEnding] = useState(false);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
   const [dailyLoaded, setDailyLoaded] = useState(false);
   const [callJoined, setCallJoined] = useState(false);
 
@@ -230,32 +227,7 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
-  const handleEnd = async () => {
-    try {
-      setEnding(true);
-
-      // Leave Daily call first
-      if (dailyCallRef.current) {
-        await dailyCallRef.current.leave();
-        dailyCallRef.current.destroy();
-        dailyCallRef.current = null;
-      }
-
-      const result = await videoInterviewService.endInterview(Number(videoId));
-      setIsActive(false);
-      setCallJoined(false);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      setInterview(result);
-      toast.success('Interview completed! Go to details page to upload transcript.');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to end interview');
-    } finally {
-      setEnding(false);
-    }
-  };
+  
 
   const handleCopyMeetingLink = async () => {
     const meetingUrl = interview?.zoom_meeting_url;
@@ -268,22 +240,6 @@ const VideoInterviewRoom: React.FC = () => {
       }
     } else {
       toast.error('Meeting link not available yet. Start the interview first.');
-    }
-  };
-
-  const toggleMic = () => {
-    if (dailyCallRef.current) {
-      const newState = !micOn;
-      dailyCallRef.current.setLocalAudio(newState);
-      setMicOn(newState);
-    }
-  };
-
-  const toggleCam = () => {
-    if (dailyCallRef.current) {
-      const newState = !camOn;
-      dailyCallRef.current.setLocalVideo(newState);
-      setCamOn(newState);
     }
   };
 
@@ -514,85 +470,31 @@ const VideoInterviewRoom: React.FC = () => {
               )}
             </Paper>
 
-            {/* Control Bar */}
-            <Paper sx={{
-              background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '12px 16px', sm: '16px 24px' },
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 1, sm: 2 },
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)', flexWrap: 'wrap'
-            }}>
-              {!isCompleted && (
-                <>
-                  <Tooltip title={micOn ? 'Mute' : 'Unmute'}>
-                    <IconButton
-                      onClick={toggleMic}
-                      disabled={!isActive || !callJoined}
-                      sx={{
-                        width: { xs: 44, sm: 56 }, height: { xs: 44, sm: 56 },
-                        background: micOn ? '#f1f5f9' : '#fef2f2',
-                        border: micOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
-                        '&:hover': { background: micOn ? '#e2e8f0' : '#fee2e2' },
-                        '&:disabled': { opacity: 0.5 }
-                      }}
-                    >
-                      {micOn ? <Mic sx={{ color: '#1e293b' }} /> : <MicOff sx={{ color: '#ef4444' }} />}
-                    </IconButton>
-                  </Tooltip>
-
-                  <Tooltip title={camOn ? 'Turn off camera' : 'Turn on camera'}>
-                    <IconButton
-                      onClick={toggleCam}
-                      disabled={!isActive || !callJoined}
-                      sx={{
-                        width: { xs: 44, sm: 56 }, height: { xs: 44, sm: 56 },
-                        background: camOn ? '#f1f5f9' : '#fef2f2',
-                        border: camOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
-                        '&:hover': { background: camOn ? '#e2e8f0' : '#fee2e2' },
-                        '&:disabled': { opacity: 0.5 }
-                      }}
-                    >
-                      {camOn ? <Videocam sx={{ color: '#1e293b' }} /> : <VideocamOff sx={{ color: '#ef4444' }} />}
-                    </IconButton>
-                  </Tooltip>
-
-                  <Divider orientation="vertical" sx={{ height: { xs: 30, sm: 40 }, mx: { xs: 0.5, sm: 1 }, display: { xs: 'none', sm: 'block' } }} />
-
-                  {!isActive ? (
-                    <Button
-                      variant="contained"
-                      startIcon={<Videocam />}
-                      onClick={handleStart}
-                      disabled={!dailyLoaded}
-                      sx={{
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                        padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
-                        fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
-                        boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
-                        '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
-                        '&:disabled': { background: '#94a3b8' }
-                      }}
-                    >
-                      {dailyLoaded ? 'Start Interview' : 'Loading...'}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="contained"
-                      startIcon={ending ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CallEnd />}
-                      onClick={handleEnd}
-                      disabled={ending}
-                      sx={{
-                        background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                        padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
-                        fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
-                        boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
-                        '&:hover': { background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' }
-                      }}
-                    >
-                      {ending ? 'Ending...' : 'End Interview'}
-                    </Button>
-                  )}
-                </>
-              )}
-            </Paper>
+            {/* Control Bar - Only show Start button before meeting, hide controls after (Jitsi has its own) */}
+            {!isActive && !isCompleted && (
+              <Paper sx={{
+                background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '12px 16px', sm: '16px 24px' },
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 1, sm: 2 },
+                boxShadow: '0 4px 20px rgba(0,0,0,0.08)', flexWrap: 'wrap'
+              }}>
+                <Button
+                  variant="contained"
+                  startIcon={<Videocam />}
+                  onClick={handleStart}
+                  disabled={!dailyLoaded}
+                  sx={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
+                    fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+                    '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
+                    '&:disabled': { background: '#94a3b8' }
+                  }}
+                >
+                  {dailyLoaded ? 'Start Meeting' : 'Loading...'}
+                </Button>
+              </Paper>
+            )}
           </Box>
 
           {/* Sidebar */}

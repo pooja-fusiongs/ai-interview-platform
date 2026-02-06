@@ -191,10 +191,13 @@ const VideoInterviewDetail: React.FC = () => {
       <Box sx={{
         minHeight: '100vh',
         background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)',
-        padding: { xs: '12px', sm: '16px', md: '24px' }
+        padding: { xs: '12px', sm: '16px', md: '24px' },
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+        maxWidth: '100%'
       }}>
         {/* Header */}
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 3, gap: { xs: 2, sm: 0 } }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 3, gap: { xs: 2, sm: 0 }, maxWidth: '100%', overflow: 'hidden' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton
               onClick={() => navigate('/video-interviews')}
@@ -237,87 +240,92 @@ const VideoInterviewDetail: React.FC = () => {
         )}
 
         {interview && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: 3 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: 3, maxWidth: '100%', overflow: 'hidden' }}>
             {/* Main Content */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, overflow: 'hidden' }}>
               {/* Schedule & Meeting Card */}
               <Box sx={{
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                maxWidth: '100%'
               }}>
                 <Box sx={{
                   background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                   padding: { xs: '16px', sm: '20px', md: '24px' },
-                  color: 'white'
+                  color: 'white',
+                  overflow: 'hidden'
                 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, mb: 2 }}>
                     <Box sx={{
-                      width: 48,
-                      height: 48,
+                      width: { xs: 40, sm: 48 },
+                      height: { xs: 40, sm: 48 },
                       borderRadius: '12px',
                       background: 'rgba(255,255,255,0.2)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      flexShrink: 0
                     }}>
-                      <Videocam sx={{ fontSize: 24 }} />
+                      <Videocam sx={{ fontSize: { xs: 20, sm: 24 } }} />
                     </Box>
-                    <Box>
-                      <Typography sx={{ fontSize: '20px', fontWeight: 700 }}>
+                    <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
+                      <Typography sx={{ fontSize: { xs: '16px', sm: '20px' }, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {interview.job_title || 'Video Interview'}
                       </Typography>
-                      <Typography sx={{ fontSize: '14px', opacity: 0.9 }}>
+                      <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, opacity: 0.9 }}>
                         {interview.duration_minutes} minutes session
                       </Typography>
                     </Box>
                   </Box>
                 </Box>
 
-                <Box sx={{ padding: { xs: '16px', sm: '20px', md: '24px' } }}>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 2, sm: 3 } }}>
+                <Box sx={{ padding: { xs: '16px', sm: '20px', md: '24px' }, maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 2, sm: 3 }, maxWidth: '100%' }}>
                     {/* Date */}
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: 1.5, sm: 2 }, minWidth: 0 }}>
                       <Box sx={{
-                        width: 44,
-                        height: 44,
+                        width: { xs: 36, sm: 44 },
+                        height: { xs: 36, sm: 44 },
                         borderRadius: '10px',
                         background: '#eff6ff',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        flexShrink: 0
                       }}>
-                        <CalendarMonth sx={{ color: '#3b82f6', fontSize: 22 }} />
+                        <CalendarMonth sx={{ color: '#3b82f6', fontSize: { xs: 18, sm: 22 } }} />
                       </Box>
-                      <Box>
+                      <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
                         <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>
                           Date
                         </Typography>
-                        <Typography sx={{ fontSize: '15px', color: '#1e293b', fontWeight: 600 }}>
+                        <Typography sx={{ fontSize: { xs: '13px', sm: '15px' }, color: '#1e293b', fontWeight: 600, wordBreak: 'break-word' }}>
                           {formatDate(interview.scheduled_at)}
                         </Typography>
                       </Box>
                     </Box>
 
                     {/* Time */}
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: 1.5, sm: 2 }, minWidth: 0 }}>
                       <Box sx={{
-                        width: 44,
-                        height: 44,
+                        width: { xs: 36, sm: 44 },
+                        height: { xs: 36, sm: 44 },
                         borderRadius: '10px',
                         background: '#f0fdf4',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        flexShrink: 0
                       }}>
-                        <AccessTime sx={{ color: '#10b981', fontSize: 22 }} />
+                        <AccessTime sx={{ color: '#10b981', fontSize: { xs: 18, sm: 22 } }} />
                       </Box>
-                      <Box>
+                      <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
                         <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>
                           Time
                         </Typography>
-                        <Typography sx={{ fontSize: '15px', color: '#1e293b', fontWeight: 600 }}>
+                        <Typography sx={{ fontSize: { xs: '13px', sm: '15px' }, color: '#1e293b', fontWeight: 600 }}>
                           {formatTime(interview.scheduled_at)}
                         </Typography>
                       </Box>
@@ -326,26 +334,29 @@ const VideoInterviewDetail: React.FC = () => {
 
                   {/* Meeting Link */}
                   {(interview.zoom_meeting_url || interview.zoom_meeting_link) && (
-                    <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid #f1f5f9' }}>
+                    <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid #f1f5f9', maxWidth: '100%', overflow: 'hidden' }}>
                       <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', mb: 2 }}>
                         Meeting Link
                       </Typography>
                       <Box sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 2,
+                        gap: 1,
                         background: '#f8fafc',
-                        padding: '12px 16px',
+                        padding: { xs: '10px 12px', sm: '12px 16px' },
                         borderRadius: '10px',
-                        border: '1px solid #e2e8f0'
+                        border: '1px solid #e2e8f0',
+                        maxWidth: '100%',
+                        overflow: 'hidden'
                       }}>
                         <Typography sx={{
-                          fontSize: '14px',
+                          fontSize: { xs: '12px', sm: '14px' },
                           color: '#3b82f6',
                           flex: 1,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          minWidth: 0
                         }}>
                           {interview.zoom_meeting_url || interview.zoom_meeting_link}
                         </Typography>
@@ -353,18 +364,18 @@ const VideoInterviewDetail: React.FC = () => {
                           <IconButton
                             size="small"
                             onClick={() => copyToClipboard(interview.zoom_meeting_url || interview.zoom_meeting_link)}
-                            sx={{ color: '#64748b' }}
+                            sx={{ color: '#64748b', flexShrink: 0, padding: { xs: '4px', sm: '8px' } }}
                           >
-                            <ContentCopy sx={{ fontSize: 18 }} />
+                            <ContentCopy sx={{ fontSize: { xs: 16, sm: 18 } }} />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Open Meeting">
                           <IconButton
                             size="small"
                             onClick={() => window.open(interview.zoom_meeting_url || interview.zoom_meeting_link, '_blank')}
-                            sx={{ color: '#3b82f6' }}
+                            sx={{ color: '#3b82f6', flexShrink: 0, padding: { xs: '4px', sm: '8px' } }}
                           >
-                            <OpenInNew sx={{ fontSize: 18 }} />
+                            <OpenInNew sx={{ fontSize: { xs: 16, sm: 18 } }} />
                           </IconButton>
                         </Tooltip>
                       </Box>
@@ -420,7 +431,9 @@ const VideoInterviewDetail: React.FC = () => {
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                padding: { xs: '16px', sm: '20px', md: '24px' }
+                padding: { xs: '16px', sm: '20px', md: '24px' },
+                maxWidth: '100%',
+                boxSizing: 'border-box'
               }}>
                 <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <i className="fas fa-sticky-note" style={{ color: '#f59e0b' }}></i>
@@ -468,7 +481,10 @@ const VideoInterviewDetail: React.FC = () => {
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                padding: { xs: '16px', sm: '20px', md: '24px' }
+                padding: { xs: '16px', sm: '20px', md: '24px' },
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                overflow: 'hidden'
               }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography sx={{ fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -675,17 +691,18 @@ const VideoInterviewDetail: React.FC = () => {
                   background: 'white',
                   borderRadius: '16px',
                   border: '1px solid #e2e8f0',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  maxWidth: '100%'
                 }}>
                   <Box sx={{
                     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    padding: '32px',
+                    padding: { xs: '20px', sm: '32px' },
                     color: 'white',
                     textAlign: 'center'
                   }}>
                     <Box sx={{
-                      width: 80,
-                      height: 80,
+                      width: { xs: 60, sm: 80 },
+                      height: { xs: 60, sm: 80 },
                       borderRadius: '50%',
                       background: 'rgba(255,255,255,0.2)',
                       display: 'flex',
@@ -694,12 +711,12 @@ const VideoInterviewDetail: React.FC = () => {
                       margin: '0 auto 16px',
                       border: '3px solid rgba(255,255,255,0.3)'
                     }}>
-                      <CheckCircle sx={{ fontSize: 40 }} />
+                      <CheckCircle sx={{ fontSize: { xs: 30, sm: 40 } }} />
                     </Box>
-                    <Typography sx={{ fontSize: '22px', fontWeight: 700, mb: 1 }}>
+                    <Typography sx={{ fontSize: { xs: '18px', sm: '22px' }, fontWeight: 700, mb: 1 }}>
                       Score Generated Successfully!
                     </Typography>
-                    <Typography sx={{ fontSize: '14px', opacity: 0.9, mb: 3 }}>
+                    <Typography sx={{ fontSize: { xs: '13px', sm: '14px' }, opacity: 0.9, mb: 3 }}>
                       Interview has been scored and results are available
                     </Typography>
                     <Button
@@ -709,10 +726,10 @@ const VideoInterviewDetail: React.FC = () => {
                       sx={{
                         background: 'white',
                         color: '#059669',
-                        padding: '14px 32px',
+                        padding: { xs: '12px 24px', sm: '14px 32px' },
                         borderRadius: '12px',
                         fontWeight: 700,
-                        fontSize: '16px',
+                        fontSize: { xs: '14px', sm: '16px' },
                         textTransform: 'none',
                         boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
                         '&:hover': {
@@ -729,13 +746,15 @@ const VideoInterviewDetail: React.FC = () => {
             </Box>
 
             {/* Sidebar */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, overflow: 'hidden' }}>
               {/* Candidate Card */}
               <Box sx={{
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                padding: '24px'
+                padding: { xs: '16px', sm: '24px' },
+                maxWidth: '100%',
+                boxSizing: 'border-box'
               }}>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Person sx={{ fontSize: 18 }} />
@@ -791,7 +810,9 @@ const VideoInterviewDetail: React.FC = () => {
                 background: 'white',
                 borderRadius: '16px',
                 border: '1px solid #e2e8f0',
-                padding: '24px'
+                padding: { xs: '16px', sm: '24px' },
+                maxWidth: '100%',
+                boxSizing: 'border-box'
               }}>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', mb: 3 }}>
                   Quick Actions
@@ -857,8 +878,10 @@ const VideoInterviewDetail: React.FC = () => {
               <Box sx={{
                 background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
                 borderRadius: '16px',
-                padding: '24px',
-                border: '1px solid #fbbf24'
+                padding: { xs: '16px', sm: '24px' },
+                border: '1px solid #fbbf24',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
               }}>
                 <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#92400e', mb: 2 }}>
                   ℹ️ Interview Tips

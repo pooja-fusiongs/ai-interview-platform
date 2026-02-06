@@ -3,12 +3,15 @@
 FastAPI POST endpoint for job applications
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import sys
 import os
+import uuid
+import json
+from typing import Optional
 from dotenv import load_dotenv
 
 # Add parent directories to path
@@ -17,9 +20,48 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
-from models import Job, JobApplication
+from models import Job, JobApplication, CandidateResume
 from schemas import JobApplicationCreate, JobApplicationResponse
 from database import get_db, engine
+
+# Create uploads directory
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "../../../uploads/resumes")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def _parse_resume_text(file_path: str, filename: str) -> str:
+    """Extract text from PDF or DOCX file."""
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    text = ""
+
+    if ext == "pdf":
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(file_path)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        except Exception as e:
+            print(f"PDF parsing error: {e}")
+
+    elif ext in ("docx", "doc"):
+        try:
+            from docx import Document
+            doc = Document(file_path)
+            for para in doc.paragraphs:
+                text += para.text + "\n"
+        except Exception as e:
+            print(f"DOCX parsing error: {e}")
+
+    elif ext == "txt":
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+        except Exception as e:
+            print(f"TXT parsing error: {e}")
+
+    return text.strip()
 
 # Test database connection
 print("🔍 Testing database connection for job applications...")
@@ -218,6 +260,169 @@ def apply_for_job(
             status_code=500,
             detail=f"Failed to submit application: {str(e)}"
         )
+
+@app.post("/api/job/apply-with-resume")
+async def apply_for_job_with_resume(
+    job_id: int = Form(...),
+    applicant_name: str = Form(...),
+    applicant_email: str = Form(...),
+    applicant_phone: str = Form(""),
+    experience_years: int = Form(0),
+    current_company: str = Form(""),
+    current_position: str = Form(""),
+    cover_letter: str = Form(""),
+    expected_salary: str = Form(""),
+    availability: str = Form(""),
+    resume: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply for a job with resume file upload
+
+    - **job_id**: ID of the job to apply for (required)
+    - **applicant_name**: Full name of applicant (required)
+    - **applicant_email**: Email of applicant (required)
+    - **resume**: Resume file (PDF/DOCX) (optional but recommended)
+    """
+    try:
+        print(f"🔍 Processing job application with resume for job ID: {job_id}")
+
+        # Validate job exists
+        job = db.query(Job).filter(Job.id == job_id, Job.is_active == True).first()
+        if not job:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Job with ID {job_id} not found or not active"
+            )
+
+        # Check if user already applied
+        existing_application = db.query(JobApplication).filter(
+            JobApplication.job_id == job_id,
+            JobApplication.applicant_email == applicant_email
+        ).first()
+
+        if existing_application:
+            raise HTTPException(
+                status_code=400,
+                detail="You have already applied for this job"
+            )
+
+        # Create new application
+        new_application = JobApplication(
+            job_id=job_id,
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            applicant_phone=applicant_phone,
+            cover_letter=cover_letter,
+            experience_years=experience_years,
+            current_company=current_company,
+            current_position=current_position,
+            expected_salary=expected_salary,
+            availability=availability,
+            status="Applied"
+        )
+
+        db.add(new_application)
+        db.flush()  # Get application.id
+
+        resume_info = None
+        if resume and resume.filename:
+            # Save resume file
+            ext = resume.filename.rsplit(".", 1)[-1] if "." in resume.filename else "pdf"
+            unique_name = f"{new_application.id}_{uuid.uuid4().hex[:8]}.{ext}"
+            file_path = os.path.join(UPLOAD_DIR, unique_name)
+
+            content = await resume.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+            # Parse resume text
+            parsed_text = _parse_resume_text(file_path, resume.filename)
+
+            # Extract skills by matching against job skills
+            parsed_skills = []
+            if parsed_text and job.skills_required:
+                try:
+                    job_skills = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
+                    text_lower = parsed_text.lower()
+                    parsed_skills = [s for s in job_skills if s.lower() in text_lower]
+                except Exception:
+                    pass
+
+            # Create CandidateResume record
+            candidate_resume = CandidateResume(
+                candidate_id=new_application.id,
+                job_id=job_id,
+                resume_path=file_path,
+                original_filename=resume.filename,
+                file_size=len(content),
+                parsed_text=parsed_text,
+                skills=json.dumps(parsed_skills),
+                experience_years=experience_years,
+                parsing_status="completed" if parsed_text else "failed"
+            )
+            db.add(candidate_resume)
+
+            # Update resume_url in application
+            new_application.resume_url = f"/uploads/resumes/{unique_name}"
+
+            resume_info = {
+                "uploaded": True,
+                "filename": resume.filename,
+                "parsed_text_length": len(parsed_text),
+                "parsed_skills": parsed_skills
+            }
+            print(f"✅ Resume uploaded and parsed: {resume.filename}")
+
+        db.commit()
+        db.refresh(new_application)
+
+        print(f"✅ Application submitted successfully: ID={new_application.id}")
+
+        # 🚀 TRIGGER AUTOMATIC QUESTION GENERATION
+        try:
+            print(f"🤖 Triggering automatic question generation for application {new_application.id}")
+
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+            from services.ai_question_generator import get_question_generator
+
+            generator = get_question_generator()
+            result = generator.generate_questions(
+                db=db,
+                job_id=job_id,
+                candidate_id=new_application.id,
+                total_questions=10
+            )
+
+            print(f"✅ Questions generated successfully: {result['total_questions']} questions in {result['mode']} mode")
+
+        except Exception as e:
+            print(f"⚠️ Question generation failed (non-critical): {e}")
+            pass
+
+        return {
+            "id": new_application.id,
+            "job_id": new_application.job_id,
+            "applicant_name": new_application.applicant_name,
+            "applicant_email": new_application.applicant_email,
+            "status": new_application.status,
+            "applied_at": new_application.applied_at.isoformat() if new_application.applied_at else None,
+            "resume_uploaded": resume_info is not None,
+            "resume_info": resume_info
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error processing application: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to submit application: {str(e)}"
+        )
+
 
 @app.get("/api/job/{job_id}/applications")
 def get_job_applications(job_id: int, db: Session = Depends(get_db)):

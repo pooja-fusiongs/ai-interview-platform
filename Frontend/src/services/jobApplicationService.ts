@@ -25,6 +25,7 @@ export interface JobApplicationData {
   current_position?: string;
   expected_salary?: string;
   availability?: string;
+  resume?: File;  // Added for file upload
 }
 
 export const jobApplicationService = {
@@ -45,11 +46,35 @@ export const jobApplicationService = {
     }
   },
 
-  // Submit job application
+  // Submit job application with resume file upload
   submitApplication: async (applicationData: JobApplicationData) => {
     try {
-      const response = await apiClient.post('/api/job/apply', applicationData);
-      return response.data;
+      // If there's a resume file, use FormData with the new endpoint
+      if (applicationData.resume) {
+        const formData = new FormData();
+        formData.append('job_id', applicationData.job_id.toString());
+        formData.append('applicant_name', applicationData.applicant_name);
+        formData.append('applicant_email', applicationData.applicant_email);
+        formData.append('applicant_phone', applicationData.applicant_phone || '');
+        formData.append('experience_years', (applicationData.experience_years || 0).toString());
+        formData.append('current_company', applicationData.current_company || '');
+        formData.append('current_position', applicationData.current_position || '');
+        formData.append('cover_letter', applicationData.cover_letter || '');
+        formData.append('expected_salary', applicationData.expected_salary || '');
+        formData.append('availability', applicationData.availability || '');
+        formData.append('resume', applicationData.resume);
+
+        const response = await apiClient.post('/api/job/apply-with-resume', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        return response.data;
+      } else {
+        // No resume file, use regular JSON endpoint
+        const response = await apiClient.post('/api/job/apply', applicationData);
+        return response.data;
+      }
     } catch (error) {
       console.error('Error submitting application:', error);
       throw error;

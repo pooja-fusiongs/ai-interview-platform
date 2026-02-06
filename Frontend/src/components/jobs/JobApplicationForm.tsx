@@ -98,35 +98,46 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
 
   const handleSubmit = async (): Promise<void> => {
     if (!job) return
-    
+
     const loadingToast = showLoading('Submitting application...')
-    
+
     try {
       console.log('🔍 Submitting job application for job ID:', job.id)
-      
-      // Prepare application data for API
-      const applicationData = {
-        job_id: job.id,
-        applicant_name: `${formData.firstName} ${formData.lastName}`,
-        applicant_email: formData.email,
-        applicant_phone: formData.phone,
-        resume_url: formData.resume ? 'uploaded_resume.pdf' : null, // Will be updated after upload
-        cover_letter: formData.coverLetter,
-        experience_years: formData.experience ? parseInt(formData.experience.split('-')[0]) : null,
-        current_company: null, // Not collected in current form
-        current_position: null, // Not collected in current form
-        expected_salary: formData.expectedSalary,
-        availability: formData.noticePeriod
-      }
-      
-      // Call the job application API using apiClient
-      const response = await apiClient.post('/api/job/apply', applicationData)
-      const result = response.data
-      console.log('✅ Application submitted successfully:', result)
 
-      // If resume is uploaded, process it
-      if (formData.resume && result.id) {
-        await handleResumeUploadAndParse(result.id, job.id)
+      // Use FormData with new endpoint if resume is present
+      if (formData.resume) {
+        const formDataUpload = new FormData()
+        formDataUpload.append('job_id', job.id.toString())
+        formDataUpload.append('applicant_name', `${formData.firstName} ${formData.lastName}`)
+        formDataUpload.append('applicant_email', formData.email)
+        formDataUpload.append('applicant_phone', formData.phone || '')
+        formDataUpload.append('experience_years', formData.experience ? formData.experience.split('-')[0] : '0')
+        formDataUpload.append('current_company', '')
+        formDataUpload.append('current_position', '')
+        formDataUpload.append('cover_letter', formData.coverLetter || '')
+        formDataUpload.append('expected_salary', formData.expectedSalary || '')
+        formDataUpload.append('availability', formData.noticePeriod || '')
+        formDataUpload.append('resume', formData.resume)
+
+        const response = await apiClient.post('/api/job/apply-with-resume', formDataUpload, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        console.log('✅ Application with resume submitted successfully:', response.data)
+      } else {
+        // No resume - use regular JSON endpoint
+        const applicationData = {
+          job_id: job.id,
+          applicant_name: `${formData.firstName} ${formData.lastName}`,
+          applicant_email: formData.email,
+          applicant_phone: formData.phone,
+          cover_letter: formData.coverLetter,
+          experience_years: formData.experience ? parseInt(formData.experience.split('-')[0]) : null,
+          expected_salary: formData.expectedSalary,
+          availability: formData.noticePeriod
+        }
+
+        const response = await apiClient.post('/api/job/apply', applicationData)
+        console.log('✅ Application submitted successfully:', response.data)
       }
 
       // Dismiss loading toast and show success
@@ -137,7 +148,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
       if (onApplicationSubmitted) {
         onApplicationSubmitted()
       }
-      
+
     } catch (error: any) {
       console.error('❌ Application error:', error)
 
@@ -146,7 +157,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
       const errorMessage = error.response?.data?.detail || 'Network error. Please check your connection and try again.'
       showError(errorMessage)
     }
-    
+
     onClose()
     // Reset form
     setFormData({
@@ -170,38 +181,6 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
       agreeTerms: false
     })
     setCurrentStep(1)
-  }
-
-  const handleResumeUploadAndParse = async (candidateId: number, jobId: number): Promise<void> => {
-    if (!formData.resume) return
-    
-    try {
-      console.log('📄 Uploading resume for candidate:', candidateId)
-      
-      // Create FormData for file upload
-      const formDataUpload = new FormData()
-      formDataUpload.append('file', formData.resume)
-      formDataUpload.append('job_id', jobId.toString())
-      
-      // Upload resume using apiClient
-      const uploadResponse = await apiClient.post(`/api/candidates/${candidateId}/resume/upload`, formDataUpload, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      console.log('✅ Resume uploaded successfully:', uploadResponse.data)
-
-      // Parse resume
-      console.log('🔍 Parsing resume...')
-      try {
-        const parseResponse = await apiClient.post(`/api/candidates/${candidateId}/resume/parse`)
-        console.log('✅ Resume parsed successfully:', parseResponse.data)
-        console.log(`📊 Skills found: ${parseResponse.data.skills?.length || 0}`)
-        console.log(`📅 Experience: ${parseResponse.data.total_experience_years} years (${parseResponse.data.experience_level})`)
-      } catch (parseError) {
-        console.error('❌ Resume parsing failed:', parseError)
-      }
-    } catch (error) {
-      console.error('❌ Resume processing error:', error)
-    }
   }
 
   const renderStepContent = () => {

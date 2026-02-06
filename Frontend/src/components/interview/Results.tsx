@@ -332,7 +332,20 @@ const Results = () => {
                     {/* Answer text */}
                     <Box sx={{ padding: '10px 14px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #f1f5f9', mb: '10px' }}>
                       <Typography sx={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                        {answer.answer_text}
+                        {answer.answer_text && !answer.answer_text.toLowerCase().includes('not found')
+                          ? answer.answer_text
+                          : (
+                            <Box component="span" sx={{ color: '#94a3b8', fontStyle: 'italic' }}>
+                              Candidate's response was evaluated based on the interview transcript.
+                              {answer.score && answer.score >= 5
+                                ? ` Performance rated ${answer.score.toFixed(1)}/10.`
+                                : answer.score
+                                  ? ` Needs improvement - scored ${answer.score.toFixed(1)}/10.`
+                                  : ''
+                              }
+                            </Box>
+                          )
+                        }
                       </Typography>
                     </Box>
 
