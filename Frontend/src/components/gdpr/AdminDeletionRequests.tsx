@@ -64,7 +64,7 @@ const AdminDeletionRequests: React.FC = () => {
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
         ) : (
           <TableContainer component={Paper} elevation={2} sx={{ overflowX: 'auto' }}>
-            <Table sx={{ minWidth: { xs: 700, md: 'auto' } }}
+            <Table sx={{ minWidth: { xs: 700, md: 'auto' } }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#fafafa' }}>
                   <TableCell><strong>Request ID</strong></TableCell>

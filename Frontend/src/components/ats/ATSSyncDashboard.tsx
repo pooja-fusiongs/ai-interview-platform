@@ -69,7 +69,7 @@ const ATSSyncDashboard: React.FC = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
         <Box sx={{ mb: { xs: 3, md: 4 } }}>
           <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '16px', md: '18px' } }}>Trigger Sync</Typography>
-          <ButtonGroup variant="contained" orientation={{ xs: 'vertical', sm: 'horizontal' } as any} sx={{ flexDirection: { xs: 'column', sm: 'row' }, '& .MuiButton-root': { minWidth: { xs: '100%', sm: 'auto' } } }}
+          <ButtonGroup variant="contained" orientation={{ xs: 'vertical', sm: 'horizontal' } as any} sx={{ flexDirection: { xs: 'column', sm: 'row' }, '& .MuiButton-root': { minWidth: { xs: '100%', sm: 'auto' } } }}>
             <Button startIcon={<Work />} onClick={() => handleSync('jobs')} disabled={!!syncing}>
               {syncing === 'jobs' ? <CircularProgress size={20} /> : 'Sync Jobs'}
             </Button>
@@ -86,7 +86,7 @@ const ATSSyncDashboard: React.FC = () => {
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
         ) : (
           <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
-            <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}
+            <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
               <TableHead>
                 <TableRow>
                   <TableCell>ID</TableCell>

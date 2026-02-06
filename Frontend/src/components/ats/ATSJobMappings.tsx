@@ -64,7 +64,7 @@ const ATSJobMappings: React.FC = () => {
 
         <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '16px', md: '18px' } }}>Job Mappings</Typography>
         <TableContainer component={Paper} sx={{ mb: { xs: 3, md: 4 }, overflowX: 'auto' }}>
-          <Table sx={{ minWidth: { xs: 400, md: 'auto' } }}
+          <Table sx={{ minWidth: { xs: 400, md: 'auto' } }}>
             <TableHead>
               <TableRow>
                 <TableCell>ATS Job ID</TableCell>
@@ -93,7 +93,7 @@ const ATSJobMappings: React.FC = () => {
 
         <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '16px', md: '18px' } }}>Candidate Mappings</Typography>
         <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
-          <Table sx={{ minWidth: { xs: 400, md: 'auto' } }}
+          <Table sx={{ minWidth: { xs: 400, md: 'auto' } }}>
             <TableHead>
               <TableRow>
                 <TableCell>ATS Candidate ID</TableCell>
