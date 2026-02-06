@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-// import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Candidate, CandidateFilters } from '../../types'
 import { apiClient } from '../../services/api'
 import { toast } from 'react-hot-toast'
@@ -40,6 +40,7 @@ import Navigation from '../layout/sidebar'
 import { CloudUpload as CloudUploadIcon, Visibility as VisibilityIcon } from '@mui/icons-material'
 
 const Candidates = () => {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCandidate, setMenuCandidate] = useState<Candidate | null>(null)
@@ -68,6 +69,7 @@ const Candidates = () => {
   const [transcriptText, setTranscriptText] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [, setCandidateInterviews] = useState<any[]>([])
+  const [candidateQuestionSessions, setCandidateQuestionSessions] = useState<Record<number, string>>({})
 
   // Fetch candidates from API
   const fetchCandidates = async () => {
@@ -80,6 +82,18 @@ const Candidates = () => {
       if (response.data.success && response.data.data) {
         setCandidates(response.data.data)
         console.log(`✅ Successfully loaded ${response.data.data.length} candidates`)
+
+        // Populate candidateQuestionSessions from API response
+        const sessions: Record<number, string> = {}
+        response.data.data.forEach((candidate: any) => {
+          if (candidate.questionSessionId) {
+            sessions[candidate.id] = candidate.questionSessionId.toString()
+          }
+        })
+        if (Object.keys(sessions).length > 0) {
+          setCandidateQuestionSessions(prev => ({ ...prev, ...sessions }))
+          console.log(`✅ Loaded ${Object.keys(sessions).length} question sessions from API`)
+        }
       } else {
         console.warn('⚠️ No candidates data received from API')
         setCandidates([])
@@ -266,12 +280,23 @@ const Candidates = () => {
     try {
       setActionLoading(true)
       toast.loading('Generating questions...')
-      await apiClient.post(`/api/candidates/${menuCandidate.id}/generate-questions`, {
+      const response = await apiClient.post(`/api/candidates/${menuCandidate.id}/generate-questions`, {
         job_id: jobId,
         total_questions: 5 // Default
       })
       toast.dismiss()
-      toast.success('Questions generated successfully! Added to candidate object.')
+
+      // Save the session ID for this candidate
+      const sessionId = response.data?.session_id || response.data?.id
+      if (sessionId) {
+        setCandidateQuestionSessions(prev => ({
+          ...prev,
+          [menuCandidate.id]: sessionId
+        }))
+        toast.success('Questions generated! Click "Review Questions" to approve.', { duration: 4000 })
+      } else {
+        toast.success('Questions generated successfully!')
+      }
     } catch (error) {
       console.error(error)
       toast.dismiss()
@@ -767,28 +792,52 @@ const Candidates = () => {
 
                         {/* Action Buttons */}
                         <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {/* Generate AI Questions Button */}
-                          <Button
-                            size="small"
-                            onClick={() => {
-                              setMenuCandidate(candidate);
-                              handleActionClick('questions');
-                            }}
-                            sx={{
-                              background: 'rgba(245, 158, 11, 0.1)',
-                              color: '#d97706',
-                              border: '1px solid #fbbf2480',
-                              borderRadius: '8px',
-                              textTransform: 'none',
-                              fontWeight: 600,
-                              fontSize: '11px',
-                              padding: '6px 12px',
-                              '&:hover': { background: 'rgba(245, 158, 11, 0.2)' }
-                            }}
-                          >
-                            <i className="fas fa-brain" style={{ marginRight: 6, fontSize: '10px' }} />
-                            Generate AI Questions
-                          </Button>
+                          {/* Generate AI Questions or Review Questions Button */}
+                          {candidateQuestionSessions[candidate.id] ? (
+                            <Button
+                              size="small"
+                              onClick={() => navigate(`/interview-outline/${candidateQuestionSessions[candidate.id]}`)}
+                              sx={{
+                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                color: 'white',
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                fontSize: '11px',
+                                padding: '6px 12px',
+                                '&:hover': {
+                                  background: 'linear-gradient(135deg, #d97706, #b45309)',
+                                  transform: 'translateY(-1px)',
+                                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                                }
+                              }}
+                            >
+                              <i className="fas fa-list-check" style={{ marginRight: 6, fontSize: '10px' }} />
+                              Review Questions
+                            </Button>
+                          ) : (
+                            <Button
+                              size="small"
+                              onClick={() => {
+                                setMenuCandidate(candidate);
+                                handleActionClick('questions');
+                              }}
+                              sx={{
+                                background: 'rgba(245, 158, 11, 0.1)',
+                                color: '#d97706',
+                                border: '1px solid #fbbf2480',
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                fontSize: '11px',
+                                padding: '6px 12px',
+                                '&:hover': { background: 'rgba(245, 158, 11, 0.2)' }
+                              }}
+                            >
+                              <i className="fas fa-brain" style={{ marginRight: 6, fontSize: '10px' }} />
+                              Generate AI Questions
+                            </Button>
+                          )}
 
                           {/* Upload Transcript Button - Only show if no transcript */}
                           {!candidate.hasTranscript && (
@@ -1892,24 +1941,43 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 >
                   Close
                 </Button>
-                <Button
-                  onClick={() => {
-                    if (detailCandidate) {
-                      setMenuCandidate(detailCandidate)
-                      handleActionClick('questions')
-                    }
-                    handleCloseDetails()
-                  }}
-                  variant="contained"
-                  sx={{
-                    background: '#f59e0b',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    '&:hover': { background: '#d97706' }
-                  }}
-                >
-                  Generate Questions
-                </Button>
+                {detailCandidate && candidateQuestionSessions[detailCandidate.id] ? (
+                  <Button
+                    onClick={() => {
+                      navigate(`/interview-outline/${candidateQuestionSessions[detailCandidate.id]}`)
+                      handleCloseDetails()
+                    }}
+                    variant="contained"
+                    sx={{
+                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' }
+                    }}
+                  >
+                    <i className="fas fa-list-check" style={{ marginRight: 8 }} />
+                    Review Questions
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      if (detailCandidate) {
+                        setMenuCandidate(detailCandidate)
+                        handleActionClick('questions')
+                      }
+                      handleCloseDetails()
+                    }}
+                    variant="contained"
+                    sx={{
+                      background: '#f59e0b',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      '&:hover': { background: '#d97706' }
+                    }}
+                  >
+                    Generate Questions
+                  </Button>
+                )}
               </DialogActions>
             </>
           )}

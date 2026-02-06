@@ -334,6 +334,16 @@ const ExpertReview: React.FC = () => {
   return (
     <Navigation>
       <Box sx={{ p: 3, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+        {/* Header */}
+        <Box sx={{ mb: 3 }}>
+          <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
+            AI Generated Questions
+          </Typography>
+          <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
+            Review and approve AI-generated interview questions for candidates
+          </Typography>
+        </Box>
+
         {/* Search and Filter */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
           <TextField
@@ -538,28 +548,50 @@ const ExpertReview: React.FC = () => {
                           {getStatusChip(questionSet.status)}
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: 'flex', gap: 0.5 }}>
-                            <IconButton 
-                              size="small" 
-                              sx={{ color: '#4caf50' }}
-                              onClick={() => handleApproveSet(questionSet.id)}
-                            >
-                              <ThumbUpIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton 
-                              size="small" 
-                              sx={{ color: '#f44336' }}
-                              onClick={() => handleRejectSet(questionSet.id)}
-                            >
-                              <ThumbDownIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton 
-                              size="small" 
-                              sx={{ color: '#666' }}
+                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <IconButton
+                              size="small"
                               onClick={() => handleViewQuestions(questionSet)}
+                              title={questionSet.status === 'pending' ? 'Review Questions' : 'View Questions'}
+                              sx={{
+                                color: questionSet.status === 'pending' ? '#f59e0b' : questionSet.status === 'approved' ? '#16a34a' : '#64748b',
+                                border: '1px solid',
+                                borderColor: questionSet.status === 'pending' ? '#f59e0b40' : questionSet.status === 'approved' ? '#16a34a40' : '#64748b40',
+                                '&:hover': {
+                                  background: questionSet.status === 'pending' ? '#f59e0b10' : questionSet.status === 'approved' ? '#16a34a10' : '#64748b10'
+                                }
+                              }}
                             >
                               <VisibilityIcon fontSize="small" />
                             </IconButton>
+                            {questionSet.status === 'pending' && (
+                              <>
+                                <IconButton
+                                  size="small"
+                                  sx={{
+                                    color: '#4caf50',
+                                    border: '1px solid #4caf5040',
+                                    '&:hover': { background: '#4caf5010' }
+                                  }}
+                                  onClick={() => handleApproveSet(questionSet.id)}
+                                  title="Approve All"
+                                >
+                                  <ThumbUpIcon fontSize="small" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  sx={{
+                                    color: '#f44336',
+                                    border: '1px solid #f4433640',
+                                    '&:hover': { background: '#f4433610' }
+                                  }}
+                                  onClick={() => handleRejectSet(questionSet.id)}
+                                  title="Reject All"
+                                >
+                                  <ThumbDownIcon fontSize="small" />
+                                </IconButton>
+                              </>
+                            )}
                           </Box>
                         </TableCell>
                       </TableRow>

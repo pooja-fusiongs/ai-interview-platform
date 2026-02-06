@@ -22,7 +22,7 @@ const DataExportPage: React.FC = () => {
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const data = await gdprService.getExportRequests();
+      const data = await gdprService.getMyExportRequests();
       setRequests(data);
     } catch {
       toast.error('Failed to load export requests');

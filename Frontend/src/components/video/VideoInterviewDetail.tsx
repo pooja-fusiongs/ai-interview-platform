@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Chip, CircularProgress, Alert,
-  TextField, Button, IconButton, Tooltip, Avatar, Divider
+  TextField, Button, IconButton, Tooltip, Avatar, Divider,
+  LinearProgress
 } from '@mui/material';
 import {
   ArrowBack,
@@ -19,7 +20,10 @@ import {
   Cancel,
   CheckCircle,
   Description,
-  Refresh
+  Refresh,
+  CloudUpload,
+  Assessment,
+  Star
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
@@ -42,6 +46,10 @@ const VideoInterviewDetail: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [transcriptText, setTranscriptText] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [scoreResult, setScoreResult] = useState<any>(null);
+  const [editingTranscript, setEditingTranscript] = useState(false);
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -72,6 +80,45 @@ const VideoInterviewDetail: React.FC = () => {
       toast.error(err.response?.data?.detail || 'Failed to load transcript');
     } finally {
       setTranscriptLoading(false);
+    }
+  };
+
+  const handleUploadTranscript = async () => {
+    if (!transcriptText.trim()) {
+      toast.error('Please enter or paste the transcript text');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcriptText);
+
+      if (result.score_generated && result.score_result) {
+        setScoreResult(result.score_result);
+        setTranscript(transcriptText);
+        setEditingTranscript(false);
+        setTranscriptText('');
+        toast.success('Transcript uploaded and score generated successfully!');
+        // Update interview status
+        setInterview((prev: any) => ({ ...prev, status: 'completed' }));
+      } else {
+        setTranscript(transcriptText);
+        setEditingTranscript(false);
+        setTranscriptText('');
+        // Show detailed error message
+        if (result.scoring_error) {
+          toast.error(`Scoring failed: ${result.scoring_error}`, { duration: 6000 });
+        } else if (result.questions_found === 0) {
+          toast.error('No questions found. Please generate and approve questions first.', { duration: 5000 });
+        } else {
+          toast.success(result.message || 'Transcript uploaded (scoring not available)');
+        }
+      }
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      toast.error(err.response?.data?.detail || 'Failed to upload transcript');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -420,49 +467,12 @@ const VideoInterviewDetail: React.FC = () => {
                     <Description sx={{ color: '#8b5cf6' }} />
                     Interview Transcript
                   </Typography>
-                  {!transcript && status === 'completed' && (
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={transcriptLoading ? <CircularProgress size={16} /> : <Refresh />}
-                      onClick={fetchTranscript}
-                      disabled={transcriptLoading}
-                      sx={{
-                        borderRadius: '8px',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        borderColor: '#8b5cf6',
-                        color: '#8b5cf6',
-                        '&:hover': {
-                          borderColor: '#7c3aed',
-                          background: 'rgba(139, 92, 246, 0.05)'
-                        }
-                      }}
-                    >
-                      {transcriptLoading ? 'Loading...' : 'Generate Transcript'}
-                    </Button>
-                  )}
-                </Box>
-
-                {transcript ? (
-                  <Box sx={{
-                    background: '#f8fafc',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    maxHeight: '400px',
-                    overflow: 'auto',
-                    border: '1px solid #e2e8f0',
-                    position: 'relative'
-                  }}>
-                    {/* Copy Button */}
+                  {transcript && (
                     <Tooltip title="Copy Transcript">
                       <IconButton
                         onClick={() => copyToClipboard(transcript)}
                         sx={{
-                          position: 'absolute',
-                          top: 12,
-                          right: 12,
-                          background: 'white',
+                          background: '#f8fafc',
                           border: '1px solid #e2e8f0',
                           '&:hover': {
                             background: '#f59e0b',
@@ -474,39 +484,173 @@ const VideoInterviewDetail: React.FC = () => {
                         <ContentCopy sx={{ fontSize: 18 }} />
                       </IconButton>
                     </Tooltip>
-                    <Typography
-                      component="pre"
-                      sx={{
-                        fontFamily: 'inherit',
-                        fontSize: '14px',
-                        color: '#374151',
-                        lineHeight: 1.8,
-                        whiteSpace: 'pre-wrap',
-                        wordWrap: 'break-word',
-                        margin: 0,
-                        paddingRight: '40px' // Space for copy button
-                      }}
-                    >
-                      {transcript}
-                    </Typography>
+                  )}
+                </Box>
+
+                {/* Show existing transcript or upload form */}
+                {transcript && !editingTranscript ? (
+                  <Box>
+                    <Box sx={{
+                      background: '#f8fafc',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      maxHeight: '300px',
+                      overflow: 'auto',
+                      border: '1px solid #e2e8f0',
+                      mb: 2
+                    }}>
+                      <Typography
+                        component="pre"
+                        sx={{
+                          fontFamily: 'inherit',
+                          fontSize: '14px',
+                          color: '#374151',
+                          lineHeight: 1.8,
+                          whiteSpace: 'pre-wrap',
+                          wordWrap: 'break-word',
+                          margin: 0
+                        }}
+                      >
+                        {transcript}
+                      </Typography>
+                    </Box>
+                    {/* Re-upload button if no score generated yet */}
+                    {!scoreResult && (
+                      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                        <Button
+                          variant="contained"
+                          fullWidth
+                          startIcon={uploading ? <CircularProgress size={18} sx={{ color: 'white' }} /> : <Refresh />}
+                          onClick={async () => {
+                            try {
+                              setUploading(true);
+                              const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcript!);
+                              if (result.score_generated && result.score_result) {
+                                setScoreResult(result.score_result);
+                                toast.success('Score generated successfully!');
+                                setInterview((prev: any) => ({ ...prev, status: 'completed' }));
+                              } else if (result.scoring_error) {
+                                toast.error(`Scoring failed: ${result.scoring_error}`, { duration: 6000 });
+                              } else {
+                                toast.error('Scoring failed. Check backend logs for details.');
+                              }
+                            } catch (err: any) {
+                              toast.error(err.response?.data?.detail || 'Failed to generate score');
+                            } finally {
+                              setUploading(false);
+                            }
+                          }}
+                          disabled={uploading}
+                          sx={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            fontWeight: 600,
+                            textTransform: 'none',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            '&:hover': {
+                              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)'
+                            }
+                          }}
+                        >
+                          {uploading ? 'Generating Score...' : 'Retry Generate Score'}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          fullWidth
+                          startIcon={<CloudUpload />}
+                          onClick={() => {
+                            setEditingTranscript(true);
+                            setTranscriptText(transcript);
+                          }}
+                          disabled={uploading}
+                          sx={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            fontWeight: 600,
+                            textTransform: 'none',
+                            borderColor: '#8b5cf6',
+                            color: '#8b5cf6',
+                            '&:hover': {
+                              borderColor: '#7c3aed',
+                              background: 'rgba(139, 92, 246, 0.05)'
+                            }
+                          }}
+                        >
+                          Edit Transcript
+                        </Button>
+                      </Box>
+                    )}
                   </Box>
                 ) : (
-                  <Box sx={{
-                    background: '#f8fafc',
-                    borderRadius: '12px',
-                    padding: '40px',
-                    textAlign: 'center',
-                    border: '1px dashed #e2e8f0'
-                  }}>
-                    <Description sx={{ fontSize: 48, color: '#cbd5e1', mb: 2 }} />
-                    <Typography sx={{ fontSize: '15px', color: '#64748b', mb: 1 }}>
-                      No transcript available
-                    </Typography>
-                    <Typography sx={{ fontSize: '13px', color: '#94a3b8' }}>
-                      {status === 'completed'
-                        ? 'Click "Generate Transcript" to create the interview transcript'
-                        : 'Transcript will be generated when the interview is completed'}
-                    </Typography>
+                  <Box>
+                    <TextField
+                      multiline
+                      rows={6}
+                      fullWidth
+                      value={transcriptText}
+                      onChange={(e) => setTranscriptText(e.target.value)}
+                      placeholder="Paste the interview transcript here...&#10;&#10;Example format:&#10;[00:00:00] Interviewer: Hello, welcome to the interview...&#10;[00:00:15] Candidate: Thank you for having me..."
+                      sx={{
+                        mb: 2,
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '12px',
+                          background: '#f8fafc',
+                          fontSize: '14px',
+                          '&:hover': { background: '#f1f5f9' },
+                          '&.Mui-focused': { background: 'white' }
+                        }
+                      }}
+                    />
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      {editingTranscript && (
+                        <Button
+                          variant="outlined"
+                          onClick={() => {
+                            setEditingTranscript(false);
+                            setTranscriptText('');
+                          }}
+                          sx={{
+                            padding: '14px 24px',
+                            borderRadius: '10px',
+                            fontWeight: 600,
+                            textTransform: 'none',
+                            borderColor: '#e2e8f0',
+                            color: '#64748b',
+                            '&:hover': {
+                              borderColor: '#94a3b8',
+                              background: '#f8fafc'
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        startIcon={uploading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CloudUpload />}
+                        onClick={handleUploadTranscript}
+                        disabled={uploading || !transcriptText.trim()}
+                        sx={{
+                          background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                          padding: '14px',
+                          borderRadius: '10px',
+                          fontWeight: 600,
+                          fontSize: '15px',
+                          textTransform: 'none',
+                          boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)',
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
+                          },
+                          '&:disabled': {
+                            background: '#94a3b8',
+                            color: 'white'
+                          }
+                        }}
+                      >
+                        {uploading ? 'Uploading & Generating Score...' : 'Upload & Generate Score'}
+                      </Button>
+                    </Box>
                   </Box>
                 )}
 
@@ -516,6 +660,149 @@ const VideoInterviewDetail: React.FC = () => {
                   </Typography>
                 )}
               </Box>
+
+              {/* Score Results Section */}
+              {scoreResult && (
+                <Box sx={{
+                  background: 'white',
+                  borderRadius: '16px',
+                  border: '1px solid #e2e8f0',
+                  overflow: 'hidden'
+                }}>
+                  {/* Score Header */}
+                  <Box sx={{
+                    background: scoreResult.recommendation === 'select'
+                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                      : scoreResult.recommendation === 'next_round'
+                      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                      : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    padding: '24px',
+                    color: 'white',
+                    textAlign: 'center'
+                  }}>
+                    <Box sx={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px',
+                      border: '3px solid rgba(255,255,255,0.3)'
+                    }}>
+                      <Typography sx={{ fontSize: '28px', fontWeight: 700 }}>
+                        {Math.round(scoreResult.overall_score * 10)}%
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: '20px', fontWeight: 700, mb: 1 }}>
+                      Interview Score
+                    </Typography>
+                    <Chip
+                      icon={<Star sx={{ color: 'white !important' }} />}
+                      label={scoreResult.recommendation?.replace('_', ' ').toUpperCase() || 'N/A'}
+                      sx={{
+                        background: 'rgba(255,255,255,0.2)',
+                        color: 'white',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        '& .MuiChip-icon': { color: 'white' }
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ padding: '24px' }}>
+                    {/* Strengths & Weaknesses */}
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 3, mb: 3 }}>
+                      <Box sx={{
+                        background: '#ecfdf5',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        border: '1px solid #a7f3d0'
+                      }}>
+                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#059669', mb: 1 }}>
+                          Strengths
+                        </Typography>
+                        <Typography sx={{ fontSize: '13px', color: '#047857', lineHeight: 1.6 }}>
+                          {scoreResult.strengths || 'N/A'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{
+                        background: '#fef2f2',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        border: '1px solid #fecaca'
+                      }}>
+                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#dc2626', mb: 1 }}>
+                          Areas for Improvement
+                        </Typography>
+                        <Typography sx={{ fontSize: '13px', color: '#b91c1c', lineHeight: 1.6 }}>
+                          {scoreResult.weaknesses || 'N/A'}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* Per Question Scores */}
+                    {scoreResult.per_question && scoreResult.per_question.length > 0 && (
+                      <Box>
+                        <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Assessment sx={{ color: '#8b5cf6' }} />
+                          Question-wise Analysis
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {scoreResult.per_question.map((pq: any, index: number) => (
+                            <Box key={pq.question_id || index} sx={{
+                              background: '#f8fafc',
+                              borderRadius: '12px',
+                              padding: '16px',
+                              border: '1px solid #e2e8f0'
+                            }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                                  Question {index + 1}
+                                </Typography>
+                                <Chip
+                                  label={`${Math.round(pq.score * 10)}%`}
+                                  size="small"
+                                  sx={{
+                                    background: pq.score >= 7 ? '#ecfdf5' : pq.score >= 5 ? '#fffbeb' : '#fef2f2',
+                                    color: pq.score >= 7 ? '#059669' : pq.score >= 5 ? '#d97706' : '#dc2626',
+                                    fontWeight: 700
+                                  }}
+                                />
+                              </Box>
+                              <LinearProgress
+                                variant="determinate"
+                                value={pq.score * 10}
+                                sx={{
+                                  height: 6,
+                                  borderRadius: 3,
+                                  mb: 1,
+                                  backgroundColor: '#e2e8f0',
+                                  '& .MuiLinearProgress-bar': {
+                                    background: pq.score >= 7 ? '#10b981' : pq.score >= 5 ? '#f59e0b' : '#ef4444',
+                                    borderRadius: 3
+                                  }
+                                }}
+                              />
+                              {pq.extracted_answer && (
+                                <Typography sx={{ fontSize: '12px', color: '#64748b', mb: 1 }}>
+                                  <strong>Answer:</strong> {pq.extracted_answer.substring(0, 150)}...
+                                </Typography>
+                              )}
+                              {pq.feedback && (
+                                <Typography sx={{ fontSize: '12px', color: '#475569', fontStyle: 'italic' }}>
+                                  {pq.feedback}
+                                </Typography>
+                              )}
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              )}
             </Box>
 
             {/* Sidebar */}
@@ -608,27 +895,38 @@ const VideoInterviewDetail: React.FC = () => {
                   >
                     View Fraud Analysis
                   </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<PlayArrow />}
-                    onClick={() => navigate(`/video-room/${videoId}`)}
-                    sx={{
-                      justifyContent: 'flex-start',
-                      padding: '12px 16px',
-                      borderRadius: '10px',
-                      borderColor: '#e2e8f0',
-                      color: '#475569',
-                      fontWeight: 600,
-                      textTransform: 'none',
-                      '&:hover': {
-                        borderColor: '#3b82f6',
-                        background: 'rgba(59, 130, 246, 0.05)',
-                        color: '#3b82f6'
-                      }
-                    }}
-                  >
-                    Open Video Room
-                  </Button>
+                  <Tooltip title={scoreResult || transcript ? 'Interview completed - Video room not available' : 'Open video room for interview'}>
+                    <span style={{ width: '100%' }}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<PlayArrow />}
+                        onClick={() => navigate(`/video-room/${videoId}`)}
+                        disabled={!!scoreResult || !!transcript || status === 'completed'}
+                        sx={{
+                          justifyContent: 'flex-start',
+                          padding: '12px 16px',
+                          borderRadius: '10px',
+                          borderColor: '#e2e8f0',
+                          color: '#475569',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          width: '100%',
+                          '&:hover': {
+                            borderColor: '#3b82f6',
+                            background: 'rgba(59, 130, 246, 0.05)',
+                            color: '#3b82f6'
+                          },
+                          '&:disabled': {
+                            borderColor: '#e2e8f0',
+                            color: '#94a3b8',
+                            background: '#f8fafc'
+                          }
+                        }}
+                      >
+                        {scoreResult || transcript ? 'Interview Completed' : 'Open Video Room'}
+                      </Button>
+                    </span>
+                  </Tooltip>
                 </Box>
               </Box>
 

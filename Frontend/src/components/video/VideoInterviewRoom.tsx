@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, Divider, CircularProgress, Alert,
-  Avatar, Chip, IconButton, Tooltip, TextField
+  Avatar, Chip, IconButton, Tooltip
 } from '@mui/material';
 import {
   Videocam, ArrowBack, AccessTime,
   Description, Security, Mic, MicOff, VideocamOff, CallEnd,
-  ContentCopy, Check, SmartToy, Person, Link as LinkIcon
+  Check, SmartToy, Person, Link as LinkIcon, ContentCopy
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
@@ -33,10 +33,6 @@ const VideoInterviewRoom: React.FC = () => {
   const [ending, setEnding] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
-  const [transcriptText, setTranscriptText] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [scoreResult, setScoreResult] = useState<any>(null);
-  const [copied, setCopied] = useState(false);
   const [dailyLoaded, setDailyLoaded] = useState(false);
   const [callJoined, setCallJoined] = useState(false);
 
@@ -71,9 +67,6 @@ const VideoInterviewRoom: React.FC = () => {
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
-        if (data.transcript) {
-          setTranscriptText(data.transcript);
-        }
         if (data.status === 'in_progress') {
           setIsActive(true);
           if (data.started_at) {
@@ -256,29 +249,11 @@ const VideoInterviewRoom: React.FC = () => {
         intervalRef.current = null;
       }
       setInterview(result);
-      if (result.transcript) {
-        setTranscriptText(result.transcript);
-        toast.success('Interview completed! Transcript generated.');
-      } else {
-        toast.success('Interview completed!');
-      }
+      toast.success('Interview completed! Go to details page to upload transcript.');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     } finally {
       setEnding(false);
-    }
-  };
-
-  const handleCopyTranscript = async () => {
-    if (transcriptText) {
-      try {
-        await navigator.clipboard.writeText(transcriptText);
-        setCopied(true);
-        toast.success('Transcript copied to clipboard!');
-        setTimeout(() => setCopied(false), 2000);
-      } catch (err) {
-        toast.error('Failed to copy transcript');
-      }
     }
   };
 
@@ -293,23 +268,6 @@ const VideoInterviewRoom: React.FC = () => {
       }
     } else {
       toast.error('Meeting link not available yet. Start the interview first.');
-    }
-  };
-
-  const handleUploadTranscript = async () => {
-    if (!transcriptText.trim()) {
-      toast.error('Please paste the transcript text');
-      return;
-    }
-    try {
-      setUploading(true);
-      const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcriptText);
-      setScoreResult(result.score_result);
-      toast.success(result.message);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload transcript');
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -455,92 +413,37 @@ const VideoInterviewRoom: React.FC = () => {
                 />
               ) : isCompleted ? (
                 <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 3 }}>
-                  {scoreResult ? (
-                    <Box>
-                      <Box sx={{
-                        width: 80, height: 80, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 16px',
-                        boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)'
-                      }}>
-                        <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700 }}>
-                          {Math.round(scoreResult.overall_score)}%
-                        </Typography>
-                      </Box>
-                      <Typography sx={{ color: 'white', fontSize: '20px', fontWeight: 700, mb: 1 }}>
-                        Score Generated!
-                      </Typography>
-                      <Chip
-                        label={scoreResult.recommendation?.toUpperCase() || 'N/A'}
-                        sx={{
-                          mb: 2, fontWeight: 700,
-                          background: scoreResult.recommendation === 'select' ? '#10b981' :
-                                     scoreResult.recommendation === 'next_round' ? '#f59e0b' : '#ef4444',
-                          color: 'white'
-                        }}
-                      />
-                      <Button
-                        variant="contained"
-                        startIcon={<Description />}
-                        onClick={() => navigate(`/video-detail/${videoId}`)}
-                        sx={{
-                          mt: 2,
-                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                          fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '12px 24px'
-                        }}
-                      >
-                        View Full Details
-                      </Button>
-                    </Box>
-                  ) : (
-                    <Box>
-                      <Typography sx={{ color: 'white', fontSize: '20px', fontWeight: 700, mb: 1 }}>
-                        Interview Completed
-                      </Typography>
-                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 2 }}>
-                        {transcriptText ? 'Review and upload transcript to generate score' : 'Paste transcript to generate score'}
-                      </Typography>
-                      {transcriptText && (
-                        <Button
-                          size="small"
-                          startIcon={copied ? <Check /> : <ContentCopy />}
-                          onClick={handleCopyTranscript}
-                          sx={{ color: copied ? '#10b981' : '#94a3b8', mb: 2 }}
-                        >
-                          {copied ? 'Copied!' : 'Copy Transcript'}
-                        </Button>
-                      )}
-                      <TextField
-                        multiline rows={6} fullWidth
-                        placeholder="Paste transcript here..."
-                        value={transcriptText}
-                        onChange={(e) => setTranscriptText(e.target.value)}
-                        sx={{
-                          mb: 2,
-                          '& .MuiOutlinedInput-root': {
-                            background: '#1e293b', color: 'white', borderRadius: '12px',
-                            '& fieldset': { borderColor: '#475569' },
-                            '&:hover fieldset': { borderColor: '#64748b' },
-                            '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
-                          },
-                        }}
-                      />
-                      <Button
-                        variant="contained" fullWidth
-                        onClick={handleUploadTranscript}
-                        disabled={uploading || !transcriptText.trim()}
-                        startIcon={uploading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <Description />}
-                        sx={{
-                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                          fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '14px',
-                          '&:disabled': { background: '#334155', color: '#64748b' }
-                        }}
-                      >
-                        {uploading ? 'Generating Score...' : 'Upload & Generate Score'}
-                      </Button>
-                    </Box>
-                  )}
+                  <Box sx={{
+                    width: 80, height: 80, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 16px',
+                    boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)'
+                  }}>
+                    <Check sx={{ color: 'white', fontSize: 40 }} />
+                  </Box>
+                  <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700, mb: 1 }}>
+                    Interview Completed
+                  </Typography>
+                  <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 3 }}>
+                    Go to Interview Details to upload transcript and generate score
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<Description />}
+                    onClick={() => navigate(`/video-detail/${videoId}`)}
+                    sx={{
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '14px 32px',
+                      fontSize: '15px',
+                      boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                      }
+                    }}
+                  >
+                    View Details & Upload Transcript
+                  </Button>
                 </Box>
               ) : (
                 <Box sx={{ textAlign: 'center', p: 4 }}>
@@ -705,7 +608,9 @@ const VideoInterviewRoom: React.FC = () => {
                   <Typography sx={{ color: '#1e293b', fontWeight: 600, fontSize: '14px' }}>
                     {interview?.candidate_name || 'Candidate'}
                   </Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: '12px' }}>Candidate</Typography>
+                  <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
+                    Candidate{(user?.role === 'candidate' || user?.name?.toLowerCase() === interview?.candidate_name?.toLowerCase()) ? ' (You)' : ''}
+                  </Typography>
                 </Box>
                 {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b' }} />}
               </Box>
@@ -717,7 +622,9 @@ const VideoInterviewRoom: React.FC = () => {
                   <Typography sx={{ color: '#1e293b', fontWeight: 600, fontSize: '14px' }}>
                     {interview?.interviewer_name || 'Interviewer'}
                   </Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: '12px' }}>Interviewer (You)</Typography>
+                  <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
+                    Interviewer{(user?.role !== 'candidate' && user?.name?.toLowerCase() === interview?.interviewer_name?.toLowerCase()) ? ' (You)' : ''}
+                  </Typography>
                 </Box>
                 {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />}
               </Box>

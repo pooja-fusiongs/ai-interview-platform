@@ -122,7 +122,7 @@ const RecruiterCandidates = () => {
     setGeneratingFor(candidate.id)
     try {
       await recruiterService.generateQuestions(jobId, candidate.id)
-      toast.success(`Questions generated for ${candidate.applicant_name}`)
+      toast.success(`Questions generated! Click "Review Questions" to approve.`, { duration: 4000 })
       await fetchCandidates() // Refresh the list
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to generate questions')

@@ -1114,6 +1114,8 @@ def upload_transcript_and_score(
         )
 
     score_result = None
+    scoring_error = None
+    llm_result = None
 
     if approved_questions:
         # Prepare questions for LLM scoring
@@ -1126,8 +1128,22 @@ def upload_transcript_and_score(
             for q in approved_questions
         ]
 
-        # Score with Gemini
-        llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+        # Check if GEMINI_API_KEY is configured
+        import config
+        if not config.GEMINI_API_KEY:
+            scoring_error = "GEMINI_API_KEY not configured. Please add it to .env and restart the backend server."
+            print(f"❌ {scoring_error}")
+        else:
+            # Score with Gemini
+            print(f"🤖 Calling Gemini API to score transcript with {len(questions_for_scoring)} questions...")
+            print(f"🔑 Using API key: {config.GEMINI_API_KEY[:20]}...")
+            try:
+                llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+                print(f"🤖 Gemini result: {'Success' if llm_result else 'Failed - returned None'}")
+            except Exception as e:
+                scoring_error = f"Gemini API error: {str(e)}"
+                print(f"❌ {scoring_error}")
+                llm_result = None
 
         if llm_result:
             score_result = {
@@ -1194,10 +1210,22 @@ def upload_transcript_and_score(
     db.commit()
     db.refresh(vi)
 
+    # Determine appropriate message
+    if score_result:
+        result_message = "Transcript uploaded and scored successfully"
+    elif scoring_error:
+        result_message = f"Transcript uploaded but scoring failed: {scoring_error}"
+    elif approved_questions:
+        result_message = "Transcript uploaded but scoring failed (unknown error - check backend logs)"
+    else:
+        result_message = "Transcript uploaded (no questions found for scoring)"
+
     return {
-        "message": "Transcript uploaded and scored successfully" if score_result else "Transcript uploaded (no questions found for scoring)",
+        "message": result_message,
         "video_interview_id": vi.id,
         "transcript_saved": True,
         "score_generated": score_result is not None,
-        "score_result": score_result
+        "score_result": score_result,
+        "questions_found": len(approved_questions) if approved_questions else 0,
+        "scoring_error": scoring_error
     }

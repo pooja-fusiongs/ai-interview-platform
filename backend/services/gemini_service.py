@@ -54,7 +54,10 @@ def generate_questions_with_gemini(
     Returns list of dicts with: question_text, sample_answer, question_type, difficulty, skill_focus
     """
     if not config.GEMINI_API_KEY:
+        print("❌ [generate_questions] GEMINI_API_KEY is not set!")
         return None  # Caller should fall back to rule-based
+
+    print(f"✅ [generate_questions] GEMINI_API_KEY found: {config.GEMINI_API_KEY[:15]}...")
 
     skills_str = ", ".join(skills_required) if skills_required else "general software development"
     experience_level = "senior" if experience_years and experience_years >= 5 else "junior/mid"
@@ -230,8 +233,17 @@ def score_transcript_with_gemini(
         - per_question: list of {question_id, score, relevance_score, completeness_score, accuracy_score, clarity_score, feedback, extracted_answer}
         - overall_score, recommendation, strengths, weaknesses
     """
+    print(f"\n{'='*60}")
+    print(f"🔍 [score_transcript] Starting transcript scoring...")
+    print(f"   - Questions to score: {len(questions_with_answers)}")
+    print(f"   - Transcript length: {len(transcript_text)} chars")
+
     if not config.GEMINI_API_KEY:
+        print("❌ [score_transcript] GEMINI_API_KEY is NOT SET!")
+        print(f"   config.GEMINI_API_KEY value: '{config.GEMINI_API_KEY}'")
         return None
+
+    print(f"✅ [score_transcript] GEMINI_API_KEY found: {config.GEMINI_API_KEY[:20]}...")
 
     questions_str = ""
     for i, qa in enumerate(questions_with_answers, 1):
@@ -319,13 +331,19 @@ RECOMMENDATION:
 REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do NOT repeat the same text."""
 
     try:
+        print(f"🤖 [score_transcript] Calling Gemini API...")
         model = _get_model()
+        print(f"🤖 [score_transcript] Model initialized, generating content...")
         response = model.generate_content(prompt)
+        print(f"🤖 [score_transcript] Got response, extracting JSON...")
         result = _extract_json(response.text)
 
         if not result or not isinstance(result, dict):
-            print("Gemini scoring returned invalid format")
+            print(f"❌ [score_transcript] Invalid format returned")
+            print(f"   Response text (first 500 chars): {response.text[:500] if response.text else 'EMPTY'}")
             return None
+
+        print(f"✅ [score_transcript] JSON extracted successfully!")
 
         # Validate required fields
         if "per_question" not in result or "overall_score" not in result:
@@ -374,8 +392,20 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
             rec = "select" if score >= 7.5 else "next_round" if score >= 5.0 else "reject"
             result["recommendation"] = rec
 
+        print(f"\n✅✅✅ [score_transcript] SCORING COMPLETED SUCCESSFULLY! ✅✅✅")
+        print(f"   Overall Score: {result.get('overall_score', 'N/A')}")
+        print(f"   Recommendation: {result.get('recommendation', 'N/A')}")
+        print(f"   Questions scored: {len(result.get('per_question', []))}")
+        print(f"{'='*60}\n")
+
         return result
 
     except Exception as e:
-        print(f"Gemini transcript scoring failed: {e}")
+        import traceback
+        print(f"\n❌❌❌ [score_transcript] EXCEPTION OCCURRED ❌❌❌")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Error message: {str(e)}")
+        print(f"   Full traceback:")
+        traceback.print_exc()
+        print(f"{'='*60}\n")
         return None

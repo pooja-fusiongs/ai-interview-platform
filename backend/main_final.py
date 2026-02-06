@@ -693,7 +693,24 @@ def get_candidates(
                 candidate.interview_questions = json.dumps(interview_questions)
                 candidate.interview_transcripts = json.dumps(interview_transcripts)
                 db.commit()
-            
+
+            # Get the latest question generation session for this candidate
+            # Find application IDs for this candidate
+            application_ids = db.query(JobApplication.id).filter(
+                JobApplication.applicant_email == candidate.email
+            ).all()
+            application_id_list = [app_id[0] for app_id in application_ids]
+
+            latest_question_session = None
+            question_session_id = None
+            if application_id_list:
+                latest_question_session = db.query(QuestionGenerationSession).filter(
+                    QuestionGenerationSession.candidate_id.in_(application_id_list)
+                ).order_by(QuestionGenerationSession.created_at.desc()).first()
+
+                if latest_question_session:
+                    question_session_id = latest_question_session.id
+
             candidate_data = {
                 "id": candidate.id,
                 "name": candidate.full_name or candidate.username,
@@ -711,6 +728,8 @@ def get_candidates(
                 "has_transcript": getattr(candidate, 'has_transcript', False),
                 "hasTranscript": getattr(candidate, 'has_transcript', False),
                 "lastActivity": candidate.last_activity.isoformat() if candidate.last_activity else None,
+                # Question session for Review button
+                "questionSessionId": question_session_id,
                 # Nested objects
                 "interview_questions": interview_questions,
                 "interview_transcripts": interview_transcripts
