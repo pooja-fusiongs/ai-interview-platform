@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, Divider, CircularProgress, Alert,
-  Avatar, Chip, IconButton, Tooltip
+  Avatar, Chip, IconButton, Tooltip, TextField
 } from '@mui/material';
 import {
   Videocam, ArrowBack, AccessTime,
@@ -25,6 +25,9 @@ const VideoInterviewRoom: React.FC = () => {
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [transcriptText, setTranscriptText] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [scoreResult, setScoreResult] = useState<any>(null);
   const intervalRef = useRef<NodeJS.Timer | null>(null);
   const audioRef = useRef<NodeJS.Timer | null>(null);
 
@@ -115,11 +118,28 @@ const VideoInterviewRoom: React.FC = () => {
         audioRef.current = null;
       }
       setInterview(result);
-      toast.success('Interview completed! Transcript generated.');
+      toast.success('Interview completed! You can now upload the transcript.');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     } finally {
       setEnding(false);
+    }
+  };
+
+  const handleUploadTranscript = async () => {
+    if (!transcriptText.trim()) {
+      toast.error('Please paste the transcript text');
+      return;
+    }
+    try {
+      setUploading(true);
+      const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcriptText);
+      setScoreResult(result.score_result);
+      toast.success(result.message);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload transcript');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -265,41 +285,141 @@ const VideoInterviewRoom: React.FC = () => {
                   </Box>
                 </Box>
               ) : isCompleted ? (
-                <Box sx={{ textAlign: 'center' }}>
-                  <Box sx={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 24px',
-                    boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)'
-                  }}>
-                    <Description sx={{ color: 'white', fontSize: 48 }} />
-                  </Box>
-                  <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700 }}>
-                    Interview Completed
-                  </Typography>
-                  <Typography sx={{ color: '#10b981', fontSize: '16px', mt: 1 }}>
-                    Transcript has been generated
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Description />}
-                    onClick={() => navigate(`/video-detail/${videoId}`)}
-                    sx={{
-                      mt: 3,
-                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                      fontWeight: 600,
-                      textTransform: 'none',
-                      borderRadius: '10px',
-                      padding: '12px 24px'
-                    }}
-                  >
-                    View Transcript
-                  </Button>
+                <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 3 }}>
+                  {scoreResult ? (
+                    // Show score results
+                    <Box>
+                      <Box sx={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 16px',
+                        boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)'
+                      }}>
+                        <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700 }}>
+                          {Math.round(scoreResult.overall_score)}%
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ color: 'white', fontSize: '20px', fontWeight: 700, mb: 1 }}>
+                        Score Generated!
+                      </Typography>
+                      <Chip
+                        label={scoreResult.recommendation?.toUpperCase() || 'N/A'}
+                        sx={{
+                          mb: 2,
+                          fontWeight: 700,
+                          background: scoreResult.recommendation === 'select' ? '#10b981' :
+                                     scoreResult.recommendation === 'next_round' ? '#f59e0b' : '#ef4444',
+                          color: 'white'
+                        }}
+                      />
+                      {scoreResult.strengths && (
+                        <Box sx={{ textAlign: 'left', mb: 2 }}>
+                          <Typography sx={{ color: '#10b981', fontSize: '14px', fontWeight: 600, mb: 0.5 }}>
+                            Strengths:
+                          </Typography>
+                          <Typography sx={{ color: '#94a3b8', fontSize: '13px' }}>
+                            {scoreResult.strengths}
+                          </Typography>
+                        </Box>
+                      )}
+                      {scoreResult.weaknesses && (
+                        <Box sx={{ textAlign: 'left', mb: 2 }}>
+                          <Typography sx={{ color: '#f59e0b', fontSize: '14px', fontWeight: 600, mb: 0.5 }}>
+                            Areas to Improve:
+                          </Typography>
+                          <Typography sx={{ color: '#94a3b8', fontSize: '13px' }}>
+                            {scoreResult.weaknesses}
+                          </Typography>
+                        </Box>
+                      )}
+                      <Button
+                        variant="contained"
+                        startIcon={<Description />}
+                        onClick={() => navigate(`/video-detail/${videoId}`)}
+                        sx={{
+                          mt: 2,
+                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          borderRadius: '10px',
+                          padding: '12px 24px'
+                        }}
+                      >
+                        View Full Details
+                      </Button>
+                    </Box>
+                  ) : (
+                    // Show transcript upload form
+                    <Box>
+                      <Typography sx={{ color: 'white', fontSize: '20px', fontWeight: 700, mb: 1 }}>
+                        Interview Completed
+                      </Typography>
+                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 3 }}>
+                        Paste the interview transcript below to generate score
+                      </Typography>
+                      <TextField
+                        multiline
+                        rows={8}
+                        fullWidth
+                        placeholder="Paste the interview transcript here..."
+                        value={transcriptText}
+                        onChange={(e) => setTranscriptText(e.target.value)}
+                        sx={{
+                          mb: 2,
+                          '& .MuiOutlinedInput-root': {
+                            background: '#1e293b',
+                            color: 'white',
+                            borderRadius: '12px',
+                            '& fieldset': { borderColor: '#334155' },
+                            '&:hover fieldset': { borderColor: '#475569' },
+                            '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
+                          },
+                          '& .MuiInputBase-input::placeholder': {
+                            color: '#64748b',
+                            opacity: 1,
+                          },
+                        }}
+                      />
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        onClick={handleUploadTranscript}
+                        disabled={uploading || !transcriptText.trim()}
+                        startIcon={uploading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <Description />}
+                        sx={{
+                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          borderRadius: '10px',
+                          padding: '14px 24px',
+                          fontSize: '15px',
+                          '&:disabled': {
+                            background: '#334155',
+                            color: '#64748b'
+                          }
+                        }}
+                      >
+                        {uploading ? 'Generating Score...' : 'Upload & Generate Score'}
+                      </Button>
+                      <Button
+                        variant="text"
+                        onClick={() => navigate(`/video-detail/${videoId}`)}
+                        sx={{
+                          mt: 2,
+                          color: '#64748b',
+                          textTransform: 'none',
+                          '&:hover': { color: '#94a3b8' }
+                        }}
+                      >
+                        Skip for now
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               ) : (
                 <Box sx={{ textAlign: 'center' }}>

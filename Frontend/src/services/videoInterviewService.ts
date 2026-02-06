@@ -45,6 +45,12 @@ export const videoInterviewService = {
     const response = await apiClient.post('/api/video/interviews/demo');
     return response.data;
   },
+  uploadTranscriptAndScore: async (id: number, transcriptText: string) => {
+    const response = await apiClient.post(`/api/video/interviews/${id}/upload-transcript`, {
+      transcript_text: transcriptText
+    });
+    return response.data;
+  },
 };
 
 export default videoInterviewService;

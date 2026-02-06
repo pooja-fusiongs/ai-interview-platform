@@ -182,6 +182,58 @@ def schedule_video_interview(
         candidate_name_for_email = candidate.full_name or candidate.username
         candidate_email_for_notification = candidate.email
 
+    # Check questions status for this candidate
+    from models import InterviewQuestion
+    from services.ai_question_generator import get_question_generator
+
+    candidate_id_for_questions = application.id if application else body.candidate_id
+
+    # Check for existing questions
+    existing_questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == body.job_id,
+        InterviewQuestion.candidate_id == candidate_id_for_questions
+    ).all()
+
+    questions_generated = False
+
+    if len(existing_questions) == 0:
+        # No questions exist - auto-generate them
+        print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating...")
+        try:
+            generator = get_question_generator()
+            result = generator.generate_questions(
+                db=db,
+                job_id=body.job_id,
+                candidate_id=candidate_id_for_questions,
+                total_questions=10
+            )
+            questions_generated = True
+            print(f"✅ Auto-generated {result['total_questions']} questions for video interview")
+            # After generating, notify that questions need approval
+            raise HTTPException(
+                status_code=400,
+                detail="Questions have been auto-generated for this candidate. Please review and approve the questions in Manage Candidates before scheduling the interview."
+            )
+        except HTTPException:
+            raise  # Re-raise our custom exception
+        except Exception as e:
+            print(f"⚠️ Failed to auto-generate questions: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to generate questions for this candidate. Please generate questions manually in Manage Candidates first."
+            )
+    else:
+        # Questions exist - check if they are approved
+        approved_count = sum(1 for q in existing_questions if q.is_approved)
+        print(f"✅ Found {len(existing_questions)} existing questions ({approved_count} approved) for candidate {candidate_id_for_questions}")
+
+        if approved_count == 0:
+            # Questions exist but none are approved
+            raise HTTPException(
+                status_code=400,
+                detail=f"Questions exist but none are approved. Please approve questions in Manage Candidates before scheduling the interview. ({len(existing_questions)} questions pending approval)"
+            )
+
     # Attempt to create a Zoom meeting
     topic = f"Interview: {job.title} - {candidate_name_for_email}"
     zoom_data = create_zoom_meeting(
@@ -623,4 +675,162 @@ def create_demo_video_interview(
         "job_title": job.title,
         "scheduled_at": vi.scheduled_at.isoformat(),
         "zoom_url": vi.zoom_meeting_url
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/upload-transcript  -- Upload transcript & score
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/upload-transcript")
+def upload_transcript_and_score(
+    video_id: int,
+    body: dict,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Upload transcript text and generate score using AI."""
+    from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus
+    from services.gemini_service import score_transcript_with_gemini
+
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    transcript_text = body.get("transcript_text", "").strip()
+    if not transcript_text:
+        raise HTTPException(status_code=400, detail="Transcript text is required")
+
+    # Save the transcript
+    vi.transcript = transcript_text
+    vi.transcript_generated_at = datetime.utcnow()
+
+    # Find JobApplication for this candidate
+    application = None
+    if vi.candidate:
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id,
+            JobApplication.applicant_email == vi.candidate.email
+        ).first()
+
+    if not application:
+        # Try to find by job_id alone if no email match
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id
+        ).first()
+
+    # Get approved questions for scoring
+    candidate_id_for_questions = application.id if application else vi.candidate_id
+    print(f"🔍 Looking for questions - job_id: {vi.job_id}, candidate_id: {candidate_id_for_questions}")
+
+    approved_questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == vi.job_id,
+        InterviewQuestion.candidate_id == candidate_id_for_questions,
+        InterviewQuestion.is_approved == True
+    ).all()
+    print(f"📝 Found {len(approved_questions)} approved questions")
+
+    # If no approved questions, try all questions
+    if not approved_questions:
+        print(f"⚠️ No approved questions, trying all questions...")
+        approved_questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == vi.job_id,
+            InterviewQuestion.candidate_id == candidate_id_for_questions
+        ).all()
+        print(f"📝 Found {len(approved_questions)} total questions")
+
+    # Error if no questions found for this candidate
+    if not approved_questions:
+        raise HTTPException(
+            status_code=400,
+            detail="No questions found for this candidate. Please generate questions first before uploading transcript."
+        )
+
+    score_result = None
+
+    if approved_questions:
+        # Prepare questions for LLM scoring
+        questions_for_scoring = [
+            {
+                "question_id": q.id,
+                "question_text": q.question_text,
+                "sample_answer": q.sample_answer or ""
+            }
+            for q in approved_questions
+        ]
+
+        # Score with Gemini
+        llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+
+        if llm_result:
+            score_result = {
+                "overall_score": llm_result.get("overall_score", 0),
+                "recommendation": llm_result.get("recommendation", ""),
+                "strengths": llm_result.get("strengths", ""),
+                "weaknesses": llm_result.get("weaknesses", ""),
+                "per_question": llm_result.get("per_question", [])
+            }
+
+            # Create or update interview session for storing scores
+            session = db.query(InterviewSession).filter(
+                InterviewSession.job_id == vi.job_id,
+                InterviewSession.application_id == candidate_id_for_questions
+            ).first()
+
+            if not session:
+                session = InterviewSession(
+                    job_id=vi.job_id,
+                    candidate_id=vi.candidate_id,
+                    application_id=candidate_id_for_questions,
+                    status=InterviewSessionStatus.SCORED,
+                    interview_mode="video_interview"
+                )
+                db.add(session)
+                db.flush()
+
+            session.transcript_text = transcript_text
+            session.overall_score = float(llm_result.get("overall_score", 0))
+            rec_str = llm_result.get("recommendation", "reject")
+            session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
+            session.strengths = llm_result.get("strengths", "")
+            session.weaknesses = llm_result.get("weaknesses", "")
+            session.status = InterviewSessionStatus.SCORED
+            session.completed_at = datetime.utcnow()
+
+            # Save per-question answers with extracted answers from transcript
+            for pq in llm_result.get("per_question", []):
+                q_id = pq.get("question_id")
+                if not q_id:
+                    continue
+
+                # Find or create answer record
+                existing_answer = db.query(InterviewAnswer).filter(
+                    InterviewAnswer.session_id == session.id,
+                    InterviewAnswer.question_id == q_id
+                ).first()
+
+                if existing_answer:
+                    answer = existing_answer
+                else:
+                    answer = InterviewAnswer(session_id=session.id, question_id=q_id)
+                    db.add(answer)
+
+                # Save extracted answer from transcript (unique per question)
+                answer.answer_text = pq.get("extracted_answer", "")
+                answer.score = float(pq.get("score", 0))
+                answer.relevance_score = float(pq.get("relevance_score", 0))
+                answer.completeness_score = float(pq.get("completeness_score", 0))
+                answer.accuracy_score = float(pq.get("accuracy_score", 0))
+                answer.clarity_score = float(pq.get("clarity_score", 0))
+                answer.feedback = pq.get("feedback", "")
+
+    db.commit()
+    db.refresh(vi)
+
+    return {
+        "message": "Transcript uploaded and scored successfully" if score_result else "Transcript uploaded (no questions found for scoring)",
+        "video_interview_id": vi.id,
+        "transcript_saved": True,
+        "score_generated": score_result is not None,
+        "score_result": score_result
     }
