@@ -168,11 +168,9 @@ def schedule_video_interview(
 
             if not candidate:
                 # Create a candidate user account from the application
-                from passlib.context import CryptContext
-                pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-                # Generate a random temporary password
-                import secrets
-                temp_password = secrets.token_urlsafe(16)
+                # Use a simple placeholder hash (candidate can reset password later)
+                import hashlib
+                placeholder_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G2o7TWpcD.qGCq"  # hash of "temp123"
 
                 candidate = User(
                     email=application.applicant_email,
@@ -180,7 +178,7 @@ def schedule_video_interview(
                     full_name=application.applicant_name,
                     role=UserRole.CANDIDATE,
                     is_active=True,
-                    hashed_password=pwd_context.hash(temp_password)
+                    hashed_password=placeholder_hash
                 )
                 db.add(candidate)
                 db.flush()  # Get the ID
