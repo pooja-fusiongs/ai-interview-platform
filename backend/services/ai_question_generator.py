@@ -57,7 +57,12 @@ class AIQuestionGenerator:
                 questions = self._generate_preview_questions(job, candidate, resume, total_questions)
             else:
                 questions = self._generate_live_questions(job, candidate, resume, total_questions)
-            
+
+            print(f"[QuestionGenerator] Generated {len(questions)} questions in {self.mode.value} mode")
+
+            if not questions or len(questions) == 0:
+                raise ValueError("No questions were generated")
+
             # Save questions to database
             saved_questions = []
             for q_data in questions:
@@ -73,11 +78,24 @@ class AIQuestionGenerator:
                 )
                 db.add(question)
                 saved_questions.append(question)
-            
+
             # Update session
             session.status = "generated"
             session.generated_at = datetime.utcnow()
             db.commit()
+
+            # Refresh questions to get their IDs after commit
+            for question in saved_questions:
+                db.refresh(question)
+
+            # Verify questions were actually saved
+            verified_count = db.query(InterviewQuestion).filter(
+                InterviewQuestion.job_id == job_id,
+                InterviewQuestion.candidate_id == candidate_id
+            ).count()
+
+            if verified_count == 0:
+                raise ValueError("Questions were not saved to database")
             
             # Update nested questions in candidate object
             self._update_candidate_nested_questions(db, candidate_id, job_id)

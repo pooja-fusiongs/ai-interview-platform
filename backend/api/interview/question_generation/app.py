@@ -58,13 +58,25 @@ def generate_questions(
         QuestionGenerationSession.job_id == request.job_id,
         QuestionGenerationSession.candidate_id == request.candidate_id
     ).first()
-    
-    if existing_session and existing_session.status == "generated":
+
+    # Also verify that actual questions exist in the database
+    existing_questions_count = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == request.job_id,
+        InterviewQuestion.candidate_id == request.candidate_id
+    ).count()
+
+    if existing_session and existing_session.status == "generated" and existing_questions_count > 0:
         return {
             "message": "Questions already generated for this candidate",
             "session_id": existing_session.id,
-            "status": "already_exists"
+            "status": "already_exists",
+            "total_questions": existing_questions_count
         }
+
+    # If session exists but no questions, delete the old session and regenerate
+    if existing_session and existing_questions_count == 0:
+        db.delete(existing_session)
+        db.commit()
     
     try:
         # Generate questions
@@ -376,20 +388,26 @@ def get_question_sets(
 ):
     """
     Get all question sets for review (simplified endpoint for frontend)
+    Only returns sessions that have actual questions
     """
     sessions = db.query(QuestionGenerationSession).all()
-    
+
     result = []
     for session in sessions:
         # Get job and candidate information
         job = db.query(Job).filter(Job.id == session.job_id).first()
         candidate = db.query(JobApplication).filter(JobApplication.id == session.candidate_id).first()
-        
+
         questions = db.query(InterviewQuestion).filter(
             InterviewQuestion.job_id == session.job_id,
             InterviewQuestion.candidate_id == session.candidate_id
         ).all()
-        
+
+        # Skip sessions that have no actual questions
+        if len(questions) == 0:
+            print(f"[question-sets] Skipping session {session.id} - no questions found")
+            continue
+
         # Convert to simplified format for frontend
         question_data = []
         for q in questions:
@@ -401,10 +419,10 @@ def get_question_sets(
                 "category": q.question_type.value,
                 "skills_tested": [q.skill_focus] if q.skill_focus else []
             })
-        
+
         # Determine main topics from questions
         main_topics = list(set([q.skill_focus for q in questions if q.skill_focus]))
-        
+
         result.append({
             "id": str(session.id),
             "job_id": session.job_id,
@@ -420,26 +438,31 @@ def get_question_sets(
             "total_questions": len(questions),
             "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"
         })
-    
+
     return result
 @router.get("/question-sets-test")
 def get_question_sets_test(db: Session = Depends(get_db)):
     """
     Test endpoint to get all question sets for review (no auth required)
+    Only returns sessions that have actual questions
     """
     sessions = db.query(QuestionGenerationSession).all()
-    
+
     result = []
     for session in sessions:
         # Get job and candidate information
         job = db.query(Job).filter(Job.id == session.job_id).first()
         candidate = db.query(JobApplication).filter(JobApplication.id == session.candidate_id).first()
-        
+
         questions = db.query(InterviewQuestion).filter(
             InterviewQuestion.job_id == session.job_id,
             InterviewQuestion.candidate_id == session.candidate_id
         ).all()
-        
+
+        # Skip sessions that have no actual questions
+        if len(questions) == 0:
+            continue
+
         # Convert to simplified format for frontend
         question_data = []
         for q in questions:
@@ -451,10 +474,10 @@ def get_question_sets_test(db: Session = Depends(get_db)):
                 "category": q.question_type.value,
                 "skills_tested": [q.skill_focus] if q.skill_focus else []
             })
-        
+
         # Determine main topics from questions
         main_topics = list(set([q.skill_focus for q in questions if q.skill_focus]))
-        
+
         result.append({
             "id": str(session.id),
             "job_id": session.job_id,
@@ -470,5 +493,5 @@ def get_question_sets_test(db: Session = Depends(get_db)):
             "total_questions": len(questions),
             "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"
         })
-    
+
     return result

@@ -98,7 +98,7 @@ export const getRouteAccess = (): RouteAccess[] => [
   },
   {
     path: '/ai-questions',
-    allowedRoles: ['domain_expert', 'admin'],
+    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
     label: 'AI Questions',
     icon: 'fas fa-robot'
   },

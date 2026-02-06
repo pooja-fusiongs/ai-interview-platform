@@ -58,6 +58,7 @@ const InterviewOutline: React.FC = () => {
     const [searchParams] = useSearchParams();
     const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
     const [loading, setLoading] = useState(true);
+    const [approvingAll, setApprovingAll] = useState(false);
     const [activeTab, setActiveTab] = useState(0); // 0: All, 1: Pending, 2: Approved
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -177,6 +178,58 @@ const InterviewOutline: React.FC = () => {
         } catch (error) {
             console.error('Error approving question:', error);
             toast.error('Failed to approve question');
+        }
+    };
+
+    const handleApproveAll = async () => {
+        if (!questionSet) return;
+
+        const pendingQuestions = questionSet.questions.filter(q => q.status === 'pending');
+
+        if (pendingQuestions.length === 0) {
+            toast.info('All questions are already approved!');
+            return;
+        }
+
+        setApprovingAll(true);
+        let successCount = 0;
+        let failCount = 0;
+
+        try {
+            for (const question of pendingQuestions) {
+                try {
+                    await questionGenerationService.expertReviewQuestion({
+                        question_id: parseInt(question.id),
+                        is_approved: true,
+                        expert_notes: 'Approved as golden standard'
+                    });
+                    successCount++;
+                } catch (error) {
+                    console.error(`Error approving question ${question.id}:`, error);
+                    failCount++;
+                }
+            }
+
+            // Update local state for all approved questions
+            setQuestionSet(prev => prev ? {
+                ...prev,
+                questions: prev.questions.map(q =>
+                    q.status === 'pending'
+                        ? { ...q, status: 'approved', is_golden: true, expert_notes: 'Approved as golden standard' }
+                        : q
+                )
+            } : null);
+
+            if (failCount === 0) {
+                toast.success(`All ${successCount} questions approved successfully!`);
+            } else {
+                toast.success(`${successCount} questions approved, ${failCount} failed.`);
+            }
+        } catch (error) {
+            console.error('Error in bulk approval:', error);
+            toast.error('Failed to approve all questions');
+        } finally {
+            setApprovingAll(false);
         }
     };
 
@@ -301,29 +354,70 @@ const InterviewOutline: React.FC = () => {
                                     {questionSet?.job_title} • {questionSet?.candidate_name}
                                 </Typography>
                             </Box>
-                            <Box
-                                onClick={handleGoBack}
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 1,
-                                    width: 'fit-content',
-                                    // mb: 3,
-                                    p:"2px 10px",
-                                    ml: "auto",
-                                    border: '1px solid #F59E0B',
-                                    color: '#F59E0B',
-                                    cursor: 'pointer',
-                                    borderRadius: 1,
-                                    '&:hover': {
-                                        backgroundColor: '#F59E0B1A',
-                                    },
-                                }}
-                            >
-                                <ArrowBackIcon fontSize="small" />
-                                <Typography>
-                                    {fromPage === 'manage-candidates' ? 'Back to Candidates' : 'Back'}
-                                </Typography>
+                            <Box sx={{ display: 'flex', gap: 2, ml: 'auto' }}>
+                                {/* Approve All Button */}
+                                {getPendingCount() > 0 && (
+                                    <Button
+                                        onClick={handleApproveAll}
+                                        disabled={approvingAll}
+                                        sx={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 1,
+                                            p: "2px 16px",
+                                            backgroundColor: '#10b981',
+                                            color: 'white',
+                                            border: '1px solid #10b981',
+                                            borderRadius: 1,
+                                            textTransform: 'none',
+                                            fontWeight: 600,
+                                            '&:hover': {
+                                                backgroundColor: '#059669',
+                                                border: '1px solid #059669',
+                                            },
+                                            '&:disabled': {
+                                                backgroundColor: '#9ca3af',
+                                                border: '1px solid #9ca3af',
+                                                color: 'white',
+                                            },
+                                        }}
+                                    >
+                                        {approvingAll ? (
+                                            <>
+                                                <CircularProgress size={16} sx={{ color: 'white' }} />
+                                                <Typography>Approving...</Typography>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircleIcon fontSize="small" />
+                                                <Typography>Approve All ({getPendingCount()})</Typography>
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
+                                {/* Back Button */}
+                                <Box
+                                    onClick={handleGoBack}
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        width: 'fit-content',
+                                        p: "2px 10px",
+                                        border: '1px solid #F59E0B',
+                                        color: '#F59E0B',
+                                        cursor: 'pointer',
+                                        borderRadius: 1,
+                                        '&:hover': {
+                                            backgroundColor: '#F59E0B1A',
+                                        },
+                                    }}
+                                >
+                                    <ArrowBackIcon fontSize="small" />
+                                    <Typography>
+                                        {fromPage === 'manage-candidates' ? 'Back to Candidates' : 'Back'}
+                                    </Typography>
+                                </Box>
                             </Box>
                         </Box>
                         <Box sx={{ mb: 2 }}>

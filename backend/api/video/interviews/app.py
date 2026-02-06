@@ -20,6 +20,7 @@ from database import get_db
 from models import (
     User,
     Job,
+    JobApplication,
     VideoInterview,
     VideoInterviewStatus,
     FraudAnalysis,
@@ -123,10 +124,35 @@ def schedule_video_interview(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Validate candidate exists
+    # Validate candidate exists - try User first, then JobApplication
     candidate = db.query(User).filter(User.id == body.candidate_id).first()
+    application_id = None
+
     if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+        # candidate_id might be a JobApplication ID - look it up
+        application = db.query(JobApplication).filter(
+            JobApplication.id == body.candidate_id
+        ).first()
+
+        if not application:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+
+        application_id = application.id
+
+        # Find or create User for this candidate
+        candidate = db.query(User).filter(User.email == application.applicant_email).first()
+
+        if not candidate:
+            # Create a candidate user account from the application
+            candidate = User(
+                email=application.applicant_email,
+                username=application.applicant_email.split('@')[0],
+                full_name=application.applicant_name,
+                role=UserRole.CANDIDATE,
+                is_active=True
+            )
+            db.add(candidate)
+            db.flush()  # Get the ID
 
     # Attempt to create a Zoom meeting
     topic = f"Interview: {job.title} - {candidate.full_name or candidate.username}"
@@ -139,7 +165,7 @@ def schedule_video_interview(
     vi = VideoInterview(
         session_id=body.session_id,
         job_id=body.job_id,
-        candidate_id=body.candidate_id,
+        candidate_id=candidate.id,  # Use User ID, not JobApplication ID
         interviewer_id=body.interviewer_id,
         scheduled_at=body.scheduled_at,
         duration_minutes=body.duration_minutes,
