@@ -138,6 +138,7 @@ const VideoInterviewRoom: React.FC = () => {
     // Generate room name from interview data
     const roomName = getMeetingRoomName();
 
+    // Using meet.jit.si - FREE public Jitsi server
     const domain = 'meet.jit.si';
     const options = {
       roomName: roomName,
@@ -148,26 +149,49 @@ const VideoInterviewRoom: React.FC = () => {
         displayName: interview?.interviewer_name || 'Interviewer'
       },
       configOverwrite: {
+        // Audio/Video settings
         startWithAudioMuted: false,
         startWithVideoMuted: false,
+
+        // Skip pre-join page - go directly to call
         prejoinPageEnabled: false,
+
+        // Disable login/auth requirements
+        enableInsecureRoomNameWarning: false,
+        requireDisplayName: false,
+        enableWelcomePage: false,
+
+        // Disable lobby (no waiting room)
+        enableLobby: false,
+
+        // Allow anyone to join without moderator
+        startAudioOnly: false,
+        disableModeratorIndicator: true,
+
+        // Disable deep linking to app
         disableDeepLinking: true,
+
+        // Enable auto-grant permissions
+        disableAudioLevels: false,
       },
       interfaceConfigOverwrite: {
         TOOLBAR_BUTTONS: [
-          'microphone', 'camera', 'closedcaptions', 'desktop',
-          'fullscreen', 'fodeviceselection', 'hangup', 'chat',
-          'recording', 'settings', 'raisehand', 'videoquality',
-          'tileview', 'select-background', 'mute-everyone'
+          'microphone', 'camera', 'desktop', 'fullscreen',
+          'fodeviceselection', 'hangup', 'chat', 'settings',
+          'raisehand', 'videoquality', 'tileview'
         ],
         SHOW_JITSI_WATERMARK: false,
         SHOW_WATERMARK_FOR_GUESTS: false,
         SHOW_BRAND_WATERMARK: false,
-        BRAND_WATERMARK_LINK: '',
         SHOW_POWERED_BY: false,
         DEFAULT_BACKGROUND: '#1e293b',
         DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
         MOBILE_APP_PROMO: false,
+        HIDE_INVITE_MORE_HEADER: true,
+        DISABLE_PRESENCE_STATUS: false,
+        // Film strip settings for better view
+        filmStripOnly: false,
+        VERTICAL_FILMSTRIP: true,
       }
     };
 
@@ -208,8 +232,29 @@ const VideoInterviewRoom: React.FC = () => {
     return `${h}:${m}:${s}`;
   };
 
+  // Request browser permissions for mic/camera
+  const requestMediaPermissions = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Stop the stream immediately - we just needed to get permission
+      stream.getTracks().forEach(track => track.stop());
+      console.log('✅ Media permissions granted');
+      return true;
+    } catch (err) {
+      console.error('❌ Media permission denied:', err);
+      toast.error('Please allow camera and microphone access for the video call');
+      return false;
+    }
+  };
+
   const handleStart = async () => {
     try {
+      // Request permissions first
+      const hasPermission = await requestMediaPermissions();
+      if (!hasPermission) {
+        return;
+      }
+
       await videoInterviewService.startInterview(Number(videoId));
       setIsActive(true);
       setElapsed(0);
@@ -265,7 +310,8 @@ const VideoInterviewRoom: React.FC = () => {
 
   const handleCopyMeetingLink = async () => {
     const roomName = getMeetingRoomName();
-    const meetingUrl = `https://meet.jit.si/${roomName}`;
+    // Using 8x8.vc - free and doesn't require login
+    const meetingUrl = `https://8x8.vc/${roomName}`;
     try {
       await navigator.clipboard.writeText(meetingUrl);
       toast.success(`Meeting link copied: ${meetingUrl}`);
@@ -866,7 +912,7 @@ const VideoInterviewRoom: React.FC = () => {
                     fontFamily: 'monospace',
                     fontWeight: 600
                   }}>
-                    https://meet.jit.si/{getMeetingRoomName()}
+                    https://8x8.vc/{getMeetingRoomName()}
                   </Typography>
                 </Box>
                 <Button
