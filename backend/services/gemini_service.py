@@ -150,7 +150,7 @@ Q: {qa['question_text']}
 Expected Answer: {qa['sample_answer']}
 ---"""
 
-    prompt = f"""You are an expert interview evaluator. Analyze the interview transcript and extract + score the candidate's responses.
+    prompt = f"""You are an expert interview evaluator. Your task is to find and extract the SPECIFIC answer given by the candidate for EACH question from the transcript.
 
 QUESTIONS TO EVALUATE:
 {questions_str}
@@ -158,13 +158,32 @@ QUESTIONS TO EVALUATE:
 INTERVIEW TRANSCRIPT:
 {transcript_text}
 
-CRITICAL INSTRUCTIONS FOR ANSWER EXTRACTION:
-1. The transcript format is: [timestamp] Speaker: text
-2. Identify the Interviewer/Hiring Manager vs Candidate by their names
-3. For EACH question above, find where a SIMILAR question was asked in the transcript
-4. Extract ONLY the candidate's response (1-3 sentences) - NOT the entire transcript!
-5. If a question wasn't asked or no answer found, write "No relevant answer found in transcript"
-6. Questions may be worded differently - match by meaning, not exact words
+CRITICAL INSTRUCTIONS - READ CAREFULLY:
+
+1. TRANSCRIPT FORMAT: Each line is "[timestamp] Speaker_Name: what they said"
+   - The Interviewer/Hiring Manager ASKS the questions
+   - The Candidate/Interviewee ANSWERS the questions
+
+2. FOR EACH QUESTION IN THE LIST ABOVE:
+   - Search the transcript for where a SIMILAR question was asked (exact wording may differ)
+   - Find the candidate's response that IMMEDIATELY FOLLOWS that question
+   - Extract ONLY that specific response - NOT the whole transcript!
+
+3. ANSWER EXTRACTION RULES:
+   - Each "extracted_answer" MUST be DIFFERENT for each question
+   - Extract only the candidate's words (not timestamps, not speaker labels)
+   - Keep it to 1-4 sentences maximum - just the core answer
+   - If question not found in transcript, write: "Question not asked in this interview"
+   - NEVER copy the same answer for multiple questions
+   - NEVER include the full transcript or conversation opening
+
+4. EXAMPLE:
+   If transcript has:
+   "[00:01:00] Interviewer: What is Python?
+   [00:01:30] Candidate: Python is a high-level programming language known for its simplicity."
+
+   Then extracted_answer should be: "Python is a high-level programming language known for its simplicity."
+   NOT: "[00:00:00] Interviewer: Hello... [00:01:00] Interviewer: What is Python..."
 
 SCORING (0-10 scale):
 - relevance_score: How relevant is the answer to the question?
@@ -172,20 +191,20 @@ SCORING (0-10 scale):
 - accuracy_score: How accurate compared to expected answer?
 - clarity_score: How clear and coherent?
 - score: Overall weighted average
-- feedback: 1-2 sentence feedback
+- feedback: Brief specific feedback for this answer
 
 OUTPUT FORMAT - Respond ONLY with this JSON:
 {{
   "per_question": [
     {{
       "question_id": <id>,
-      "extracted_answer": "ONLY the specific candidate response for this question (1-3 sentences max)",
+      "extracted_answer": "The specific 1-4 sentence answer the candidate gave for THIS question only",
       "score": 7.5,
       "relevance_score": 8.0,
       "completeness_score": 7.0,
       "accuracy_score": 7.5,
       "clarity_score": 8.0,
-      "feedback": "Specific feedback"
+      "feedback": "Brief specific feedback"
     }}
   ],
   "overall_score": 7.2,
@@ -195,16 +214,18 @@ OUTPUT FORMAT - Respond ONLY with this JSON:
 }}
 
 SCORING GUIDELINES:
-- 8-10: Excellent answer
-- 6-8: Good answer
-- 4-6: Adequate, missing some points
-- 2-4: Poor, significant gaps
-- 0-2: No relevant answer
+- 8-10: Excellent, comprehensive answer
+- 6-8: Good answer with minor gaps
+- 4-6: Adequate but missing key points
+- 2-4: Poor answer with significant gaps
+- 0-2: No relevant answer or question not asked
 
 RECOMMENDATION:
 - select: overall >= 7.5
 - next_round: overall >= 5.0
-- reject: overall < 5.0"""
+- reject: overall < 5.0
+
+REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do NOT repeat the same text."""
 
     try:
         model = _get_model()
@@ -219,6 +240,30 @@ RECOMMENDATION:
         if "per_question" not in result or "overall_score" not in result:
             print("Gemini scoring missing required fields")
             return None
+
+        # Validate and clean extracted answers - ensure they are unique per question
+        per_question = result.get("per_question", [])
+        seen_answers = set()
+        for pq in per_question:
+            extracted = pq.get("extracted_answer", "")
+            # Clean up the extracted answer
+            if extracted:
+                # Remove timestamps and speaker labels if accidentally included
+                cleaned = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '', extracted)
+                cleaned = re.sub(r'(Hiring Manager|Interviewer|Manager):', '', cleaned, flags=re.IGNORECASE)
+                cleaned = cleaned.strip()
+
+                # Check if this answer is a duplicate or too similar to previous ones
+                answer_key = cleaned[:100].lower() if cleaned else ""
+                if answer_key in seen_answers and len(per_question) > 1:
+                    print(f"⚠️ Duplicate answer detected for question {pq.get('question_id')}, marking as not found")
+                    pq["extracted_answer"] = "Answer could not be uniquely extracted from transcript"
+                else:
+                    pq["extracted_answer"] = cleaned if cleaned else extracted
+                    if answer_key:
+                        seen_answers.add(answer_key)
+            else:
+                pq["extracted_answer"] = "No answer found in transcript"
 
         # Normalize recommendation
         rec = result.get("recommendation", "reject").lower()

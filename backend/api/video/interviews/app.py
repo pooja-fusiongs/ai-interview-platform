@@ -143,149 +143,174 @@ def schedule_video_interview(
     db: Session = Depends(get_db),
 ):
     """Schedule a new video interview. Recruiter/Admin only."""
-    # Validate job exists
-    job = db.query(Job).filter(Job.id == body.job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    # Validate candidate - check JobApplication FIRST (frontend sends JobApplication IDs)
-    application = db.query(JobApplication).filter(
-        JobApplication.id == body.candidate_id
-    ).first()
-
-    candidate = None
-    candidate_name_for_email = None
-    candidate_email_for_notification = None
-
-    if application:
-        # Found JobApplication - use its info for email
-        candidate_name_for_email = application.applicant_name
-        candidate_email_for_notification = application.applicant_email
-
-        # Find or create User for this candidate
-        candidate = db.query(User).filter(User.email == application.applicant_email).first()
-
-        if not candidate:
-            # Create a candidate user account from the application
-            candidate = User(
-                email=application.applicant_email,
-                username=application.applicant_email.split('@')[0],
-                full_name=application.applicant_name,
-                role=UserRole.CANDIDATE,
-                is_active=True
-            )
-            db.add(candidate)
-            db.flush()  # Get the ID
-    else:
-        # No JobApplication found - try finding User directly (for backward compatibility)
-        candidate = db.query(User).filter(User.id == body.candidate_id).first()
-        if not candidate:
-            raise HTTPException(status_code=404, detail="Candidate not found")
-        candidate_name_for_email = candidate.full_name or candidate.username
-        candidate_email_for_notification = candidate.email
-
-    # Check questions status for this candidate
-    from models import InterviewQuestion
-    from services.ai_question_generator import get_question_generator
-
-    candidate_id_for_questions = application.id if application else body.candidate_id
-
-    # Check for existing questions
-    existing_questions = db.query(InterviewQuestion).filter(
-        InterviewQuestion.job_id == body.job_id,
-        InterviewQuestion.candidate_id == candidate_id_for_questions
-    ).all()
-
-    questions_generated = False
-
-    if len(existing_questions) == 0:
-        # No questions exist - auto-generate them
-        print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating...")
-        try:
-            generator = get_question_generator()
-            result = generator.generate_questions(
-                db=db,
-                job_id=body.job_id,
-                candidate_id=candidate_id_for_questions,
-                total_questions=10
-            )
-            questions_generated = True
-            print(f"✅ Auto-generated {result['total_questions']} questions for video interview")
-            # After generating, notify that questions need approval
-            raise HTTPException(
-                status_code=400,
-                detail="Questions have been auto-generated for this candidate. Please review and approve the questions in Manage Candidates before scheduling the interview."
-            )
-        except HTTPException:
-            raise  # Re-raise our custom exception
-        except Exception as e:
-            print(f"⚠️ Failed to auto-generate questions: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to generate questions for this candidate. Please generate questions manually in Manage Candidates first."
-            )
-    else:
-        # Questions exist - check if they are approved
-        approved_count = sum(1 for q in existing_questions if q.is_approved)
-        print(f"✅ Found {len(existing_questions)} existing questions ({approved_count} approved) for candidate {candidate_id_for_questions}")
-
-        if approved_count == 0:
-            # Questions exist but none are approved
-            raise HTTPException(
-                status_code=400,
-                detail=f"Questions exist but none are approved. Please approve questions in Manage Candidates before scheduling the interview. ({len(existing_questions)} questions pending approval)"
-            )
-
-    # Attempt to create a Zoom meeting
-    topic = f"Interview: {job.title} - {candidate_name_for_email}"
-    zoom_data = create_zoom_meeting(
-        topic=topic,
-        start_time=body.scheduled_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        duration=body.duration_minutes,
-    )
-
-    vi = VideoInterview(
-        session_id=body.session_id,
-        job_id=body.job_id,
-        candidate_id=candidate.id,  # Use User ID, not JobApplication ID
-        interviewer_id=body.interviewer_id,
-        scheduled_at=body.scheduled_at,
-        duration_minutes=body.duration_minutes,
-        status=VideoInterviewStatus.SCHEDULED,
-    )
-
-    if zoom_data:
-        vi.zoom_meeting_id = zoom_data["meeting_id"]
-        vi.zoom_meeting_url = zoom_data["join_url"]
-        vi.zoom_host_url = zoom_data["host_url"]
-        vi.zoom_passcode = zoom_data["passcode"]
-
-    db.add(vi)
-    db.commit()
-    db.refresh(vi)
-
-    # Send email notification to candidate
     try:
-        interview_date = body.scheduled_at.strftime("%B %d, %Y")
-        interview_time = body.scheduled_at.strftime("%I:%M %p")
+        # Validate job exists
+        job = db.query(Job).filter(Job.id == body.job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
 
-        # Use video-room URL instead of Zoom meeting URL
-        frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
-        meeting_url = f"{frontend_url}/video-room/{vi.id}"
+        # Validate candidate - check JobApplication FIRST (frontend sends JobApplication IDs)
+        application = db.query(JobApplication).filter(
+            JobApplication.id == body.candidate_id
+        ).first()
 
-        send_interview_notification(
-            candidate_email=candidate_email_for_notification,
-            candidate_name=candidate_name_for_email,
-            job_title=job.title,
-            interview_date=interview_date,
-            interview_time=interview_time,
-            meeting_url=meeting_url
+        candidate = None
+        candidate_name_for_email = None
+        candidate_email_for_notification = None
+
+        if application:
+            # Found JobApplication - use its info for email
+            candidate_name_for_email = application.applicant_name
+            candidate_email_for_notification = application.applicant_email
+
+            # Find or create User for this candidate
+            candidate = db.query(User).filter(User.email == application.applicant_email).first()
+
+            if not candidate:
+                # Create a candidate user account from the application
+                from passlib.context import CryptContext
+                pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+                # Generate a random temporary password
+                import secrets
+                temp_password = secrets.token_urlsafe(16)
+
+                candidate = User(
+                    email=application.applicant_email,
+                    username=application.applicant_email.split('@')[0],
+                    full_name=application.applicant_name,
+                    role=UserRole.CANDIDATE,
+                    is_active=True,
+                    hashed_password=pwd_context.hash(temp_password)
+                )
+                db.add(candidate)
+                db.flush()  # Get the ID
+        else:
+            # No JobApplication found - try finding User directly (for backward compatibility)
+            candidate = db.query(User).filter(User.id == body.candidate_id).first()
+            if not candidate:
+                raise HTTPException(status_code=404, detail="Candidate not found")
+            candidate_name_for_email = candidate.full_name or candidate.username
+            candidate_email_for_notification = candidate.email
+
+        # Check questions status for this candidate
+        from models import InterviewQuestion
+        from services.ai_question_generator import get_question_generator
+
+        candidate_id_for_questions = application.id if application else body.candidate_id
+
+        # Check for existing questions
+        existing_questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == body.job_id,
+            InterviewQuestion.candidate_id == candidate_id_for_questions
+        ).all()
+
+        questions_generated = False
+
+        if len(existing_questions) == 0:
+            # No questions exist - auto-generate them
+            print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating...")
+            try:
+                generator = get_question_generator()
+                result = generator.generate_questions(
+                    db=db,
+                    job_id=body.job_id,
+                    candidate_id=candidate_id_for_questions,
+                    total_questions=10
+                )
+                questions_generated = True
+                print(f"✅ Auto-generated {result['total_questions']} questions for video interview")
+                # After generating, notify that questions need approval
+                raise HTTPException(
+                    status_code=400,
+                    detail="Questions have been auto-generated for this candidate. Please review and approve the questions in Manage Candidates before scheduling the interview."
+                )
+            except HTTPException:
+                raise  # Re-raise our custom exception
+            except Exception as e:
+                print(f"⚠️ Failed to auto-generate questions: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to generate questions for this candidate. Please generate questions manually in Manage Candidates first."
+                )
+        else:
+            # Questions exist - check if they are approved
+            approved_count = sum(1 for q in existing_questions if q.is_approved)
+            print(f"✅ Found {len(existing_questions)} existing questions ({approved_count} approved) for candidate {candidate_id_for_questions}")
+
+            if approved_count == 0:
+                # Questions exist but none are approved
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Questions exist but none are approved. Please approve questions in Manage Candidates before scheduling the interview. ({len(existing_questions)} questions pending approval)"
+                )
+
+        # Attempt to create a Zoom meeting
+        topic = f"Interview: {job.title} - {candidate_name_for_email}"
+        zoom_data = create_zoom_meeting(
+            topic=topic,
+            start_time=body.scheduled_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            duration=body.duration_minutes,
         )
-        print(f"📧 Interview notification sent to {candidate_email_for_notification}")
-    except Exception as e:
-        print(f"⚠️ Failed to send email notification: {e}")
 
-    return _build_response(vi, db)
+        # Use current_user as interviewer if not provided
+        interviewer_id = body.interviewer_id if body.interviewer_id else current_user.id
+
+        vi = VideoInterview(
+            session_id=body.session_id,
+            job_id=body.job_id,
+            candidate_id=candidate.id,  # Use User ID, not JobApplication ID
+            interviewer_id=interviewer_id,
+            scheduled_at=body.scheduled_at,
+            duration_minutes=body.duration_minutes,
+            status=VideoInterviewStatus.SCHEDULED,
+        )
+
+        if zoom_data:
+            vi.zoom_meeting_id = zoom_data["meeting_id"]
+            vi.zoom_meeting_url = zoom_data["join_url"]
+            vi.zoom_host_url = zoom_data["host_url"]
+            vi.zoom_passcode = zoom_data["passcode"]
+
+        db.add(vi)
+        db.commit()
+        db.refresh(vi)
+
+        # Send email notification to candidate
+        try:
+            interview_date = body.scheduled_at.strftime("%B %d, %Y")
+            interview_time = body.scheduled_at.strftime("%I:%M %p")
+
+            # Use video-room URL instead of Zoom meeting URL
+            frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
+            meeting_url = f"{frontend_url}/video-room/{vi.id}"
+
+            send_interview_notification(
+                candidate_email=candidate_email_for_notification,
+                candidate_name=candidate_name_for_email,
+                job_title=job.title,
+                interview_date=interview_date,
+                interview_time=interview_time,
+                meeting_url=meeting_url
+            )
+            print(f"📧 Interview notification sent to {candidate_email_for_notification}")
+        except Exception as e:
+            print(f"⚠️ Failed to send email notification: {e}")
+
+        return _build_response(vi, db)
+    
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        print(f"❌ Error scheduling video interview: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to schedule video interview: {str(e)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -422,49 +447,6 @@ def cancel_video_interview(
     db.commit()
 
     return {"message": "Video interview cancelled", "id": video_id}
-
-
-# ---------------------------------------------------------------------------
-# DELETE /api/video/interviews/data/all  -- Delete all video interview data
-# ---------------------------------------------------------------------------
-
-@router.delete("/api/video/interviews/data/all")
-def delete_all_video_interview_data(
-    current_user: User = Depends(
-        require_any_role([UserRole.ADMIN])
-    ),
-    db: Session = Depends(get_db),
-):
-    """
-    Delete ALL video interview data including related fraud analyses.
-    ADMIN ONLY - Use with caution!
-    """
-    try:
-        # Count records before deletion
-        video_count = db.query(VideoInterview).count()
-        fraud_count = db.query(FraudAnalysis).count()
-        
-        # Delete related fraud analyses first (foreign key constraint)
-        db.query(FraudAnalysis).delete()
-        
-        # Delete all video interviews
-        db.query(VideoInterview).delete()
-        
-        db.commit()
-        
-        return {
-            "message": "All video interview data deleted successfully",
-            "deleted": {
-                "video_interviews": video_count,
-                "fraud_analyses": fraud_count
-            }
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete video interview data: {str(e)}"
-        )
 
 
 # ---------------------------------------------------------------------------
