@@ -196,15 +196,19 @@ const VideoInterviewRoom: React.FC = () => {
 
   const handleStart = async () => {
     try {
-      // Request permissions first
+      // Try to request permissions, but don't block if no camera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         stream.getTracks().forEach(track => track.stop());
         console.log('✅ Media permissions granted');
-      } catch (err) {
-        console.error('❌ Media permission denied:', err);
-        toast.error('Please allow camera and microphone access for the video call');
-        return;
+      } catch (err: any) {
+        console.warn('⚠️ Media device warning:', err.name);
+        // Don't block - just warn and continue
+        if (err.name === 'NotFoundError') {
+          toast('No camera/mic found. Video call will open anyway.', { icon: '⚠️' });
+        } else {
+          toast('Camera access issue. Video call will open anyway.', { icon: '⚠️' });
+        }
       }
 
       await videoInterviewService.startInterview(Number(videoId));
