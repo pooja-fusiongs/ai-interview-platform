@@ -168,17 +168,29 @@ def schedule_video_interview(
 
             if not candidate:
                 # Create a candidate user account from the application
-                # Use a simple placeholder hash (candidate can reset password later)
                 import hashlib
-                placeholder_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G2o7TWpcD.qGCq"  # hash of "temp123"
+                import random
+
+                # Use SHA256 hash (same as crud.py)
+                temp_password = "Welcome123"
+                hashed_pwd = hashlib.sha256(temp_password.encode()).hexdigest()
+
+                # Generate unique username
+                base_username = application.applicant_email.split('@')[0]
+                username = base_username
+
+                # Check if username exists, add random number if needed
+                existing = db.query(User).filter(User.username == username).first()
+                if existing:
+                    username = f"{base_username}{random.randint(100, 999)}"
 
                 candidate = User(
                     email=application.applicant_email,
-                    username=application.applicant_email.split('@')[0],
+                    username=username,
                     full_name=application.applicant_name,
                     role=UserRole.CANDIDATE,
                     is_active=True,
-                    hashed_password=placeholder_hash
+                    hashed_password=hashed_pwd
                 )
                 db.add(candidate)
                 db.flush()  # Get the ID
