@@ -8,6 +8,7 @@ import {
   Typography,
   Button,
   Card,
+  CardContent,
   Avatar,
   Chip,
   TextField,
@@ -34,13 +35,18 @@ import {
   Select,
   InputLabel,
   FormControl,
-  Tooltip
+  Tooltip,
+  TablePagination,
+  useMediaQuery,
+  useTheme
 } from '@mui/material'
 import Navigation from '../layout/sidebar'
 import { CloudUpload as CloudUploadIcon, Visibility as VisibilityIcon } from '@mui/icons-material'
 
 const Candidates = () => {
   const navigate = useNavigate()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCandidate, setMenuCandidate] = useState<Candidate | null>(null)
@@ -54,6 +60,8 @@ const Candidates = () => {
   const [loading, setLoading] = useState<boolean>(true)
   const [sortField, setSortField] = useState<string>('')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
   const [filters, setFilters] = useState<CandidateFilters>({
     statuses: { active: true, pending: true },
     departments: {},
@@ -474,6 +482,22 @@ const Candidates = () => {
     if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
     return 0
   })
+
+  // Pagination handlers
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10))
+    setPage(0)
+  }
+
+  // Paginated data for table view
+  const paginatedCandidates = sortedCandidates.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  )
 
   return (
     <Navigation>
@@ -930,19 +954,194 @@ const Candidates = () => {
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
                 <Typography sx={{ color: '#64748b', fontSize: '16px' }}>Loading candidates...</Typography>
               </Box>
-            ) : (
-              <>
-                <TableContainer
-                  component={Paper}
+            ) : paginatedCandidates.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+                <i className="fas fa-users" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '16px', display: 'block' }}></i>
+                <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
+                  No candidates found
+                </Typography>
+                <Typography sx={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
+                  {searchQuery ?
+                    'Try adjusting your search or filters to find matching candidates.' :
+                    'No users with candidate role found in the system.'
+                  }
+                </Typography>
+                <Button
+                  onClick={refreshCandidates}
                   sx={{
-                    borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                    overflowX: 'auto',
-                    background: 'white',
-                    WebkitOverflowScrolling: 'touch'
+                    background: '#f59e0b',
+                    color: 'white',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    '&:hover': {
+                      background: '#d97706'
+                    }
                   }}
                 >
+                  <i className="fas fa-sync-alt" style={{ marginRight: '8px' }}></i>
+                  Refresh List
+                </Button>
+              </Paper>
+            ) : isMobile ? (
+              /* Mobile Card View */
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {paginatedCandidates.map((candidate) => (
+                  <Card key={candidate.id} sx={{ borderRadius: 2, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
+                    <CardContent sx={{ p: 2 }}>
+                      {/* Header with Avatar and Status */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Box sx={{ position: 'relative' }}>
+                            <Avatar sx={{ width: 40, height: 40, backgroundColor: '#f59e0b', color: '#fff', fontSize: '1rem' }}>
+                              {candidate.name.charAt(0).toUpperCase()}
+                            </Avatar>
+                            <Box sx={{
+                              position: 'absolute',
+                              bottom: 0,
+                              right: 0,
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              border: '2px solid white',
+                              background: candidate.isOnline ? '#10b981' : '#94a3b8'
+                            }} />
+                          </Box>
+                          <Box>
+                            <Typography
+                              sx={{
+                                fontWeight: 600,
+                                color: '#1e293b',
+                                fontSize: '14px',
+                                cursor: 'pointer',
+                                '&:hover': { color: '#3b82f6' }
+                              }}
+                              onClick={() => handleViewDetails(candidate)}
+                            >
+                              {candidate.name}
+                            </Typography>
+                            <Typography sx={{ color: '#f59e0b', fontSize: '12px', fontWeight: 600 }}>
+                              {candidate.role}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Chip
+                          size="small"
+                          label={candidate.status}
+                          sx={{
+                            textTransform: 'capitalize',
+                            background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                            color: candidate.status === 'active' ? '#10b981' : '#f59e0b',
+                            fontWeight: 600,
+                            fontSize: '11px'
+                          }}
+                        />
+                      </Box>
+
+                      {/* Details Grid */}
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
+                        <Box>
+                          <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
+                            Department
+                          </Typography>
+                          <Typography sx={{ fontSize: '13px', color: '#1e293b' }}>
+                            {candidate.department}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
+                            Score
+                          </Typography>
+                          <Typography sx={{
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#f59e0b' : '#ef4444'
+                          }}>
+                            {candidate.score}%
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {/* Email */}
+                      <Box sx={{ mb: 2 }}>
+                        <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
+                          Email
+                        </Typography>
+                        <Typography sx={{ fontSize: '13px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.email}
+                        </Typography>
+                      </Box>
+
+                      {/* Online Status */}
+                      <Box sx={{ mb: 2 }}>
+                        <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
+                          Online Status
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: 0.5 }}>
+                          <Box sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: candidate.isOnline ? '#10b981' : '#94a3b8'
+                          }} />
+                          <Typography sx={{
+                            fontSize: '13px',
+                            color: candidate.isOnline ? '#10b981' : '#94a3b8',
+                            fontWeight: 500,
+                            textTransform: 'capitalize'
+                          }}>
+                            {candidate.onlineStatus || (candidate.isOnline ? 'Active' : 'Inactive')}
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {/* Actions */}
+                      <Box sx={{ display: 'flex', gap: 1, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<VisibilityIcon />}
+                          onClick={() => handleViewDetails(candidate)}
+                          sx={{
+                            flex: 1,
+                            textTransform: 'none',
+                            borderColor: '#3b82f6',
+                            color: '#3b82f6',
+                            fontSize: '12px',
+                            '&:hover': {
+                              borderColor: '#2563eb',
+                              backgroundColor: 'rgba(59, 130, 246, 0.05)'
+                            }
+                          }}
+                        >
+                          View Details
+                        </Button>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleOpenMenu(e, candidate)}
+                          sx={{
+                            color: '#64748b',
+                            border: '1px solid #e2e8f0',
+                            '&:hover': {
+                              color: '#f59e0b',
+                              borderColor: '#f59e0b',
+                              background: 'rgba(245,158,11,0.06)'
+                            }
+                          }}
+                        >
+                          <i className="fas fa-ellipsis-h" style={{ fontSize: '14px' }}></i>
+                        </IconButton>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            ) : (
+              /* Desktop Table View */
+              <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+                <TableContainer sx={{ overflowX: 'auto' }}>
                   <Table size="small" sx={{ minWidth: 800 }}>
                     <TableHead>
                       <TableRow sx={{ background: '#f8fafc' }}>
@@ -1029,7 +1228,7 @@ const Candidates = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {sortedCandidates.map((candidate) => (
+                      {paginatedCandidates.map((candidate) => (
                         <TableRow key={candidate.id} hover>
                           <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>
                             <Typography
@@ -1114,46 +1313,52 @@ const Candidates = () => {
                           </TableCell>
                         </TableRow>
                       ))}
-                      {sortedCandidates.length === 0 && !loading && (
-                        <TableRow>
-                          <TableCell colSpan={7} sx={{ textAlign: 'center', padding: '48px 24px' }}>
-                            <Box>
-                              <i className="fas fa-users" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '16px' }}></i>
-                              <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
-                                No candidates found
-                              </Typography>
-                              <Typography sx={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
-                                {searchQuery ?
-                                  'Try adjusting your search or filters to find matching candidates.' :
-                                  'No users with candidate role found in the system.'
-                                }
-                              </Typography>
-                              <Button
-                                onClick={refreshCandidates}
-                                sx={{
-                                  background: '#f59e0b',
-                                  color: 'white',
-                                  padding: '8px 16px',
-                                  borderRadius: '8px',
-                                  fontSize: '14px',
-                                  fontWeight: 600,
-                                  textTransform: 'none',
-                                  '&:hover': {
-                                    background: '#d97706'
-                                  }
-                                }}
-                              >
-                                <i className="fas fa-sync-alt" style={{ marginRight: '8px' }}></i>
-                                Refresh List
-                              </Button>
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      )}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              </>
+              </Paper>
+            )}
+
+            {/* Pagination for Table View */}
+            {sortedCandidates.length > 0 && (
+              <Paper sx={{ mt: 2, borderRadius: 2, overflow: 'hidden' }}>
+                <TablePagination
+                  rowsPerPageOptions={isMobile ? [5, 10] : [5, 10, 25, 50]}
+                  component="div"
+                  count={sortedCandidates.length}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  labelRowsPerPage={isMobile ? "Per page:" : "Rows per page:"}
+                  sx={{
+                    flexShrink: 0,
+                    backgroundColor: '#fff',
+                    '.MuiTablePagination-toolbar': {
+                      flexWrap: 'wrap',
+                      justifyContent: isMobile ? 'center' : 'flex-end',
+                      padding: isMobile ? '8px' : '8px 16px',
+                      gap: isMobile ? 1 : 0,
+                    },
+                    '.MuiTablePagination-selectLabel': {
+                      color: '#64748b',
+                      fontWeight: 500,
+                      fontSize: isMobile ? '12px' : '14px',
+                    },
+                    '.MuiTablePagination-displayedRows': {
+                      color: '#64748b',
+                      fontWeight: 500,
+                      fontSize: isMobile ? '12px' : '14px',
+                    },
+                    '.MuiTablePagination-select': {
+                      fontWeight: 500,
+                    },
+                    '.MuiTablePagination-actions': {
+                      marginLeft: isMobile ? 0 : 2,
+                    }
+                  }}
+                />
+              </Paper>
             )}
           </>
         )}

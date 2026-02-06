@@ -18,7 +18,11 @@ import {
   InputAdornment,
   Button,
   TablePagination,
-  CircularProgress
+  CircularProgress,
+  Card,
+  CardContent,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -57,6 +61,8 @@ interface QuestionSet {
 
 const ExpertReview: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -400,245 +406,358 @@ const ExpertReview: React.FC = () => {
           </Button>
         </Box>
 
-        {/* Table */}
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-          <TableContainer sx={{ overflowX: 'auto' }}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: '#fafafa' }}>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 600, 
-                      color: sortField === 'experience' ? '#d97706' : '#666', 
-                      fontSize: '0.875rem',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      backgroundColor: sortField === 'experience' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
-                      transition: 'all 0.2s ease',
-                      '&:hover': { 
-                        color: '#d97706',
-                        backgroundColor: 'rgba(217, 119, 6, 0.1)'
-                      }
-                    }}
-                    onClick={() => handleSort('experience')}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      Experience
-                      {renderSortIcon('experience')}
+        {/* Loading State */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+            <CircularProgress size={32} sx={{ color: '#f59e0b' }} />
+            <Typography sx={{ ml: 2, color: '#666' }}>Loading question sets...</Typography>
+          </Box>
+        ) : paginatedData.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+            <Typography color="textSecondary">No question sets found</Typography>
+          </Paper>
+        ) : isMobile ? (
+          /* Mobile Card View */
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {paginatedData.map((questionSet) => (
+              <Card key={questionSet.id} sx={{ borderRadius: 2, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
+                <CardContent sx={{ p: 2 }}>
+                  {/* Header with Avatar and Status */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Avatar sx={{ width: 40, height: 40, backgroundColor: '#f59e0b', color: '#fff', fontSize: '1rem' }}>
+                        {(questionSet.candidate_name || 'U').charAt(0).toUpperCase()}
+                      </Avatar>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>
+                          {questionSet.candidate_name || 'Unknown Candidate'}
+                        </Typography>
+                        <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
+                          {questionSet.job_title || 'Unknown Position'}
+                        </Typography>
+                      </Box>
                     </Box>
-                  </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 600, 
-                      color: sortField === 'candidate_name' ? '#d97706' : '#666', 
-                      fontSize: '0.875rem',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      backgroundColor: sortField === 'candidate_name' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
-                      transition: 'all 0.2s ease',
-                      '&:hover': { 
-                        color: '#d97706',
-                        backgroundColor: 'rgba(217, 119, 6, 0.1)'
-                      }
-                    }}
-                    onClick={() => handleSort('candidate_name')}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      Candidate
-                      {renderSortIcon('candidate_name')}
+                    {getStatusChip(questionSet.status)}
+                  </Box>
+
+                  {/* Details Grid */}
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
+                    <Box>
+                      <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
+                        Experience
+                      </Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#1e293b' }}>
+                        {questionSet.experience || '2+ years'}
+                      </Typography>
                     </Box>
-                  </TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 600, 
-                      color: sortField === 'candidate_email' ? '#d97706' : '#666', 
-                      fontSize: '0.875rem',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      backgroundColor: sortField === 'candidate_email' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
-                      transition: 'all 0.2s ease',
-                      '&:hover': { 
-                        color: '#d97706',
-                        backgroundColor: 'rgba(217, 119, 6, 0.1)'
-                      }
-                    }}
-                    onClick={() => handleSort('candidate_email')}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box>
+                      <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
+                        Skills
+                      </Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {questionSet.main_topics?.join(', ') || 'Engineering'}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Email */}
+                  <Box sx={{ mb: 2 }}>
+                    <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
                       Email
-                      {renderSortIcon('candidate_email')}
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Location</TableCell>
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 600, 
-                      color: sortField === 'skills' ? '#d97706' : '#666', 
-                      fontSize: '0.875rem',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      backgroundColor: sortField === 'skills' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
-                      transition: 'all 0.2s ease',
-                      '&:hover': { 
-                        color: '#d97706',
-                        backgroundColor: 'rgba(217, 119, 6, 0.1)'
-                      }
-                    }}
-                    onClick={() => handleSort('skills')}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      Skills
-                      {renderSortIcon('skills')}
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>
-                    Status
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
-                      <CircularProgress size={24} />
-                      <Typography variant="body2" sx={{ mt: 1, color: '#666' }}>
-                        Loading question sets...
-                      </Typography>
+                    </Typography>
+                    <Typography sx={{ fontSize: '13px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {questionSet.candidate_email || 'No email provided'}
+                    </Typography>
+                  </Box>
+
+                  {/* Actions */}
+                  <Box sx={{ display: 'flex', gap: 1, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => handleViewQuestions(questionSet)}
+                      sx={{
+                        flex: 1,
+                        textTransform: 'none',
+                        borderColor: questionSet.status === 'pending' ? '#f59e0b' : '#16a34a',
+                        color: questionSet.status === 'pending' ? '#f59e0b' : '#16a34a',
+                        fontSize: '12px',
+                        '&:hover': {
+                          borderColor: questionSet.status === 'pending' ? '#d97706' : '#15803d',
+                          backgroundColor: questionSet.status === 'pending' ? '#fef3c7' : '#dcfce7'
+                        }
+                      }}
+                    >
+                      {questionSet.status === 'pending' ? 'Review' : 'View'}
+                    </Button>
+                    {questionSet.status === 'pending' && (
+                      <>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleApproveSet(questionSet.id)}
+                          sx={{
+                            color: '#4caf50',
+                            border: '1px solid #4caf5040',
+                            '&:hover': { background: '#4caf5010' }
+                          }}
+                        >
+                          <ThumbUpIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRejectSet(questionSet.id)}
+                          sx={{
+                            color: '#f44336',
+                            border: '1px solid #f4433640',
+                            '&:hover': { background: '#f4433610' }
+                          }}
+                        >
+                          <ThumbDownIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        ) : (
+          /* Desktop Table View */
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: '#fafafa' }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: 600,
+                        color: sortField === 'experience' ? '#d97706' : '#666',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: sortField === 'experience' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          color: '#d97706',
+                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                        }
+                      }}
+                      onClick={() => handleSort('experience')}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        Experience
+                        {renderSortIcon('experience')}
+                      </Box>
                     </TableCell>
-                  </TableRow>
-                ) : paginatedData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
-                      <Typography variant="body2" color="textSecondary">
-                        No question sets found
-                      </Typography>
+                    <TableCell
+                      sx={{
+                        fontWeight: 600,
+                        color: sortField === 'candidate_name' ? '#d97706' : '#666',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: sortField === 'candidate_name' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          color: '#d97706',
+                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                        }
+                      }}
+                      onClick={() => handleSort('candidate_name')}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        Candidate
+                        {renderSortIcon('candidate_name')}
+                      </Box>
                     </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 600,
+                        color: sortField === 'candidate_email' ? '#d97706' : '#666',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: sortField === 'candidate_email' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          color: '#d97706',
+                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                        }
+                      }}
+                      onClick={() => handleSort('candidate_email')}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        Email
+                        {renderSortIcon('candidate_email')}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Location</TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 600,
+                        color: sortField === 'skills' ? '#d97706' : '#666',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: sortField === 'skills' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          color: '#d97706',
+                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                        }
+                      }}
+                      onClick={() => handleSort('skills')}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        Skills
+                        {renderSortIcon('skills')}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>
+                      Status
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Actions</TableCell>
                   </TableRow>
-                ) : (
-                  paginatedData.map((questionSet) => {
-                    return (
-                      <TableRow key={questionSet.id} sx={{ '&:hover': { backgroundColor: '#fafafa' } }}>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
-                            {questionSet.experience || '2+ years'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar sx={{ width: 32, height: 32, backgroundColor: '#e0e0e0', color: '#666', fontSize: '0.875rem' }}>
-                              {(questionSet.candidate_name || 'U').charAt(0).toUpperCase()}
-                            </Avatar>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
-                                {questionSet.candidate_name || 'Unknown Candidate'}
-                              </Typography>
-                              <Typography variant="caption" sx={{ color: '#666' }}>
-                                {questionSet.job_title || 'Unknown Position'}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ color: '#666' }}>
-                            {questionSet.candidate_email || 'No email provided'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Box sx={{ width: 4, height: 4, backgroundColor: '#4caf50', borderRadius: '50%' }} />
-                            <Typography variant="body2" sx={{ color: '#666' }}>
-                              New York
+                </TableHead>
+                <TableBody>
+                  {paginatedData.map((questionSet) => (
+                    <TableRow key={questionSet.id} sx={{ '&:hover': { backgroundColor: '#fafafa' } }}>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
+                          {questionSet.experience || '2+ years'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Avatar sx={{ width: 32, height: 32, backgroundColor: '#e0e0e0', color: '#666', fontSize: '0.875rem' }}>
+                            {(questionSet.candidate_name || 'U').charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
+                              {questionSet.candidate_name || 'Unknown Candidate'}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#666' }}>
+                              {questionSet.job_title || 'Unknown Position'}
                             </Typography>
                           </Box>
-                        </TableCell>
-                        <TableCell>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ color: '#666' }}>
+                          {questionSet.candidate_email || 'No email provided'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box sx={{ width: 4, height: 4, backgroundColor: '#4caf50', borderRadius: '50%' }} />
                           <Typography variant="body2" sx={{ color: '#666' }}>
-                            {questionSet.main_topics?.join(', ') || 'Engineering'}
+                            New York
                           </Typography>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusChip(questionSet.status)}
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleViewQuestions(questionSet)}
-                              title={questionSet.status === 'pending' ? 'Review Questions' : 'View Questions'}
-                              sx={{
-                                color: questionSet.status === 'pending' ? '#f59e0b' : questionSet.status === 'approved' ? '#16a34a' : '#64748b',
-                                border: '1px solid',
-                                borderColor: questionSet.status === 'pending' ? '#f59e0b40' : questionSet.status === 'approved' ? '#16a34a40' : '#64748b40',
-                                '&:hover': {
-                                  background: questionSet.status === 'pending' ? '#f59e0b10' : questionSet.status === 'approved' ? '#16a34a10' : '#64748b10'
-                                }
-                              }}
-                            >
-                              <VisibilityIcon fontSize="small" />
-                            </IconButton>
-                            {questionSet.status === 'pending' && (
-                              <>
-                                <IconButton
-                                  size="small"
-                                  sx={{
-                                    color: '#4caf50',
-                                    border: '1px solid #4caf5040',
-                                    '&:hover': { background: '#4caf5010' }
-                                  }}
-                                  onClick={() => handleApproveSet(questionSet.id)}
-                                  title="Approve All"
-                                >
-                                  <ThumbUpIcon fontSize="small" />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  sx={{
-                                    color: '#f44336',
-                                    border: '1px solid #f4433640',
-                                    '&:hover': { background: '#f4433610' }
-                                  }}
-                                  onClick={() => handleRejectSet(questionSet.id)}
-                                  title="Reject All"
-                                >
-                                  <ThumbDownIcon fontSize="small" />
-                                </IconButton>
-                              </>
-                            )}
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ color: '#666' }}>
+                          {questionSet.main_topics?.join(', ') || 'Engineering'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusChip(questionSet.status)}
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleViewQuestions(questionSet)}
+                            title={questionSet.status === 'pending' ? 'Review Questions' : 'View Questions'}
+                            sx={{
+                              color: questionSet.status === 'pending' ? '#f59e0b' : questionSet.status === 'approved' ? '#16a34a' : '#64748b',
+                              border: '1px solid',
+                              borderColor: questionSet.status === 'pending' ? '#f59e0b40' : questionSet.status === 'approved' ? '#16a34a40' : '#64748b40',
+                              '&:hover': {
+                                background: questionSet.status === 'pending' ? '#f59e0b10' : questionSet.status === 'approved' ? '#16a34a10' : '#64748b10'
+                              }
+                            }}
+                          >
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                          {questionSet.status === 'pending' && (
+                            <>
+                              <IconButton
+                                size="small"
+                                sx={{
+                                  color: '#4caf50',
+                                  border: '1px solid #4caf5040',
+                                  '&:hover': { background: '#4caf5010' }
+                                }}
+                                onClick={() => handleApproveSet(questionSet.id)}
+                                title="Approve All"
+                              >
+                                <ThumbUpIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                sx={{
+                                  color: '#f44336',
+                                  border: '1px solid #f4433640',
+                                  '&:hover': { background: '#f4433610' }
+                                }}
+                                onClick={() => handleRejectSet(questionSet.id)}
+                                title="Reject All"
+                              >
+                                <ThumbDownIcon fontSize="small" />
+                              </IconButton>
+                            </>
+                          )}
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        )}
 
         {/* Pagination */}
-        <TablePagination
-          rowsPerPageOptions={[5, 10, 25, 50]}
-          component="div"
-          count={sortedQuestionSets.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          sx={{
-            flexShrink: 0,
-            borderTop: '1px solid #e2e8f0',
-            backgroundColor: '#fff',
-            borderRadius: '0 0 8px 8px',
-            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-              color: '#64748b',
-              fontWeight: 500,
-            },
-            '.MuiTablePagination-select': {
-              fontWeight: 500,
-            },
-          }}
-        />
+        <Paper sx={{ mt: 2, borderRadius: 2, overflow: 'hidden' }}>
+          <TablePagination
+            rowsPerPageOptions={isMobile ? [5, 10] : [5, 10, 25, 50]}
+            component="div"
+            count={sortedQuestionSets.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            labelRowsPerPage={isMobile ? "Per page:" : "Rows per page:"}
+            sx={{
+              flexShrink: 0,
+              backgroundColor: '#fff',
+              '.MuiTablePagination-toolbar': {
+                flexWrap: 'wrap',
+                justifyContent: isMobile ? 'center' : 'flex-end',
+                padding: isMobile ? '8px' : '8px 16px',
+                gap: isMobile ? 1 : 0,
+              },
+              '.MuiTablePagination-selectLabel': {
+                color: '#64748b',
+                fontWeight: 500,
+                fontSize: isMobile ? '12px' : '14px',
+              },
+              '.MuiTablePagination-displayedRows': {
+                color: '#64748b',
+                fontWeight: 500,
+                fontSize: isMobile ? '12px' : '14px',
+              },
+              '.MuiTablePagination-select': {
+                fontWeight: 500,
+              },
+              '.MuiTablePagination-actions': {
+                marginLeft: isMobile ? 0 : 2,
+              }
+            }}
+          />
+        </Paper>
       </Box>
     </Navigation>
   );

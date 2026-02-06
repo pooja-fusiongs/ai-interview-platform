@@ -25,6 +25,8 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import {
   Visibility,
@@ -132,6 +134,8 @@ const FeedbackList: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const fetchFeedbacks = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -588,30 +592,32 @@ const FeedbackList: React.FC = () => {
         >
           
 
-          {/* Table */}
+          {/* Table / Cards */}
           {loading ? (
-            <TableContainer sx={{ overflowX: 'auto' }}>
-              <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
-                <TableHead>
-                  <TableRow sx={{ backgroundColor: '#f8fafc' }}>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>ID</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Candidate</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Job Position</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Score</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Hire Date</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px', width: 60 }}></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableSkeleton />
-                </TableBody>
-              </Table>
-            </TableContainer>
-          ) : filteredFeedbacks.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <>
+            isMobile ? (
+              // Mobile Loading Skeleton
+              <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Card key={i} sx={{ borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                    <CardContent sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                        <Skeleton variant="circular" width={40} height={40} />
+                        <Box sx={{ flex: 1 }}>
+                          <Skeleton variant="text" width="60%" />
+                          <Skeleton variant="text" width="40%" height={14} />
+                        </Box>
+                        <Skeleton variant="circular" width={44} height={44} />
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Skeleton variant="text" width="30%" />
+                        <Skeleton variant="rounded" width={70} height={24} />
+                      </Box>
+                      <Skeleton variant="text" width="50%" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            ) : (
               <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
                   <TableHead>
@@ -626,25 +632,36 @@ const FeedbackList: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {paginatedFeedbacks.map((fb, ) => (
-                      <TableRow
-                        key={fb.id}
+                    <TableSkeleton />
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )
+          ) : filteredFeedbacks.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <>
+              {isMobile ? (
+                // Mobile Card View
+                <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {paginatedFeedbacks.map((fb) => (
+                    <Grow in key={fb.id} timeout={300}>
+                      <Card
                         sx={{
-                          '&:hover': { backgroundColor: '#f8fafc' },
-                          transition: 'background-color 0.15s ease',
+                          borderRadius: '12px',
+                          border: '1px solid #e5e7eb',
+                          boxShadow: 'none',
+                          transition: 'all 0.2s ease',
+                          '&:hover': { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)' },
                         }}
                       >
-                        <TableCell>
-                          <Typography sx={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
-                            #{fb.id}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                          {/* Header with Avatar, Name, and Score */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                             <Box
                               sx={{
-                                width: 36,
-                                height: 36,
+                                width: 40,
+                                height: 40,
                                 borderRadius: '10px',
                                 background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                                 display: 'flex',
@@ -652,102 +669,279 @@ const FeedbackList: React.FC = () => {
                                 justifyContent: 'center',
                                 color: '#fff',
                                 fontWeight: 600,
-                                fontSize: '14px',
+                                fontSize: '16px',
+                                flexShrink: 0,
                               }}
                             >
                               {fb.candidate_name?.charAt(0).toUpperCase() || 'C'}
                             </Box>
-                            <Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography
                                 sx={{
-                                  fontSize: '14px',
+                                  fontSize: '15px',
                                   fontWeight: 600,
+                                  color: '#1e293b',
                                   cursor: 'pointer',
-                                  '&:hover': { cursor:"pointer" }
+                                  '&:hover': { color: '#3b82f6' },
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
                                 }}
                                 onClick={() => navigate(`/feedback/${fb.id}`)}
                               >
                                 {fb.candidate_name || `Candidate #${fb.candidate_id}`}
                               </Typography>
                               <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>
-                                ID: {fb.candidate_id}
+                                ID: #{fb.id} | Candidate ID: {fb.candidate_id}
                               </Typography>
                             </Box>
+                            <CircularScore score={fb.overall_score} size={48} />
                           </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography
-                            sx={{
-                              fontSize: '14px',
-                              color: '#1e293b',
-                              cursor: 'pointer',
-                              '&:hover': { color: '#3b82f6' }
-                            }}
-                            onClick={() => navigate(`/feedback/${fb.id}`)}
-                          >
-                            {fb.job_title || `Job #${fb.job_id}`}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <CircularScore score={fb.overall_score} />
-                        </TableCell>
-                        <TableCell>
-                          <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                            {fb.hire_date ? new Date(fb.hire_date).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            }) : '-'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            icon={fb.still_employed ? <CheckCircle sx={{ fontSize: '14px !important' }} /> : <Cancel sx={{ fontSize: '14px !important' }} />}
-                            label={fb.still_employed ? 'Employed' : 'Left'}
-                            size="small"
-                            sx={{
-                              backgroundColor: fb.still_employed ? '#f0fdf4' : '#fef2f2',
-                              color: fb.still_employed ? '#16a34a' : '#dc2626',
-                              border: `1px solid ${fb.still_employed ? '#22c55e' : '#ef4444'}30`,
-                              fontWeight: 600,
-                              fontSize: '12px',
-                              '& .MuiChip-icon': {
-                                color: fb.still_employed ? '#22c55e' : '#ef4444',
-                              },
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Tooltip title="View Details" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={() => navigate(`/feedback/${fb.id}`)}
-                                sx={{
-                                  color: '#3b82f6',
-                                  '&:hover': { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#2563eb' },
-                                }}
-                              >
-                                <Visibility sx={{ fontSize: '18px' }} />
-                              </IconButton>
-                            </Tooltip>
+
+                          {/* Job Position */}
+                          <Box sx={{ mb: 1.5 }}>
+                            <Typography sx={{ fontSize: '12px', color: '#64748b', mb: 0.25 }}>
+                              Job Position
+                            </Typography>
+                            <Typography
+                              sx={{
+                                fontSize: '14px',
+                                color: '#1e293b',
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                                '&:hover': { color: '#3b82f6' },
+                              }}
+                              onClick={() => navigate(`/feedback/${fb.id}`)}
+                            >
+                              {fb.job_title || `Job #${fb.job_id}`}
+                            </Typography>
+                          </Box>
+
+                          {/* Hire Date and Status Row */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                            <Box>
+                              <Typography sx={{ fontSize: '12px', color: '#64748b', mb: 0.25 }}>
+                                Hire Date
+                              </Typography>
+                              <Typography sx={{ fontSize: '13px', color: '#1e293b', fontWeight: 500 }}>
+                                {fb.hire_date ? new Date(fb.hire_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                }) : '-'}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              icon={fb.still_employed ? <CheckCircle sx={{ fontSize: '14px !important' }} /> : <Cancel sx={{ fontSize: '14px !important' }} />}
+                              label={fb.still_employed ? 'Employed' : 'Left'}
+                              size="small"
+                              sx={{
+                                backgroundColor: fb.still_employed ? '#f0fdf4' : '#fef2f2',
+                                color: fb.still_employed ? '#16a34a' : '#dc2626',
+                                border: `1px solid ${fb.still_employed ? '#22c55e' : '#ef4444'}30`,
+                                fontWeight: 600,
+                                fontSize: '12px',
+                                '& .MuiChip-icon': {
+                                  color: fb.still_employed ? '#22c55e' : '#ef4444',
+                                },
+                              }}
+                            />
+                          </Box>
+
+                          {/* Action Buttons */}
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<Visibility sx={{ fontSize: '16px' }} />}
+                              onClick={() => navigate(`/feedback/${fb.id}`)}
+                              sx={{
+                                flex: 1,
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                backgroundColor: '#3b82f6',
+                                '&:hover': { backgroundColor: '#2563eb' },
+                              }}
+                            >
+                              View Details
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<Edit sx={{ fontSize: '16px' }} />}
+                              onClick={() => navigate(`/feedback/${fb.id}/edit`)}
+                              sx={{
+                                flex: 1,
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                borderColor: '#e5e7eb',
+                                color: '#64748b',
+                                '&:hover': { borderColor: '#d1d5db', backgroundColor: '#f8fafc' },
+                              }}
+                            >
+                              Edit
+                            </Button>
                             <IconButton
                               size="small"
                               onClick={(e) => handleMenuOpen(e, fb)}
                               sx={{
-                                color: '#94a3b8',
-                                '&:hover': { backgroundColor: '#f1f5f9', color: '#64748b' },
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                color: '#64748b',
+                                '&:hover': { backgroundColor: '#f8fafc', borderColor: '#d1d5db' },
                               }}
                             >
-                              <MoreVert sx={{ fontSize: '20px' }} />
+                              <MoreVert sx={{ fontSize: '18px' }} />
                             </IconButton>
                           </Box>
-                        </TableCell>
+                        </CardContent>
+                      </Card>
+                    </Grow>
+                  ))}
+                </Box>
+              ) : (
+                // Desktop Table View
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>ID</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Candidate</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Job Position</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Score</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Hire Date</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px', width: 60 }}></TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedFeedbacks.map((fb) => (
+                        <TableRow
+                          key={fb.id}
+                          sx={{
+                            '&:hover': { backgroundColor: '#f8fafc' },
+                            transition: 'background-color 0.15s ease',
+                          }}
+                        >
+                          <TableCell>
+                            <Typography sx={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+                              #{fb.id}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <Box
+                                sx={{
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: '10px',
+                                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#fff',
+                                  fontWeight: 600,
+                                  fontSize: '14px',
+                                }}
+                              >
+                                {fb.candidate_name?.charAt(0).toUpperCase() || 'C'}
+                              </Box>
+                              <Box>
+                                <Typography
+                                  sx={{
+                                    fontSize: '14px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    '&:hover': { cursor:"pointer" }
+                                  }}
+                                  onClick={() => navigate(`/feedback/${fb.id}`)}
+                                >
+                                  {fb.candidate_name || `Candidate #${fb.candidate_id}`}
+                                </Typography>
+                                <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>
+                                  ID: {fb.candidate_id}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              sx={{
+                                fontSize: '14px',
+                                color: '#1e293b',
+                                cursor: 'pointer',
+                                '&:hover': { color: '#3b82f6' }
+                              }}
+                              onClick={() => navigate(`/feedback/${fb.id}`)}
+                            >
+                              {fb.job_title || `Job #${fb.job_id}`}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <CircularScore score={fb.overall_score} />
+                          </TableCell>
+                          <TableCell>
+                            <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                              {fb.hire_date ? new Date(fb.hire_date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              }) : '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              icon={fb.still_employed ? <CheckCircle sx={{ fontSize: '14px !important' }} /> : <Cancel sx={{ fontSize: '14px !important' }} />}
+                              label={fb.still_employed ? 'Employed' : 'Left'}
+                              size="small"
+                              sx={{
+                                backgroundColor: fb.still_employed ? '#f0fdf4' : '#fef2f2',
+                                color: fb.still_employed ? '#16a34a' : '#dc2626',
+                                border: `1px solid ${fb.still_employed ? '#22c55e' : '#ef4444'}30`,
+                                fontWeight: 600,
+                                fontSize: '12px',
+                                '& .MuiChip-icon': {
+                                  color: fb.still_employed ? '#22c55e' : '#ef4444',
+                                },
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Tooltip title="View Details" arrow>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => navigate(`/feedback/${fb.id}`)}
+                                  sx={{
+                                    color: '#3b82f6',
+                                    '&:hover': { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#2563eb' },
+                                  }}
+                                >
+                                  <Visibility sx={{ fontSize: '18px' }} />
+                                </IconButton>
+                              </Tooltip>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleMenuOpen(e, fb)}
+                                sx={{
+                                  color: '#94a3b8',
+                                  '&:hover': { backgroundColor: '#f1f5f9', color: '#64748b' },
+                                }}
+                              >
+                                <MoreVert sx={{ fontSize: '20px' }} />
+                              </IconButton>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
               <TablePagination
                 component="div"
                 count={filteredFeedbacks.length}
@@ -758,10 +952,27 @@ const FeedbackList: React.FC = () => {
                   setRowsPerPage(parseInt(e.target.value, 10));
                   setPage(0);
                 }}
-                rowsPerPageOptions={[5, 10, 25, 50]}
+                rowsPerPageOptions={isMobile ? [5, 10] : [5, 10, 25, 50]}
+                labelRowsPerPage={isMobile ? 'Per page:' : 'Rows per page:'}
                 sx={{
                   borderTop: '1px solid #f1f5f9',
                   '& .MuiTablePagination-select': { borderRadius: '6px' },
+                  '& .MuiTablePagination-toolbar': {
+                    flexWrap: isMobile ? 'wrap' : 'nowrap',
+                    justifyContent: isMobile ? 'center' : 'flex-end',
+                    gap: isMobile ? 1 : 0,
+                    px: isMobile ? 1 : 2,
+                    py: isMobile ? 1.5 : 1,
+                  },
+                  '& .MuiTablePagination-selectLabel': {
+                    display: isMobile ? 'none' : 'block',
+                  },
+                  '& .MuiTablePagination-displayedRows': {
+                    fontSize: isMobile ? '12px' : '14px',
+                  },
+                  '& .MuiTablePagination-actions': {
+                    ml: isMobile ? 0 : 2,
+                  },
                 }}
               />
             </>

@@ -3,7 +3,7 @@ import {
   Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, Chip, IconButton, Tooltip, CircularProgress, Alert,
   TablePagination, TextField, InputAdornment, FormControl, Select, MenuItem,
-  Button, Popover, Badge
+  Button, Popover, Badge, Card, CardContent, useMediaQuery, useTheme
 } from '@mui/material';
 import { Visibility, PlayArrow, Cancel, Search, FilterList, Close } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,8 @@ const statusColorMap: Record<string, 'primary' | 'warning' | 'success' | 'error'
 
 const VideoInterviewList: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [interviews, setInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -291,7 +293,179 @@ const VideoInterviewList: React.FC = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
+        ) : isMobile ? (
+          /* Mobile Card View */
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {paginatedInterviews.length === 0 ? (
+              <Paper sx={{ p: 3, textAlign: 'center' }}>
+                <Typography color="textSecondary">No video interviews found</Typography>
+              </Paper>
+            ) : (
+              paginatedInterviews.map((row, index) => (
+                <Card
+                  key={row.id}
+                  sx={{
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    border: '1px solid #e2e8f0',
+                    '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.12)' },
+                  }}
+                >
+                  <CardContent sx={{ p: 2 }}>
+                    {/* Header with job title and status */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            fontWeight: 600,
+                            color: '#1e293b',
+                            cursor: 'pointer',
+                            '&:hover': { color: '#3b82f6' },
+                          }}
+                          onClick={() => navigate(`/video-detail/${row.id}`)}
+                        >
+                          {row.job_title || 'N/A'}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: '#64748b',
+                            cursor: 'pointer',
+                            '&:hover': { color: '#3b82f6' },
+                          }}
+                          onClick={() => navigate(`/video-detail/${row.id}`)}
+                        >
+                          {row.candidate_name || 'N/A'}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={row.status}
+                        color={statusColorMap[row.status] || 'default'}
+                        size="small"
+                        sx={{ ml: 1 }}
+                      />
+                    </Box>
+
+                    {/* Interview details */}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>
+                          Scheduled
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
+                          {new Date(row.scheduled_at).toLocaleDateString()}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>
+                          {new Date(row.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>
+                          Duration
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
+                          {row.duration_minutes} min
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>
+                          Trust Score
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
+                          {row.trust_score ?? '—'}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>
+                          Flags
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
+                          {row.flag_count ?? 0}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* Action buttons */}
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', pt: 1.5, mt: 1 }}>
+                      <Tooltip title="View Details">
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate(`/video-detail/${row.id}`)}
+                          sx={{ backgroundColor: '#f1f5f9', '&:hover': { backgroundColor: '#e2e8f0' } }}
+                        >
+                          <Visibility fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="success"
+                            onClick={() => navigate(`/video-room/${row.id}`)}
+                            disabled={row.status === 'cancelled' || row.status === 'completed'}
+                            sx={{ backgroundColor: '#f0fdf4', '&:hover': { backgroundColor: '#dcfce7' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                          >
+                            <PlayArrow fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Cancel">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleCancel(row.id)}
+                            disabled={row.status === 'cancelled' || row.status === 'completed'}
+                            sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                          >
+                            <Cancel fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+
+            {/* Mobile-friendly Pagination */}
+            <Paper sx={{ borderRadius: '12px', overflow: 'hidden' }}>
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 25]}
+                component="div"
+                count={filteredInterviews.length}
+                rowsPerPage={rowsPerPage}
+                page={page}
+                onPageChange={handleChangePage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                labelRowsPerPage="Per page:"
+                sx={{
+                  '.MuiTablePagination-toolbar': {
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    padding: '8px',
+                  },
+                  '.MuiTablePagination-spacer': {
+                    display: 'none',
+                  },
+                  '.MuiTablePagination-selectLabel': {
+                    margin: 0,
+                  },
+                  '.MuiTablePagination-displayedRows': {
+                    margin: '8px 0',
+                    width: '100%',
+                    textAlign: 'center',
+                  },
+                  '.MuiTablePagination-actions': {
+                    marginLeft: 0,
+                  },
+                }}
+              />
+            </Paper>
+          </Box>
         ) : (
+          /* Desktop Table View */
           <Paper sx={{ width: '100%', display: 'flex', flexDirection: 'column', maxHeight: { xs: 'calc(100vh - 220px)', md: 'calc(100vh - 180px)' }, overflow: 'hidden' }}>
             <TableContainer sx={{ flex: 1, overflowX: 'auto' }}>
               <Table stickyHeader>
