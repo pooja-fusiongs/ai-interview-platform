@@ -55,7 +55,7 @@ def create_daily_room(topic, start_time=None, duration=None):
         "Content-Type": "application/json"
     }
 
-    # Room settings
+    # Room settings (FREE plan compatible)
     payload = {
         "name": room_name,
         "privacy": "public",  # Anyone with link can join
@@ -64,7 +64,7 @@ def create_daily_room(topic, start_time=None, duration=None):
             "start_audio_off": False,
             "enable_chat": True,
             "enable_screenshare": True,
-            "enable_recording": "local",  # Allow local recording
+            # "enable_recording": "local",  # Disabled - not available in FREE plan
             "max_participants": 10,
             "exp": int(time.time()) + (24 * 60 * 60),  # Room expires in 24 hours
             "enable_prejoin_ui": False,  # Skip pre-join, go directly to call
@@ -86,9 +86,11 @@ def create_daily_room(topic, start_time=None, duration=None):
             }
         else:
             print(f"⚠️ Daily.co room creation failed: {response.status_code} - {response.text}")
+            print(f"⚠️ Daily.co API key (first 10 chars): {config.DAILY_API_KEY[:10]}... Room: {room_name}")
             return None
     except Exception as e:
         print(f"⚠️ Daily.co API error: {e}")
+        print(f"⚠️ Check if DAILY_API_KEY is valid in .env file")
         return None
 
 

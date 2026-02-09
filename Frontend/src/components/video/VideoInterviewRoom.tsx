@@ -47,6 +47,9 @@ const VideoInterviewRoom: React.FC = () => {
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
 
+  // Detect if meeting URL is Jitsi (fallback) instead of Daily.co
+  const isJitsi = interview?.zoom_meeting_url?.includes('meet.jit.si') || false;
+
   // Load Daily.co script
   useEffect(() => {
     const script = document.createElement('script');
@@ -124,16 +127,19 @@ const VideoInterviewRoom: React.FC = () => {
     };
   }, [isActive]);
 
-  // Initialize Daily.co when interview becomes active
+  // Initialize video call when interview becomes active
   useEffect(() => {
-    if (isActive && dailyLoaded && dailyContainerRef.current && !dailyCallRef.current && interview?.zoom_meeting_url) {
-      initializeDaily();
+    if (isActive && dailyContainerRef.current && !dailyCallRef.current && interview?.zoom_meeting_url) {
+      // For Jitsi URLs, we don't need Daily.co SDK to be loaded
+      if (isJitsi || dailyLoaded) {
+        initializeDaily();
+      }
     }
   }, [isActive, dailyLoaded, interview]);
 
   const initializeDaily = async () => {
-    if (!dailyContainerRef.current || !window.DailyIframe) {
-      console.error('Daily container or SDK not available');
+    if (!dailyContainerRef.current) {
+      console.error('Video container not available');
       return;
     }
 
@@ -141,6 +147,30 @@ const VideoInterviewRoom: React.FC = () => {
     if (!meetingUrl) {
       console.error('No meeting URL available');
       toast.error('Meeting URL not available');
+      return;
+    }
+
+    // Handle Jitsi URLs - embed as iframe instead of Daily.co SDK
+    if (meetingUrl.includes('meet.jit.si')) {
+      console.log('🎥 Initializing Jitsi meeting:', meetingUrl);
+      const iframe = document.createElement('iframe');
+      iframe.src = meetingUrl;
+      iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = '0';
+      iframe.style.borderRadius = '20px';
+      iframe.onload = () => {
+        setCallJoined(true);
+        toast.success('Connected to video call!');
+      };
+      dailyContainerRef.current.innerHTML = '';
+      dailyContainerRef.current.appendChild(iframe);
+      return;
+    }
+
+    if (!window.DailyIframe) {
+      console.error('Daily.co SDK not available');
       return;
     }
 
@@ -218,7 +248,36 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const handleStart = () => {
-    setShowConsentDialog(true);
+    if (user?.role === 'candidate') {
+      setShowConsentDialog(true);
+    } else {
+      // Recruiter/Admin — start directly without consent popup
+      startInterviewDirectly();
+    }
+  };
+
+  const startInterviewDirectly = async () => {
+    try {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        stream.getTracks().forEach(track => track.stop());
+      } catch (err: any) {
+        if (err.name === 'NotFoundError') {
+          toast('No camera/mic found. Video call will open anyway.', { icon: '⚠️' });
+        } else {
+          toast('Camera access issue. Video call will open anyway.', { icon: '⚠️' });
+        }
+      }
+
+      await videoInterviewService.startInterview(Number(videoId));
+      const data = await videoInterviewService.getInterview(Number(videoId));
+      setInterview(data);
+      setIsActive(true);
+      setElapsed(0);
+      toast.success('Interview started! Connecting to video call...');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to start interview');
+    }
   };
 
   const handleConsentAccept = async () => {
@@ -654,7 +713,7 @@ const VideoInterviewRoom: React.FC = () => {
                     variant="contained"
                     startIcon={<Videocam />}
                     onClick={handleStart}
-                    disabled={!dailyLoaded}
+                    disabled={!dailyLoaded && !isJitsi}
                     sx={{
                       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                       padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
@@ -664,7 +723,7 @@ const VideoInterviewRoom: React.FC = () => {
                       '&:disabled': { background: '#94a3b8' }
                     }}
                   >
-                    {dailyLoaded ? 'Start Meeting' : 'Loading...'}
+                    {(dailyLoaded || isJitsi) ? 'Start Meeting' : 'Loading...'}
                   </Button>
                 ) : (
                   <Button
