@@ -34,6 +34,7 @@ const VideoInterviewRoom: React.FC = () => {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
+  const jitsiApiRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
@@ -100,7 +101,22 @@ const VideoInterviewRoom: React.FC = () => {
     }
   }, [isActive, interview]);
 
-  const initializeVideo = () => {
+  const loadJitsiScript = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if ((window as any).JitsiMeetExternalAPI) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://meet.jit.si/external_api.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load Jitsi API'));
+      document.head.appendChild(script);
+    });
+  };
+
+  const initializeVideo = async () => {
     if (!videoContainerRef.current) {
       console.error('Video container not available');
       return;
@@ -113,16 +129,81 @@ const VideoInterviewRoom: React.FC = () => {
       return;
     }
 
-    // Add Jitsi config to skip pre-join lobby and auto-join
-    let jitsiUrl = meetingUrl;
-    if (meetingUrl.includes('meet.jit.si') && !meetingUrl.includes('prejoinPageEnabled')) {
-      const separator = meetingUrl.includes('#') ? '&' : '#';
-      jitsiUrl = `${meetingUrl}${separator}config.prejoinPageEnabled=false&config.disableDeepLinking=true`;
+    // Use Jitsi IFrame API for proper embedding (bypasses lobby/moderator screen)
+    if (meetingUrl.includes('meet.jit.si')) {
+      try {
+        await loadJitsiScript();
+
+        // Extract room name from URL (remove config hash params)
+        const roomName = meetingUrl.split('meet.jit.si/')[1]?.split('#')[0]?.split('?')[0];
+        if (!roomName) {
+          toast.error('Invalid meeting URL');
+          return;
+        }
+
+        videoContainerRef.current.innerHTML = '';
+
+        const api = new (window as any).JitsiMeetExternalAPI('meet.jit.si', {
+          roomName: roomName,
+          parentNode: videoContainerRef.current,
+          width: '100%',
+          height: '100%',
+          configOverwrite: {
+            prejoinPageEnabled: false,
+            disableDeepLinking: true,
+            enableLobby: false,
+            startWithAudioMuted: false,
+            startWithVideoMuted: false,
+            enableWelcomePage: false,
+            enableClosePage: false,
+            disableModeratedRooms: true,
+            // Additional security bypass settings
+            requireDisplayName: false,
+            enableInsecureRoomNameWarning: false,
+            enableNoisyMicDetection: false,
+            // Disable lobby completely
+            lobby: {
+              autoKnock: false,
+              enableChat: false,
+            },
+            // Allow everyone to join without approval
+            disableLobbyPassword: true,
+            enableLobbyChat: false,
+          },
+          interfaceConfigOverwrite: {
+            SHOW_JITSI_WATERMARK: false,
+            SHOW_WATERMARK_FOR_GUESTS: false,
+            DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+            HIDE_INVITE_MORE_HEADER: true,
+            DISABLE_PRESENCE_STATUS: true,
+          },
+          userInfo: {
+            displayName: interview?.candidate_name || user?.name || 'Participant'
+          }
+        });
+
+        api.addEventListener('videoConferenceJoined', () => {
+          setCallJoined(true);
+          toast.success('Connected to video call!');
+        });
+
+        api.addEventListener('readyToClose', () => {
+          console.log('📴 Jitsi call ended by user');
+          handleEnd();
+        });
+
+        jitsiApiRef.current = api;
+        console.log('🎥 Jitsi IFrame API initialized for room:', roomName);
+        return;
+      } catch (err) {
+        console.error('Failed to load Jitsi API, falling back to iframe:', err);
+      }
     }
 
-    console.log('🎥 Initializing Jitsi meeting:', jitsiUrl);
+    // Fallback: plain iframe (for non-Jitsi URLs or if API fails)
+    console.log('🎥 Initializing video via iframe:', meetingUrl);
     const iframe = document.createElement('iframe');
-    iframe.src = jitsiUrl;
+    iframe.src = meetingUrl;
     iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
     iframe.style.width = '100%';
     iframe.style.height = '100%';
@@ -171,6 +252,9 @@ const VideoInterviewRoom: React.FC = () => {
       setIsActive(true);
       setElapsed(0);
       toast.success('Interview started! Connecting to video call...');
+
+      // Start recording for recruiter/admin
+      startRecording();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to start interview');
     }
@@ -298,6 +382,10 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const cleanupVideoCall = () => {
+    if (jitsiApiRef.current) {
+      try { jitsiApiRef.current.dispose(); } catch (e) { /* ignore */ }
+      jitsiApiRef.current = null;
+    }
     if (videoContainerRef.current) {
       videoContainerRef.current.innerHTML = '';
     }
@@ -422,7 +510,7 @@ const VideoInterviewRoom: React.FC = () => {
                     border: '1px solid #fecaca',
                   }}
                 />
-                {isRecording && user?.role !== 'candidate' && (
+                {isRecording && (
                   <Chip
                     icon={<FiberManualRecord sx={{ fontSize: 14, color: '#ef4444', animation: 'blink 1s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
                     label="REC"
@@ -502,25 +590,38 @@ const VideoInterviewRoom: React.FC = () => {
                   <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700, mb: 1 }}>
                     Interview Completed
                   </Typography>
-                  <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 3 }}>
-                    Go to Interview Details to upload transcript and generate score
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Description />}
-                    onClick={() => navigate(`/video-detail/${videoId}`)}
-                    sx={{
-                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                      fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '14px 32px',
-                      fontSize: '15px',
-                      boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
-                      '&:hover': {
-                        background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
-                      }
-                    }}
-                  >
-                    View Details & Upload Transcript
-                  </Button>
+                  {user?.role === 'candidate' ? (
+                    <>
+                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 1 }}>
+                        Thank you for attending the interview!
+                      </Typography>
+                      <Typography sx={{ color: '#64748b', fontSize: '13px' }}>
+                        The recruiter will review your interview and get back to you soon.
+                      </Typography>
+                    </>
+                  ) : (
+                    <>
+                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 3 }}>
+                        Go to Interview Details to upload transcript and generate score
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        startIcon={<Description />}
+                        onClick={() => navigate(`/video-detail/${videoId}`)}
+                        sx={{
+                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '14px 32px',
+                          fontSize: '15px',
+                          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                          }
+                        }}
+                      >
+                        View Details & Upload Transcript
+                      </Button>
+                    </>
+                  )}
                 </Box>
               ) : (
                 <Box sx={{ textAlign: 'center', p: { xs: 2, sm: 4 } }}>
