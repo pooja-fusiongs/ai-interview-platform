@@ -38,13 +38,15 @@ def create_daily_room(topic, start_time=None, duration=None):
         print("⚠️ Daily.co API key not configured, falling back to Jitsi")
         return None
 
-    # Clean topic to create room name
+    # Clean topic to create room name (Daily.co rules: lowercase, alphanumeric, single hyphens, max 41 chars)
     room_name = re.sub(r'[^a-zA-Z0-9\s-]', '', topic)
     room_name = re.sub(r'\s+', '-', room_name.strip()).lower()
+    room_name = re.sub(r'-+', '-', room_name)  # Collapse consecutive hyphens
+    room_name = room_name.strip('-')  # Remove leading/trailing hyphens
 
-    # Add unique ID to prevent collisions
+    # Add unique ID to prevent collisions (8 chars + 1 hyphen = 9, so max base = 32)
     unique_id = uuid.uuid4().hex[:8]
-    room_name = f"{room_name}-{unique_id}"
+    room_name = f"{room_name[:32]}-{unique_id}"
 
     # Daily.co API to create room
     url = "https://api.daily.co/v1/rooms"
@@ -119,6 +121,8 @@ def create_jitsi_meeting(topic, start_time=None, duration=None):
     # Clean topic to create room name (remove special chars, spaces to hyphens)
     room_name = re.sub(r'[^a-zA-Z0-9\s-]', '', topic)
     room_name = re.sub(r'\s+', '-', room_name.strip())
+    room_name = re.sub(r'-+', '-', room_name)  # Collapse consecutive hyphens
+    room_name = room_name.strip('-')  # Remove leading/trailing hyphens
 
     # Add unique ID to prevent room name collisions
     unique_id = uuid.uuid4().hex[:8]

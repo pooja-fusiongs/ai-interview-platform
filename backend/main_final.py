@@ -52,6 +52,7 @@ uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
 os.makedirs(os.path.join(uploads_dir, "profile_images"), exist_ok=True)
 os.makedirs(os.path.join(uploads_dir, "resumes"), exist_ok=True)
+os.makedirs(os.path.join(uploads_dir, "recordings"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # CORS middleware - allow localhost and production domains

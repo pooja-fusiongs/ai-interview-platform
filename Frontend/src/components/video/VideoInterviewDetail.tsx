@@ -22,10 +22,13 @@ import {
   Description,
   CloudUpload,
   Assessment,
+  FiberManualRecord,
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
 
 const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactElement }> = {
   scheduled: { color: '#3b82f6', bg: '#eff6ff', icon: <CalendarMonth sx={{ fontSize: 18 }} /> },
@@ -684,6 +687,44 @@ const VideoInterviewDetail: React.FC = () => {
                   </Typography>
                 )}
               </Box>
+
+              {/* Recording Playback */}
+              {interview.recording_url && (
+                <Box sx={{
+                  background: 'white',
+                  borderRadius: '16px',
+                  border: '1px solid #e2e8f0',
+                  padding: { xs: '16px', sm: '20px', md: '24px' },
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                  overflow: 'hidden'
+                }}>
+                  <Typography sx={{
+                    fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, color: '#1e293b',
+                    display: 'flex', alignItems: 'center', gap: 1, mb: 2
+                  }}>
+                    <FiberManualRecord sx={{ color: '#ef4444', fontSize: 20 }} />
+                    Interview Recording
+                  </Typography>
+                  <Box sx={{
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    background: '#0f172a',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <video
+                      controls
+                      style={{ width: '100%', maxHeight: '500px', display: 'block' }}
+                      src={`${API_BASE_URL}${interview.recording_url}`}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  </Box>
+                  <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: 1.5 }}>
+                    Recording is stored securely and only accessible to authorized recruiters.
+                  </Typography>
+                </Box>
+              )}
 
               {/* Score Generated - View Result Button */}
               {scoreResult && (

@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, Divider, CircularProgress, Alert,
-  Avatar, Chip, IconButton, Tooltip
+  Avatar, Chip, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Videocam, ArrowBack, AccessTime,
   Description, Security, CallEnd,
-  Check, SmartToy, Person, Link as LinkIcon, ContentCopy
+  Check, SmartToy, Person, Link as LinkIcon, ContentCopy,
+  FiberManualRecord
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
@@ -33,11 +35,17 @@ const VideoInterviewRoom: React.FC = () => {
   const [dailyLoaded, setDailyLoaded] = useState(false);
   const [callJoined, setCallJoined] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [showConsentDialog, setShowConsentDialog] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [uploadingRecording, setUploadingRecording] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dailyContainerRef = useRef<HTMLDivElement>(null);
   const dailyCallRef = useRef<any>(null);
   const endingRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   // Load Daily.co script
   useEffect(() => {
@@ -209,8 +217,16 @@ const VideoInterviewRoom: React.FC = () => {
     return `${h}:${m}:${s}`;
   };
 
-  const handleStart = async () => {
+  const handleStart = () => {
+    setShowConsentDialog(true);
+  };
+
+  const handleConsentAccept = async () => {
+    setShowConsentDialog(false);
     try {
+      // Save consent to backend
+      await videoInterviewService.updateRecordingConsent(Number(videoId), true);
+
       // Try to request permissions, but don't block if no camera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -218,7 +234,6 @@ const VideoInterviewRoom: React.FC = () => {
         console.log('✅ Media permissions granted');
       } catch (err: any) {
         console.warn('⚠️ Media device warning:', err.name);
-        // Don't block - just warn and continue
         if (err.name === 'NotFoundError') {
           toast('No camera/mic found. Video call will open anyway.', { icon: '⚠️' });
         } else {
@@ -235,9 +250,96 @@ const VideoInterviewRoom: React.FC = () => {
       setIsActive(true);
       setElapsed(0);
       toast.success('Interview started! Connecting to video call...');
+
+      // Start recording
+      startRecording();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to start interview');
     }
+  };
+
+  const handleConsentDecline = () => {
+    setShowConsentDialog(false);
+    toast.error('Recording consent is required to start the interview.');
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      recordingStreamRef.current = stream;
+      recordedChunksRef.current = [];
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : 'video/webm',
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        console.log('🎥 Recording stopped, chunks:', recordedChunksRef.current.length);
+      };
+
+      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+      console.log('🎥 Recording started');
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+      toast('Recording could not start. Interview will continue without recording.', { icon: '⚠️' });
+    }
+  };
+
+  const stopAndUploadRecording = async () => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      const recorder = mediaRecorderRef.current!;
+
+      recorder.onstop = async () => {
+        // Stop all tracks
+        if (recordingStreamRef.current) {
+          recordingStreamRef.current.getTracks().forEach(track => track.stop());
+          recordingStreamRef.current = null;
+        }
+
+        setIsRecording(false);
+
+        if (recordedChunksRef.current.length === 0) {
+          console.warn('No recording data collected');
+          resolve();
+          return;
+        }
+
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        console.log(`🎥 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+
+        // Upload to backend
+        try {
+          setUploadingRecording(true);
+          toast('Uploading recording...', { icon: '📤' });
+          await videoInterviewService.uploadRecording(Number(videoId), blob);
+          toast.success('Recording uploaded successfully!');
+        } catch (err) {
+          console.error('Failed to upload recording:', err);
+          toast.error('Failed to upload recording.');
+        } finally {
+          setUploadingRecording(false);
+          recordedChunksRef.current = [];
+        }
+
+        resolve();
+      };
+
+      recorder.stop();
+    });
   };
 
   const cleanupVideoCall = () => {
@@ -263,6 +365,9 @@ const VideoInterviewRoom: React.FC = () => {
     endingRef.current = true;
     try {
       setEnding(true);
+
+      // Stop and upload recording first
+      await stopAndUploadRecording();
 
       // Clean up all video call elements
       cleanupVideoCall();
@@ -370,6 +475,19 @@ const VideoInterviewRoom: React.FC = () => {
                     border: '1px solid #fecaca',
                   }}
                 />
+                {isRecording && user?.role !== 'candidate' && (
+                  <Chip
+                    icon={<FiberManualRecord sx={{ fontSize: 14, color: '#ef4444', animation: 'blink 1s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
+                    label="REC"
+                    sx={{
+                      background: '#fef2f2',
+                      color: '#ef4444',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      border: '1px solid #fecaca',
+                    }}
+                  />
+                )}
                 <Tooltip title="Copy meeting link for candidate">
                   <IconButton onClick={handleCopyMeetingLink} sx={{ color: '#64748b' }}>
                     <LinkIcon />
@@ -705,6 +823,75 @@ const VideoInterviewRoom: React.FC = () => {
             </Paper>
           </Box>
         </Box>
+
+        {/* Uploading Recording Overlay */}
+        {uploadingRecording && (
+          <Box sx={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Paper sx={{ p: 4, borderRadius: '16px', textAlign: 'center' }}>
+              <CircularProgress sx={{ color: '#f59e0b', mb: 2 }} />
+              <Typography sx={{ fontWeight: 600, color: '#1e293b' }}>Uploading Recording...</Typography>
+              <Typography sx={{ color: '#64748b', fontSize: '13px', mt: 1 }}>Please wait, do not close this page.</Typography>
+            </Paper>
+          </Box>
+        )}
+
+        {/* Recording Consent Dialog */}
+        <Dialog
+          open={showConsentDialog}
+          onClose={() => setShowConsentDialog(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: { borderRadius: '16px', p: 1 }
+          }}
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700, color: '#1e293b' }}>
+            <FiberManualRecord sx={{ color: '#ef4444', fontSize: 20 }} />
+            Recording Consent
+          </DialogTitle>
+          <DialogContent>
+            <Typography sx={{ color: '#475569', fontSize: '15px', lineHeight: 1.8, mb: 2 }}>
+              This interview session will be <strong>recorded</strong> for review purposes. The recording will include your video and audio.
+            </Typography>
+            <Box sx={{
+              background: '#f8fafc', borderRadius: '12px', p: 2.5,
+              border: '1px solid #e2e8f0'
+            }}>
+              <Typography sx={{ color: '#64748b', fontSize: '13px', lineHeight: 1.8 }}>
+                By clicking <strong>"I Agree"</strong>, you consent to being recorded during this interview. The recording will be stored securely and only accessible to authorized recruiters.
+              </Typography>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+            <Button
+              onClick={handleConsentDecline}
+              sx={{
+                color: '#64748b', textTransform: 'none', fontWeight: 600,
+                borderRadius: '10px', px: 3,
+                '&:hover': { background: '#f1f5f9' }
+              }}
+            >
+              Decline
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleConsentAccept}
+              sx={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                textTransform: 'none', fontWeight: 600,
+                borderRadius: '10px', px: 3,
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+                '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }
+              }}
+            >
+              I Agree — Start Interview
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Navigation>
   );

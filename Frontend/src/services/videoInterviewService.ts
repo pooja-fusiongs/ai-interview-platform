@@ -72,6 +72,20 @@ export const videoInterviewService = {
     });
     return response.data;
   },
+  // Recording Methods
+  updateRecordingConsent: async (id: number, consent: boolean) => {
+    const response = await apiClient.patch(`/api/video/interviews/${id}/recording-consent`, { consent });
+    return response.data;
+  },
+  uploadRecording: async (id: number, blob: Blob) => {
+    const formData = new FormData();
+    formData.append('file', blob, `interview_${id}.webm`);
+    const response = await apiClient.post(`/api/video/interviews/${id}/upload-recording`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5 min timeout for large uploads
+    });
+    return response.data;
+  },
 };
 
 export default videoInterviewService;

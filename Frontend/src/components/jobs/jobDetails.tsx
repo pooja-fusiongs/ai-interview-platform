@@ -299,17 +299,20 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       display: 'flex',
       flexDirection: { xs: 'column', lg: 'row' },
       minHeight: '100vh',
-      background: '#f8fafc'
+      background: '#f8fafc',
+      overflow: 'hidden',
+      maxWidth: '100vw'
     }}>
       {/* Main Content Area */}
       <Box sx={{
         flex: 1,
-        padding: { xs: '12px', sm: '16px', md: '24px 32px' },
+        padding: { xs: '10px', sm: '16px', md: '24px 32px' },
         overflow: 'auto',
         maxWidth: { xs: '100%', lg: 'calc(100% - 320px)' },
-        m: { xs: '8px', sm: '12px', md: '20px' },
-        borderRadius: { xs: '12px', md: '20px' },
-        background: '#fff',border:"1px solid #fff",
+        m: { xs: '4px', sm: '12px', md: '20px' },
+        borderRadius: { xs: '8px', md: '20px' },
+        background: '#fff', border: '1px solid #fff',
+        boxSizing: 'border-box',
         '&::-webkit-scrollbar': {
           width: '6px'
         },
@@ -325,13 +328,13 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         }
       }}>
         {/* Header with Back Button */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: '16px',
           background: '#fff',
-          padding: '16px 0px',
+          padding: { xs: '10px 0px', sm: '16px 0px' },
           borderBottom: '1px solid #e2e8f0',
           position: 'sticky',
           top: 0,
@@ -343,9 +346,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               color: '#64748b',
               textTransform: 'none',
               fontWeight: 600,
-              fontSize: '16px',
-              padding: '8px 16px',
+              fontSize: { xs: '14px', sm: '16px' },
+              padding: { xs: '6px 10px', sm: '8px 16px' },
               borderRadius: '8px',
+              minWidth: 'auto',
               '&:hover': {
                 background: '#f1f5f9'
               }
@@ -380,23 +384,24 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             {selectedJob.title}
           </Typography>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', sm: '16px' }, marginBottom: '20px' }}>
             <Box sx={{
-              width: 48,
-              height: 48,
+              width: { xs: 40, sm: 48 },
+              height: { xs: 40, sm: 48 },
               borderRadius: '8px',
               background: selectedJob.color,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
               <i className={selectedJob.icon} style={{ color: 'white', fontSize: '20px' }}></i>
             </Box>
-            <Box>
-              <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#1e293b' }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: { xs: '16px', sm: '18px' }, fontWeight: 600, color: '#1e293b' }}>
                 {selectedJob.company}
               </Typography>
-              <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
+              <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b', wordBreak: 'break-word' }}>
                 {selectedJob.location} • {selectedJob.type} • {selectedJob.postedTime}
               </Typography>
             </Box>
@@ -533,35 +538,32 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             Job Status & Statistics
           </Typography>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', sm: '16px' }, marginBottom: '20px', flexWrap: 'wrap' }}>
             <Chip
               label={selectedJob.status}
               sx={{
                 background: getStatusColor(selectedJob.status).bg,
                 color: getStatusColor(selectedJob.status).color,
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
                 height: '32px',
                 borderRadius: '8px',
                 padding: '0 12px'
               }}
             />
-            {/* <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
-              deadline {selectedJob.application_deadline}
-            </Typography> */}
             {/* Application Deadline */}
             {selectedJob.application_deadline && (
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: '8px',
-                padding: '8px 12px',
+                padding: { xs: '6px 10px', sm: '8px 12px' },
                 backgroundColor: '#fef3c7',
                 borderRadius: '8px',
                 border: '1px solid #f59e0b'
               }}>
                 <i className="fas fa-clock" style={{ color: '#f59e0b', fontSize: '12px' }}></i>
-                <Typography sx={{ fontSize: '14px', color: '#92400e', fontWeight: 600 }}>
+                <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#92400e', fontWeight: 600 }}>
                   Deadlined: {new Date(selectedJob.application_deadline).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'short',
@@ -578,59 +580,59 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             gap: { xs: '8px', sm: '12px', md: '16px' },
             marginBottom: '20px'
           }}>
-            <Box sx={{ 
-              textAlign: 'center', 
-              padding: '16px', 
-              backgroundColor: '#f8fafc', 
+            <Box sx={{
+              textAlign: 'center',
+              padding: { xs: '10px', sm: '16px' },
+              backgroundColor: '#f8fafc',
               borderRadius: '12px',
               border: '1px solid #e2e8f0'
             }}>
-              <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>
+              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#f59e0b' }}>
                 {loading ? '...' : applicationStats.applied}
               </Typography>
-              <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
                 Applied
               </Typography>
             </Box>
-            <Box sx={{ 
-              textAlign: 'center', 
-              padding: '16px', 
-              backgroundColor: '#f8fafc', 
+            <Box sx={{
+              textAlign: 'center',
+              padding: { xs: '10px', sm: '16px' },
+              backgroundColor: '#f8fafc',
               borderRadius: '12px',
               border: '1px solid #e2e8f0'
             }}>
-              <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#8b5cf6' }}>
+              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#8b5cf6' }}>
                 {loading ? '...' : applicationStats.interview}
               </Typography>
-              <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
                 Interview Pending
               </Typography>
             </Box>
-            <Box sx={{ 
-              textAlign: 'center', 
-              padding: '16px', 
-              backgroundColor: '#f8fafc', 
+            <Box sx={{
+              textAlign: 'center',
+              padding: { xs: '10px', sm: '16px' },
+              backgroundColor: '#f8fafc',
               borderRadius: '12px',
               border: '1px solid #e2e8f0'
             }}>
-              <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#10b981' }}>
+              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#10b981' }}>
                 {loading ? '...' : applicationStats.selected}
               </Typography>
-              <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
                 Selected
               </Typography>
             </Box>
-            <Box sx={{ 
-              textAlign: 'center', 
-              padding: '16px', 
-              backgroundColor: '#f8fafc', 
+            <Box sx={{
+              textAlign: 'center',
+              padding: { xs: '10px', sm: '16px' },
+              backgroundColor: '#f8fafc',
               borderRadius: '12px',
               border: '1px solid #e2e8f0'
             }}>
-              <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#ef4444' }}>
+              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#ef4444' }}>
                 {loading ? '...' : applicationStats.rejected}
               </Typography>
-              <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
                 Rejected
               </Typography>
             </Box>
@@ -640,10 +642,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         </Box>
 
         {/* Interview Configuration */}
-        <Box sx={{ 
+        <Box sx={{
           marginBottom: '16px',
           background: 'white',
-          padding: '24px',
+          padding: { xs: '12px', sm: '24px' },
           borderRadius: '16px'
         }}>
           <Typography variant="h5" sx={{
@@ -750,10 +752,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         </Box>
 
         {/* About This Role */}
-        <Box sx={{ 
+        <Box sx={{
           marginBottom: '16px',
           background: 'white',
-          padding: '24px',
+          padding: { xs: '12px', sm: '24px' },
           borderRadius: '16px'
         }}>
           <Typography variant="h5" sx={{
@@ -765,10 +767,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             About This Role
           </Typography>
           <Typography sx={{
-            fontSize: '16px',
+            fontSize: { xs: '14px', sm: '16px' },
             color: '#64748b',
             lineHeight: 1.6,
-            marginBottom: '16px'
+            marginBottom: '16px',
+            wordBreak: 'break-word'
           }}>
             {selectedJob.fullDescription || selectedJob.description}
           </Typography>
@@ -776,10 +779,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
         {/* Qualifications */}
         {selectedJob.requirements && (
-          <Box sx={{ 
+          <Box sx={{
             marginBottom: '16px',
             background: 'white',
-            padding: '24px',
+            padding: { xs: '12px', sm: '24px' },
             borderRadius: '16px'
           }}>
             <Typography variant="h5" sx={{
@@ -790,14 +793,15 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             }}>
               Qualifications
             </Typography>
-            <Box component="ul" sx={{ 
-              margin: 0, 
-              paddingLeft: '20px',
+            <Box component="ul" sx={{
+              margin: 0,
+              paddingLeft: { xs: '16px', sm: '20px' },
               '& li': {
-                fontSize: '16px',
+                fontSize: { xs: '14px', sm: '16px' },
                 color: '#64748b',
                 lineHeight: 1.6,
-                marginBottom: '8px'
+                marginBottom: '8px',
+                wordBreak: 'break-word'
               }
             }}>
               {selectedJob.requirements.map((req: string, index: number) => (
@@ -811,10 +815,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
         {/* Responsibilities */}
         {selectedJob.responsibilities && (
-          <Box sx={{ 
+          <Box sx={{
             marginBottom: '16px',
             background: 'white',
-            padding: '24px',
+            padding: { xs: '12px', sm: '24px' },
             borderRadius: '16px'
           }}>
             <Typography variant="h5" sx={{
@@ -825,14 +829,15 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             }}>
               Responsibility
             </Typography>
-            <Box component="ul" sx={{ 
-              margin: 0, 
-              paddingLeft: '20px',
+            <Box component="ul" sx={{
+              margin: 0,
+              paddingLeft: { xs: '16px', sm: '20px' },
               '& li': {
-                fontSize: '16px',
+                fontSize: { xs: '14px', sm: '16px' },
                 color: '#64748b',
                 lineHeight: 1.6,
-                marginBottom: '8px'
+                marginBottom: '8px',
+                wordBreak: 'break-word'
               }
             }}>
               {selectedJob.responsibilities.map((resp: string, index: number) => (
@@ -926,16 +931,17 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
       {/* Right Sidebar */}
       <Box sx={{
-        width: { xs: '100%', lg: 320 },
+        width: { xs: 'auto', lg: 320 },
         background: 'white',
         borderLeft: { xs: 'none', lg: '1px solid #e2e8f0' },
         borderTop: { xs: '1px solid #e2e8f0', lg: 'none' },
-        padding: { xs: '16px', md: '24px' },
+        padding: { xs: '12px', sm: '16px', md: '24px' },
         mt: { xs: '0', lg: '20px' },
         mb: { xs: '8px', lg: 0 },
-        mx: { xs: '8px', sm: '12px', lg: 0 },
-        overflow: 'auto',
-        borderRadius: { xs: '12px', lg: '10px' },
+        mx: { xs: '4px', sm: '12px', lg: 0 },
+        overflow: 'hidden',
+        borderRadius: { xs: '8px', lg: '10px' },
+        boxSizing: 'border-box',
         '&::-webkit-scrollbar': {
           width: '6px'
         },
@@ -971,26 +977,27 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           </Box>
         ) : (
           similarJobs.map((job) => (
-            <Box 
-              key={job.id} 
+            <Box
+              key={job.id}
               onClick={() => onJobSelect && onJobSelect(job)}
               sx={{
-              padding: '16px',
+              padding: { xs: '12px', sm: '16px' },
               border: '1px solid #e2e8f0',
               borderRadius: '12px',
-              marginBottom: '16px',
+              marginBottom: { xs: '10px', sm: '16px' },
               cursor: 'pointer',
               transition: 'all 0.3s ease',
+              overflow: 'hidden',
               '&:hover': {
                 boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
                 borderColor: getJobColor(job.department || 'Engineering'),
                 transform: 'translateY(-2px)'
               }
             }}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: '8px', sm: '12px' } }}>
                 <Box sx={{
-                  width: 40,
-                  height: 40,
+                  width: { xs: 32, sm: 40 },
+                  height: { xs: 32, sm: 40 },
                   borderRadius: '8px',
                   background: getJobColor(job.department || 'Engineering'),
                   display: 'flex',
@@ -998,41 +1005,49 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <i className={getJobIcon(job.department || 'Engineering')} style={{ color: 'white', fontSize: '16px' }}></i>
+                  <i className={getJobIcon(job.department || 'Engineering')} style={{ color: 'white', fontSize: '14px' }}></i>
                 </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                   <Typography sx={{
-                    fontSize: '16px',
+                    fontSize: { xs: '14px', sm: '16px' },
                     fontWeight: 600,
                     color: '#1e293b',
-                    marginBottom: '4px'
+                    marginBottom: '4px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
                   }}>
                     {job.title}
                   </Typography>
                   <Typography sx={{
-                    fontSize: '14px',
+                    fontSize: { xs: '12px', sm: '14px' },
                     color: '#64748b',
-                    marginBottom: '8px'
+                    marginBottom: '8px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
                   }}>
                     {job.company} • {job.location}
                   </Typography>
                   <Typography sx={{
-                    fontSize: '12px',
+                    fontSize: { xs: '11px', sm: '12px' },
                     color: '#64748b',
-                    marginBottom: '4px'
+                    marginBottom: '4px',
+                    wordBreak: 'break-word'
                   }}>
                     {getJobType(job)} • {getWorkMode(job)} • {getExperienceLevel(job)}
                   </Typography>
                   <Typography sx={{
-                    fontSize: '12px',
+                    fontSize: { xs: '11px', sm: '12px' },
                     color: '#94a3b8'
                   }}>
                     {getTimeAgo(job.created_at)} • {job.status}
                   </Typography>
                 </Box>
-                <IconButton sx={{ 
+                <IconButton sx={{
                   color: '#cbd5e1',
                   padding: '4px',
+                  flexShrink: 0,
                   '&:hover': { color: '#fbbf24' }
                 }}>
                   <i className="fas fa-bookmark" style={{ fontSize: '14px' }}></i>
@@ -1063,16 +1078,17 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             </Box>
           ) : (
             otherJobs.map((job) => (
-              <Box 
-                key={job.id} 
+              <Box
+                key={job.id}
                 onClick={() => onJobSelect && onJobSelect(job)}
                 sx={{
-                  padding: '16px',
+                  padding: { xs: '12px', sm: '16px' },
                   border: '1px solid #e2e8f0',
                   borderRadius: '12px',
-                  marginBottom: '16px',
+                  marginBottom: { xs: '10px', sm: '16px' },
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
+                  overflow: 'hidden',
                   '&:hover': {
                     boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
                     borderColor: getJobColor(job.department || 'Engineering'),
@@ -1080,10 +1096,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   }
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: '8px', sm: '12px' } }}>
                   <Box sx={{
-                    width: 40,
-                    height: 40,
+                    width: { xs: 32, sm: 40 },
+                    height: { xs: 32, sm: 40 },
                     borderRadius: '8px',
                     background: getJobColor(job.department || 'Engineering'),
                     display: 'flex',
@@ -1091,41 +1107,49 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                     justifyContent: 'center',
                     flexShrink: 0
                   }}>
-                    <i className={getJobIcon(job.department || 'Engineering')} style={{ color: 'white', fontSize: '16px' }}></i>
+                    <i className={getJobIcon(job.department || 'Engineering')} style={{ color: 'white', fontSize: '14px' }}></i>
                   </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                     <Typography sx={{
-                      fontSize: '16px',
+                      fontSize: { xs: '14px', sm: '16px' },
                       fontWeight: 600,
                       color: '#1e293b',
-                      marginBottom: '4px'
+                      marginBottom: '4px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
                     }}>
                       {job.title}
                     </Typography>
                     <Typography sx={{
-                      fontSize: '14px',
+                      fontSize: { xs: '12px', sm: '14px' },
                       color: '#64748b',
-                      marginBottom: '8px'
+                      marginBottom: '8px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
                     }}>
                       {job.company} • {job.location}
                     </Typography>
                     <Typography sx={{
-                      fontSize: '12px',
+                      fontSize: { xs: '11px', sm: '12px' },
                       color: '#64748b',
-                      marginBottom: '4px'
+                      marginBottom: '4px',
+                      wordBreak: 'break-word'
                     }}>
                       {getJobType(job)} • {getWorkMode(job)} • {getExperienceLevel(job)}
                     </Typography>
                     <Typography sx={{
-                      fontSize: '12px',
+                      fontSize: { xs: '11px', sm: '12px' },
                       color: '#94a3b8'
                     }}>
                       {getTimeAgo(job.created_at)} • {job.status}
                     </Typography>
                   </Box>
-                  <IconButton sx={{ 
+                  <IconButton sx={{
                     color: '#cbd5e1',
                     padding: '4px',
+                    flexShrink: 0,
                     '&:hover': { color: '#fbbf24' }
                   }}>
                     <i className="fas fa-bookmark" style={{ fontSize: '14px' }}></i>

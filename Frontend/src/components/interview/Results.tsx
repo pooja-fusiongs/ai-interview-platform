@@ -621,10 +621,10 @@ const Results = () => {
                     </Box>
 
                     {/* Right: score + rec */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '6px', md: '12px' }, flexShrink: 0, width: { xs: 'auto', sm: 'auto' }, justifyContent: 'flex-end', alignSelf: { xs: 'flex-end', sm: 'center' } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '4px', md: '12px' }, flexShrink: 0, justifyContent: 'flex-end' }}>
                       {s.overall_score != null && (
-                        <Box sx={{ width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 }, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                          <Typography sx={{ fontSize: { xs: '14px', md: '16px' }, fontWeight: 800, color: sc.text, lineHeight: 1 }}>
+                        <Box sx={{ width: { xs: 38, md: 48 }, height: { xs: 38, md: 48 }, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Typography sx={{ fontSize: { xs: '13px', md: '16px' }, fontWeight: 800, color: sc.text, lineHeight: 1 }}>
                             {s.overall_score.toFixed(1)}
                           </Typography>
                           <Typography sx={{ fontSize: '9px', color: sc.text, opacity: 0.7 }}>/10</Typography>
@@ -640,10 +640,11 @@ const Results = () => {
                             backgroundColor: rec.bg,
                             color: rec.color,
                             height: { xs: '22px', md: '26px' },
+                            display: { xs: 'none', sm: 'flex' },
                           }}
                         />
                       )}
-                      <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: 12 }}></i>
+                      <Box component="i" className="fas fa-chevron-right" sx={{ color: '#cbd5e1', fontSize: 12, display: { xs: 'none', sm: 'block' } }} />
                     </Box>
                   </Box>
                 )

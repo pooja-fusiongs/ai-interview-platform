@@ -198,7 +198,7 @@ const PrivacyNotice: React.FC = () => {
                   </Box>
                   <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>Overview</Typography>
                 </Box>
-                <Typography sx={{ fontSize: '14px', color: '#475569', lineHeight: 1.8, pl: '52px' }}>{content}</Typography>
+                <Typography sx={{ fontSize: '14px', color: '#475569', lineHeight: 1.8, pl: { xs: 0, sm: '52px' } }}>{content}</Typography>
               </Box>
             )}
 
@@ -211,7 +211,7 @@ const PrivacyNotice: React.FC = () => {
                   </Box>
                   <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>Data We Collect</Typography>
                 </Box>
-                <Box sx={{ pl: '52px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                <Box sx={{ pl: { xs: 0, sm: '52px' }, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 1 }}>
                   {dataCategories.map((category, idx) => (
                     <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 2, p: '10px 14px', bgcolor: '#f8fafc', borderRadius: '8px' }}>
                       {getCategoryIcon(category)}
@@ -231,7 +231,7 @@ const PrivacyNotice: React.FC = () => {
                   </Box>
                   <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>Data Retention</Typography>
                 </Box>
-                <Box sx={{ pl: '52px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                <Box sx={{ pl: { xs: 0, sm: '52px' }, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 1 }}>
                   {Object.entries(retentionSummary).map(([key, value], idx) => (
                     <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, p: '12px 14px', bgcolor: '#f8fafc', borderRadius: '8px' }}>
                       {getRetentionIcon(key)}
@@ -256,7 +256,7 @@ const PrivacyNotice: React.FC = () => {
                 </Box>
                 <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>Your Rights</Typography>
               </Box>
-              <Box sx={{ pl: '52px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+              <Box sx={{ pl: { xs: 0, sm: '52px' }, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 1 }}>
                 {userRights.map((right, idx) => (
                   <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: '10px 14px', bgcolor: '#f8fafc', borderRadius: '8px' }}>
                     <Box sx={{ color: right.color }}>{right.icon}</Box>
@@ -274,7 +274,7 @@ const PrivacyNotice: React.FC = () => {
                 </Box>
                 <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>Contact Us</Typography>
               </Box>
-              <Typography sx={{ fontSize: '13px', color: '#64748b', lineHeight: 1.7, pl: '52px' }}>
+              <Typography sx={{ fontSize: '13px', color: '#64748b', lineHeight: 1.7, pl: { xs: 0, sm: '52px' } }}>
                 If you have questions about this privacy notice or wish to exercise your data rights, please contact our Data Protection Officer or use the data management options in your account settings.
               </Typography>
             </Box>

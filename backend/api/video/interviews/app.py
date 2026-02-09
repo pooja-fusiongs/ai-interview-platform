@@ -7,7 +7,8 @@ Zoom service for meeting creation/deletion and checks for associated
 fraud analysis records.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
@@ -136,6 +137,7 @@ def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewRes
         started_at=vi.started_at,
         ended_at=vi.ended_at,
         recording_consent=vi.recording_consent,
+        recording_url=vi.recording_url,
         candidate_name=candidate_name,
         interviewer_name=interviewer_name,
         job_title=job_title,
@@ -1339,3 +1341,89 @@ def upload_transcript_and_score(
         "questions_found": len(approved_questions) if approved_questions else 0,
         "scoring_error": scoring_error
     }
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/video/interviews/{video_id}/recording-consent
+# ---------------------------------------------------------------------------
+
+@router.patch("/api/video/interviews/{video_id}/recording-consent")
+def update_recording_consent(
+    video_id: int,
+    body: dict,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Update recording consent for a video interview."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    vi.recording_consent = body.get("consent", False)
+    db.commit()
+    db.refresh(vi)
+    return {"message": "Recording consent updated", "recording_consent": vi.recording_consent}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/upload-recording
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/upload-recording")
+async def upload_recording(
+    video_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Upload a recording file for a video interview."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # Save file to uploads/recordings/
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"interview_{video_id}_{timestamp}.webm"
+    recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "recordings")
+    os.makedirs(recordings_dir, exist_ok=True)
+    file_path = os.path.join(recordings_dir, filename)
+
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    vi.recording_url = f"/uploads/recordings/{filename}"
+    db.commit()
+    db.refresh(vi)
+
+    print(f"🎥 Recording saved: {file_path} ({len(contents)} bytes)")
+    return {"message": "Recording uploaded successfully", "recording_url": vi.recording_url}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/video/interviews/{video_id}/recording  -- Serve recording file
+# ---------------------------------------------------------------------------
+
+@router.get("/api/video/interviews/{video_id}/recording")
+def get_recording(
+    video_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Serve the recording file for a video interview."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    if not vi.recording_url:
+        raise HTTPException(status_code=404, detail="No recording available for this interview")
+
+    # Candidates can only view their own
+    if current_user.role == UserRole.CANDIDATE and vi.candidate_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", vi.recording_url.lstrip("/"))
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Recording file not found")
+
+    return FileResponse(file_path, media_type="video/webm", filename=os.path.basename(file_path))
