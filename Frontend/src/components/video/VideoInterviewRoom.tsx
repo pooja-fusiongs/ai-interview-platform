@@ -16,13 +16,6 @@ import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 
-// Declare Daily.co types
-declare global {
-  interface Window {
-    DailyIframe: any;
-  }
-}
-
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
   const navigate = useNavigate();
@@ -32,7 +25,6 @@ const VideoInterviewRoom: React.FC = () => {
   const [error, setError] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [dailyLoaded, setDailyLoaded] = useState(false);
   const [callJoined, setCallJoined] = useState(false);
   const [ending, setEnding] = useState(false);
   const [showConsentDialog, setShowConsentDialog] = useState(false);
@@ -40,37 +32,11 @@ const VideoInterviewRoom: React.FC = () => {
   const [uploadingRecording, setUploadingRecording] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const dailyContainerRef = useRef<HTMLDivElement>(null);
-  const dailyCallRef = useRef<any>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
-
-  // Detect if meeting URL is Jitsi (fallback) instead of Daily.co
-  const isJitsi = interview?.zoom_meeting_url?.includes('meet.jit.si') || false;
-
-  // Load Daily.co script
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@daily-co/daily-js';
-    script.async = true;
-    script.onload = () => {
-      setDailyLoaded(true);
-      console.log('✅ Daily.co SDK loaded');
-    };
-    script.onerror = () => {
-      console.error('❌ Failed to load Daily.co SDK');
-      toast.error('Failed to load video call. Please refresh the page.');
-    };
-    document.body.appendChild(script);
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -129,16 +95,13 @@ const VideoInterviewRoom: React.FC = () => {
 
   // Initialize video call when interview becomes active
   useEffect(() => {
-    if (isActive && dailyContainerRef.current && !dailyCallRef.current && interview?.zoom_meeting_url) {
-      // For Jitsi URLs, we don't need Daily.co SDK to be loaded
-      if (isJitsi || dailyLoaded) {
-        initializeDaily();
-      }
+    if (isActive && videoContainerRef.current && interview?.zoom_meeting_url) {
+      initializeVideo();
     }
-  }, [isActive, dailyLoaded, interview]);
+  }, [isActive, interview]);
 
-  const initializeDaily = async () => {
-    if (!dailyContainerRef.current) {
+  const initializeVideo = () => {
+    if (!videoContainerRef.current) {
       console.error('Video container not available');
       return;
     }
@@ -150,94 +113,27 @@ const VideoInterviewRoom: React.FC = () => {
       return;
     }
 
-    // Handle Jitsi URLs - embed as iframe instead of Daily.co SDK
-    if (meetingUrl.includes('meet.jit.si')) {
-      console.log('🎥 Initializing Jitsi meeting:', meetingUrl);
-      const iframe = document.createElement('iframe');
-      iframe.src = meetingUrl;
-      iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
-      iframe.style.width = '100%';
-      iframe.style.height = '100%';
-      iframe.style.border = '0';
-      iframe.style.borderRadius = '20px';
-      iframe.onload = () => {
-        setCallJoined(true);
-        toast.success('Connected to video call!');
-      };
-      dailyContainerRef.current.innerHTML = '';
-      dailyContainerRef.current.appendChild(iframe);
-      return;
+    // Add Jitsi config to skip pre-join lobby and auto-join
+    let jitsiUrl = meetingUrl;
+    if (meetingUrl.includes('meet.jit.si') && !meetingUrl.includes('prejoinPageEnabled')) {
+      const separator = meetingUrl.includes('#') ? '&' : '#';
+      jitsiUrl = `${meetingUrl}${separator}config.prejoinPageEnabled=false&config.disableDeepLinking=true`;
     }
 
-    if (!window.DailyIframe) {
-      console.error('Daily.co SDK not available');
-      return;
-    }
-
-    console.log('🎥 Initializing Daily.co with URL:', meetingUrl);
-
-    try {
-      // Create Daily.co call frame
-      dailyCallRef.current = window.DailyIframe.createFrame(dailyContainerRef.current, {
-        iframeStyle: {
-          width: '100%',
-          height: '100%',
-          border: '0',
-          borderRadius: '20px',
-        },
-        showLeaveButton: false, // We have our own end button
-        showFullscreenButton: true,
-      });
-
-      // Event listeners
-      dailyCallRef.current.on('joined-meeting', () => {
-        console.log('✅ Joined Daily.co meeting');
-        setCallJoined(true);
-        toast.success('Connected to video call!');
-      });
-
-      dailyCallRef.current.on('participant-joined', (event: any) => {
-        console.log('👤 Participant joined:', event.participant);
-        if (!event.participant.local) {
-          toast.success(`${event.participant.user_name || 'Someone'} joined the call`);
-        }
-      });
-
-      dailyCallRef.current.on('participant-left', (event: any) => {
-        console.log('👤 Participant left:', event.participant);
-      });
-
-      dailyCallRef.current.on('left-meeting', () => {
-        console.log('📴 Left Daily.co meeting');
-        handleEnd();
-      });
-
-      dailyCallRef.current.on('error', (error: any) => {
-        console.error('Daily.co error:', error);
-        toast.error('Video call error. Please try again.');
-      });
-
-      // Determine username based on current user's role
-      let displayName = 'Participant';
-      if (user?.role === 'candidate') {
-        // Candidate joining - show candidate name
-        displayName = interview?.candidate_name || user?.name || 'Candidate';
-      } else {
-        // Recruiter/Admin joining - show interviewer name
-        displayName = interview?.interviewer_name || user?.name || 'Interviewer';
-      }
-
-      // Join the meeting
-      await dailyCallRef.current.join({
-        url: meetingUrl,
-        userName: displayName,
-      });
-
-      console.log('✅ Daily.co call initialized');
-    } catch (err) {
-      console.error('Failed to initialize Daily.co:', err);
-      toast.error('Failed to start video call. Please try again.');
-    }
+    console.log('🎥 Initializing Jitsi meeting:', jitsiUrl);
+    const iframe = document.createElement('iframe');
+    iframe.src = jitsiUrl;
+    iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.borderRadius = '20px';
+    iframe.onload = () => {
+      setCallJoined(true);
+      toast.success('Connected to video call!');
+    };
+    videoContainerRef.current.innerHTML = '';
+    videoContainerRef.current.appendChild(iframe);
   };
 
   const formatTime = (seconds: number) => {
@@ -402,18 +298,10 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const cleanupVideoCall = () => {
-    // Destroy Daily.co SDK instance
-    if (dailyCallRef.current) {
-      try { dailyCallRef.current.leave(); } catch (e) { /* ignore */ }
-      try { dailyCallRef.current.destroy(); } catch (e) { /* ignore */ }
-      dailyCallRef.current = null;
+    if (videoContainerRef.current) {
+      videoContainerRef.current.innerHTML = '';
     }
-    // Manually remove any lingering iframes from the container
-    if (dailyContainerRef.current) {
-      dailyContainerRef.current.innerHTML = '';
-    }
-    // Remove any orphaned Daily.co iframes that may have been appended to body
-    document.querySelectorAll('iframe[allow*="camera"], iframe[src*="daily"], iframe[src*="jit.si"]').forEach(el => {
+    document.querySelectorAll('iframe[allow*="camera"], iframe[src*="jit.si"]').forEach(el => {
       el.remove();
     });
   };
@@ -591,9 +479,9 @@ const VideoInterviewRoom: React.FC = () => {
               boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
             }}>
               {isActive ? (
-                // Daily.co Video Call
+                // Jitsi Video Call
                 <Box
-                  ref={dailyContainerRef}
+                  ref={videoContainerRef}
                   sx={{
                     width: '100%',
                     height: '100%',
@@ -713,17 +601,15 @@ const VideoInterviewRoom: React.FC = () => {
                     variant="contained"
                     startIcon={<Videocam />}
                     onClick={handleStart}
-                    disabled={!dailyLoaded && !isJitsi}
                     sx={{
                       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                       padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
                       fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
                       boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
                       '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
-                      '&:disabled': { background: '#94a3b8' }
                     }}
                   >
-                    {(dailyLoaded || isJitsi) ? 'Start Meeting' : 'Loading...'}
+                    Start Meeting
                   </Button>
                 ) : (
                   <Button

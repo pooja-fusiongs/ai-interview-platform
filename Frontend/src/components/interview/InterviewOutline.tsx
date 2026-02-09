@@ -345,20 +345,20 @@ const InterviewOutline: React.FC = () => {
     return (
         <Navigation>
             <Box sx={{
-                display: 'flex', backgroundColor: 'white', minHeight: '100vh', m: "20px", borderRadius: "10px", boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                display: 'flex', backgroundColor: 'white', minHeight: '100vh', m: { xs: '8px', sm: '20px' }, borderRadius: "10px", boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
             }}>
                 {/* Main Content */}
-                <Box sx={{ flex: 1, p: 3, pr: { xs: 3, lg: 1 } }}>
+                <Box sx={{ flex: 1, p: { xs: 2, sm: 3 }, pr: { xs: 2, lg: 1 } }}>
                     {/* Clean Header */}
                     <Box sx={{ mb: 3 }}>
 
-                        <Box sx={{ display: "flex", justifyContent: "space-between", }}>
-                            <Box>
-                                <Typography variant="h1" sx={{ color: 'black', fontSize: '1.1rem' }}>
+                        <Box sx={{ display: "flex", flexDirection: { xs: 'column', sm: 'row' }, justifyContent: "space-between", gap: { xs: 1.5, sm: 0 } }}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography variant="h1" sx={{ color: 'black', fontSize: { xs: '0.95rem', sm: '1.1rem' }, wordBreak: 'break-word' }}>
                                     {questionSet?.job_title} • {questionSet?.candidate_name}
                                 </Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', gap: 2, ml: 'auto' }}>
+                            <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, flexShrink: 0, flexWrap: 'wrap' }}>
                                 {/* Approve All Button */}
                                 {getPendingCount() > 0 && (
                                     <Button
@@ -367,8 +367,9 @@ const InterviewOutline: React.FC = () => {
                                         sx={{
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: 1,
-                                            p: "2px 16px",
+                                            gap: 0.5,
+                                            p: { xs: '2px 10px', sm: '2px 16px' },
+                                            fontSize: { xs: '13px', sm: '14px' },
                                             backgroundColor: '#10b981',
                                             color: 'white',
                                             border: '1px solid #10b981',
@@ -580,15 +581,19 @@ const InterviewOutline: React.FC = () => {
                     </Box>
 
                     {/* Tabs for Filtering */}
-                    <Box sx={{ borderBottom: 1, borderColor: '#e5e7eb', mb: 4 }}>
+                    <Box sx={{ borderBottom: 1, borderColor: '#e5e7eb', mb: { xs: 2, sm: 4 } }}>
                         <Tabs
                             value={activeTab}
                             onChange={handleTabChange}
+                            variant="fullWidth"
                             sx={{
                                 '& .MuiTab-root': {
                                     textTransform: 'none',
                                     fontWeight: 600,
                                     color: '#6b7280',
+                                    fontSize: { xs: '13px', sm: '14px' },
+                                    minHeight: { xs: '40px', sm: '48px' },
+                                    px: { xs: 1, sm: 3 },
                                     '&.Mui-selected': {
                                         color: '#374151'
                                     }
@@ -600,15 +605,15 @@ const InterviewOutline: React.FC = () => {
                         >
                             <Tab
                                 label={`All (${questionSet?.questions.length || 0})`}
-                                sx={{ minWidth: 'auto', px: 3 }}
+                                sx={{ minWidth: 'auto' }}
                             />
                             <Tab
                                 label={`Pending (${getPendingCount()})`}
-                                sx={{ minWidth: 'auto', px: 3 }}
+                                sx={{ minWidth: 'auto' }}
                             />
                             <Tab
                                 label={`Approved (${getApprovedCount()})`}
-                                sx={{ minWidth: 'auto', px: 3 }}
+                                sx={{ minWidth: 'auto' }}
                             />
                         </Tabs>
                     </Box>
@@ -630,13 +635,13 @@ const InterviewOutline: React.FC = () => {
                                     transition: 'all 0.2s ease-in-out'
                                 }}
                             >
-                                <CardContent sx={{ p: 3 }}>
+                                <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
                                     {/* Question Header */}
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
-                                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, gap: 1 }}>
+                                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#333', fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                                             Question {questionSet?.questions.findIndex(q => q.id === question.id) + 1}
                                         </Typography>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                                             <Chip
                                                 label={question.status === 'approved' ? 'Approved' : 'Pending'}
                                                 size="small"
@@ -699,7 +704,7 @@ const InterviewOutline: React.FC = () => {
                                                 color: '#333',
                                                 lineHeight: 1.6,
                                                 mb: 3,
-                                                fontSize: '1.1rem',
+                                                fontSize: { xs: '0.95rem', sm: '1.1rem' },
                                                 opacity: question.status === 'approved' ? 0.9 : 1
                                             }}
                                         >

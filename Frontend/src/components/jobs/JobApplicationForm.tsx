@@ -189,7 +189,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: '24px',mt:"10px" }}>
             {/* First Name & Last Name - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   First Name *
@@ -248,7 +248,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             </Box>
 
             {/* Email & Phone - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Email Address *
@@ -308,7 +308,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             </Box>
 
             {/* Address & City - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Street Address
@@ -367,7 +367,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             </Box>
 
             {/* State & Zip Code - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   State
@@ -431,7 +431,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: '24px',mt:"10px"  }}>
             {/* Experience & Notice Period - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Years of Experience *
@@ -490,7 +490,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             </Box>
 
             {/* Current Salary & Expected Salary - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Current Salary (Optional)
@@ -624,7 +624,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             </Box>
 
             {/* Portfolio & LinkedIn - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   Portfolio Website
@@ -683,7 +683,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             </Box>
 
             {/* GitHub & Other Links - Side by Side */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
               <Box>
                 <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
                   GitHub Profile
@@ -758,7 +758,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
               {/* Summary Fields - Side by Side Layout */}
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Row 1: Full Name & Email */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
                   <Box>
                     <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
                       Full Name:
@@ -778,7 +778,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                 </Box>
 
                 {/* Row 2: Phone & Experience */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
                   <Box>
                     <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
                       Phone:
@@ -798,7 +798,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                 </Box>
 
                 {/* Row 3: Expected Salary & Notice Period */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
                   <Box>
                     <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
                       Expected Salary:
@@ -818,7 +818,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                 </Box>
 
                 {/* Row 4: Resume & Portfolio */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
                   <Box>
                     <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
                       Resume:
@@ -885,20 +885,21 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
           sx: {
             borderRadius: '16px',
             maxHeight: '90vh',
-            width: '700px',
-            height: '900px'
+            width: { xs: '100%', sm: '700px' },
+            height: { xs: 'auto', sm: '900px' },
+            margin: { xs: '8px', sm: '32px' }
           }
         }
       }}
     >
       {/* Header */}
-      <DialogTitle sx={{ padding: '24px 24px 0 24px' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography sx={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>
+      <DialogTitle sx={{ padding: { xs: '16px 16px 0', sm: '24px 24px 0 24px' } }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: { xs: '16px', sm: '20px' }, fontWeight: 700, color: '#1e293b', wordBreak: 'break-word' }}>
               Apply for {job.title}
             </Typography>
-            <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
+            <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b' }}>
               {job.company} • {job.location}
             </Typography>
           </Box>
@@ -908,35 +909,35 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
         </Box>
 
         {/* Step Navigation */}
-        <Box sx={{ marginTop: '20px' }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            paddingY: '20px', 
-            maxWidth: '550px', 
-            margin: '0 auto', 
+        <Box sx={{ marginTop: { xs: '12px', sm: '20px' }, overflow: 'hidden' }}>
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingY: { xs: '10px', sm: '20px' },
+            maxWidth: '550px',
+            margin: '0 auto',
             position: 'relative',
-            paddingX: '20px'
+            paddingX: { xs: '10px', sm: '20px' }
           }}>
             {/* Background Line */}
             <Box sx={{
               position: 'absolute',
-              top: '45px',
-              left: '45px',
-              right: '45px',
+              top: { xs: '30px', sm: '45px' },
+              left: { xs: '12%', sm: '45px' },
+              right: { xs: '12%', sm: '45px' },
               height: '3px',
               backgroundColor: '#e2e8f0',
               zIndex: 1,
               borderRadius: '2px'
             }} />
-            
+
             {/* Progress Line */}
             <Box sx={{
               position: 'absolute',
-              top: '45px',
-              left: '45px',
-              width: `calc(${((currentStep - 1) / (steps.length - 1)) * 100}% - 0px)`,
+              top: { xs: '30px', sm: '45px' },
+              left: { xs: '12%', sm: '45px' },
+              width: `calc(${((currentStep - 1) / (steps.length - 1)) * 76}%)`,
               height: '3px',
               backgroundColor: '#f59e0b',
               zIndex: 1,
@@ -945,28 +946,28 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             }} />
 
             {steps.map((step, index) => (
-              <Box key={index} sx={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                position: 'relative', 
+              <Box key={index} sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                position: 'relative',
                 zIndex: 2,
                 flex: 1,
-                maxWidth: '120px'
+                maxWidth: { xs: '80px', sm: '120px' }
               }}>
                 {/* Step Circle with Icon */}
                 <Box sx={{
-                  width: 50,
-                  height: 50,
+                  width: { xs: 36, sm: 50 },
+                  height: { xs: 36, sm: 50 },
                   borderRadius: '50%',
                   backgroundColor: index + 1 <= currentStep ? '#f59e0b' : '#e2e8f0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginBottom: '12px',
+                  marginBottom: { xs: '6px', sm: '12px' },
                   transition: 'all 0.3s ease',
                   border: index + 1 === currentStep ? '3px solid rgba(245, 158, 11, 0.3)' : 'none',
-                  boxShadow: index + 1 === currentStep ? '0 0 0 6px rgba(245, 158, 11, 0.1)' : 'none'
+                  boxShadow: index + 1 === currentStep ? '0 0 0 4px rgba(245, 158, 11, 0.1)' : 'none'
                 }}>
                   {index === 0 && (
                     <PersonIcon sx={{ 
@@ -996,12 +997,12 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                 
                 {/* Step Label */}
                 <Typography sx={{
-                  fontSize: '11px',
+                  fontSize: { xs: '9px', sm: '11px' },
                   fontWeight: index + 1 === currentStep ? 700 : 500,
                   color: index + 1 <= currentStep ? '#f59e0b' : '#94a3b8',
                   textAlign: 'center',
                   lineHeight: 1.2,
-                  maxWidth: '100px',
+                  maxWidth: { xs: '70px', sm: '100px' },
                   wordWrap: 'break-word'
                 }}>
                   {step}
@@ -1019,12 +1020,14 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
 
       {/* Footer */}
       <Box sx={{
-        padding: '20px 24px',
+        padding: { xs: '12px 16px', sm: '20px 24px' },
         backgroundColor: 'white',
         borderTop: '1px solid #e2e8f0',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: { xs: 'wrap', sm: 'nowrap' },
+        gap: { xs: '8px', sm: 0 }
       }}>
         <Button
           onClick={handlePrevious}

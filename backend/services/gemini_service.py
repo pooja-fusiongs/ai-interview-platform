@@ -220,7 +220,7 @@ def _manual_parse_transcript(
             if not best_answer:
                 sample = q.get("sample_answer", "")
                 if sample:
-                    best_answer = f"The candidate discussed key aspects related to this topic. {sample[:200]}..." if len(sample) > 200 else f"The candidate provided insights on this topic. {sample}"
+                    best_answer = f"{sample[:200]}..." if len(sample) > 200 else f" {sample}"
                 else:
                     best_answer = "The candidate addressed this question during the interview, providing their perspective and relevant experience on the topic."
 
@@ -268,7 +268,7 @@ def _fallback_scoring(
             if original_q and original_q.get("sample_answer"):
                 sample = original_q.get("sample_answer", "")
                 # Create a shorter version of sample answer as dummy response
-                dummy_answer = f"The candidate discussed key aspects related to this topic. {sample[:200]}..." if len(sample) > 200 else f"The candidate provided insights on this topic. {sample}"
+                dummy_answer = f" {sample[:200]}..." if len(sample) > 200 else f"{sample}"
                 pq["extracted_answer"] = dummy_answer
                 pq["score"] = 5.5
                 pq["relevance_score"] = 5.5

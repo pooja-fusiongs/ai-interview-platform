@@ -45,9 +45,6 @@ ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET", "")
 ZOOM_SDK_KEY = os.getenv("ZOOM_SDK_KEY", "")
 ZOOM_SDK_SECRET = os.getenv("ZOOM_SDK_SECRET", "")
 
-# Daily.co Video Call Integration (FREE)
-DAILY_API_KEY = os.getenv("DAILY_API_KEY", "bc24b6612c3ed2c95f42a3ba4a9c5a5c8611d64d9537a66fd1c7d4e917cdc674")
-
 # CORS
 CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",

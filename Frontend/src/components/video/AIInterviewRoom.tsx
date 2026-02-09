@@ -13,13 +13,6 @@ import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 
-// Declare Daily.co types
-declare global {
-  interface Window {
-    DailyIframe: any;
-  }
-}
-
 interface Question {
   id: number;
   question_text: string;
@@ -51,48 +44,21 @@ const AIInterviewRoom: React.FC = () => {
   const [questionTime, setQuestionTime] = useState(QUESTION_TIME_LIMIT);
   const [scoreResult, setScoreResult] = useState<any>(null);
 
-  // Daily.co states
-  const [dailyLoaded, setDailyLoaded] = useState(false);
   const [callJoined, setCallJoined] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
 
-  const dailyContainerRef = useRef<HTMLDivElement>(null);
-  const dailyCallRef = useRef<any>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const questionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Load Daily.co script
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@daily-co/daily-js';
-    script.async = true;
-    script.onload = () => {
-      setDailyLoaded(true);
-      console.log('✅ Daily.co SDK loaded for AI Interview');
-    };
-    script.onerror = () => {
-      console.error('❌ Failed to load Daily.co SDK');
-      toast.error('Failed to load video. Please refresh.');
-    };
-    document.body.appendChild(script);
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (questionTimerRef.current) clearInterval(questionTimerRef.current);
-      if (dailyCallRef.current) {
-        dailyCallRef.current.leave();
-        dailyCallRef.current.destroy();
-        dailyCallRef.current = null;
+      if (videoContainerRef.current) {
+        videoContainerRef.current.innerHTML = '';
       }
     };
   }, []);
@@ -168,16 +134,16 @@ const AIInterviewRoom: React.FC = () => {
     };
   }, [isActive, callJoined, currentIndex, completing]);
 
-  // Initialize Daily.co when interview becomes active
+  // Initialize video call when interview becomes active
   useEffect(() => {
-    if (isActive && dailyLoaded && dailyContainerRef.current && !dailyCallRef.current && interview?.zoom_meeting_url) {
-      initializeDaily();
+    if (isActive && videoContainerRef.current && interview?.zoom_meeting_url) {
+      initializeVideo();
     }
-  }, [isActive, dailyLoaded, interview]);
+  }, [isActive, interview]);
 
-  const initializeDaily = async () => {
-    if (!dailyContainerRef.current || !window.DailyIframe) {
-      console.error('Daily container or SDK not available');
+  const initializeVideo = () => {
+    if (!videoContainerRef.current) {
+      console.error('Video container not available');
       return;
     }
 
@@ -188,43 +154,27 @@ const AIInterviewRoom: React.FC = () => {
       return;
     }
 
-    console.log('🎥 Initializing Daily.co for AI Interview:', meetingUrl);
-
-    try {
-      dailyCallRef.current = window.DailyIframe.createFrame(dailyContainerRef.current, {
-        iframeStyle: {
-          width: '100%',
-          height: '100%',
-          border: '0',
-          borderRadius: '16px',
-        },
-        showLeaveButton: false,
-        showFullscreenButton: true,
-      });
-
-      dailyCallRef.current.on('joined-meeting', () => {
-        console.log('✅ Joined AI Interview meeting');
-        setCallJoined(true);
-        toast.success('Connected! AI Interview starting...');
-      });
-
-      dailyCallRef.current.on('error', (error: any) => {
-        console.error('Daily.co error:', error);
-        toast.error('Video call error. Please try again.');
-      });
-
-      const displayName = interview?.candidate_name || user?.name || 'Candidate';
-
-      await dailyCallRef.current.join({
-        url: meetingUrl,
-        userName: displayName,
-      });
-
-      console.log('✅ Daily.co AI Interview initialized');
-    } catch (err) {
-      console.error('Failed to initialize Daily.co:', err);
-      toast.error('Failed to start video. Please try again.');
+    // Add Jitsi config to skip pre-join lobby and auto-join
+    let jitsiUrl = meetingUrl;
+    if (meetingUrl.includes('meet.jit.si') && !meetingUrl.includes('prejoinPageEnabled')) {
+      const separator = meetingUrl.includes('#') ? '&' : '#';
+      jitsiUrl = `${meetingUrl}${separator}config.prejoinPageEnabled=false&config.disableDeepLinking=true`;
     }
+
+    console.log('🎥 Initializing Jitsi meeting for AI Interview:', jitsiUrl);
+    const iframe = document.createElement('iframe');
+    iframe.src = jitsiUrl;
+    iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.borderRadius = '16px';
+    iframe.onload = () => {
+      setCallJoined(true);
+      toast.success('Connected! AI Interview starting...');
+    };
+    videoContainerRef.current.innerHTML = '';
+    videoContainerRef.current.appendChild(iframe);
   };
 
   const formatTime = (seconds: number) => {
@@ -314,11 +264,9 @@ const AIInterviewRoom: React.FC = () => {
     try {
       setCompleting(true);
 
-      // Leave Daily call
-      if (dailyCallRef.current) {
-        await dailyCallRef.current.leave();
-        dailyCallRef.current.destroy();
-        dailyCallRef.current = null;
+      // Clean up video call iframe
+      if (videoContainerRef.current) {
+        videoContainerRef.current.innerHTML = '';
       }
 
       const result = await videoInterviewService.submitAIInterviewAnswers(Number(videoId), finalAnswers);
@@ -341,19 +289,13 @@ const AIInterviewRoom: React.FC = () => {
   };
 
   const toggleMic = () => {
-    if (dailyCallRef.current) {
-      const newState = !micOn;
-      dailyCallRef.current.setLocalAudio(newState);
-      setMicOn(newState);
-    }
+    setMicOn(!micOn);
+    toast('Use Jitsi controls inside the video to toggle mic', { icon: '🎙️' });
   };
 
   const toggleCam = () => {
-    if (dailyCallRef.current) {
-      const newState = !camOn;
-      dailyCallRef.current.setLocalVideo(newState);
-      setCamOn(newState);
-    }
+    setCamOn(!camOn);
+    toast('Use Jitsi controls inside the video to toggle camera', { icon: '📷' });
   };
 
   if (loading) {
@@ -508,7 +450,6 @@ const AIInterviewRoom: React.FC = () => {
                   variant="contained"
                   startIcon={<Videocam />}
                   onClick={handleStart}
-                  disabled={!dailyLoaded}
                   sx={{
                     background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
                     padding: '14px 40px',
@@ -520,10 +461,9 @@ const AIInterviewRoom: React.FC = () => {
                     '&:hover': {
                       background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
                     },
-                    '&:disabled': { background: '#64748b' }
                   }}
                 >
-                  {dailyLoaded ? 'Start AI Video Interview' : 'Loading...'}
+                  Start AI Video Interview
                 </Button>
               </Paper>
             ) : isCompleted ? (
@@ -615,7 +555,7 @@ const AIInterviewRoom: React.FC = () => {
                 boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
               }}>
                 <Box
-                  ref={dailyContainerRef}
+                  ref={videoContainerRef}
                   sx={{
                     width: '100%',
                     height: '100%',

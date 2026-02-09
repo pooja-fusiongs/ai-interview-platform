@@ -130,7 +130,7 @@ const SignUp = () => {
         <Box sx={{ width: '100%', maxWidth: { xs: '100%', sm: 400 }, textAlign: 'center' }}>
           {/* Profile Avatar */}
           <Box sx={{
-            display: { xs: 'none', sm: 'flex' },
+            display: 'flex',
             justifyContent: 'center',
             marginBottom: { xs: '12px', md: '20px' }
           }}>
