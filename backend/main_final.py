@@ -77,6 +77,22 @@ app.add_middleware(
 def health_check():
     return {"status": "healthy", "message": "AI Interview Platform API is running"}
 
+@app.get("/debug/daily-test")
+def debug_daily_test():
+    """Debug: Test if Daily.co room creation works from this server."""
+    import config as cfg
+    from services.zoom_service import create_daily_room
+    has_key = bool(cfg.DAILY_API_KEY)
+    key_prefix = cfg.DAILY_API_KEY[:10] + "..." if cfg.DAILY_API_KEY else "NOT SET"
+    result = create_daily_room("debug-test-room")
+    return {
+        "daily_api_key_set": has_key,
+        "key_prefix": key_prefix,
+        "room_created": result is not None,
+        "room_url": result.get("join_url") if result else None,
+        "error": None if result else "Room creation failed - check server logs"
+    }
+
 # Mount auth router
 app.include_router(auth_router)
 app.include_router(create_job_router)
