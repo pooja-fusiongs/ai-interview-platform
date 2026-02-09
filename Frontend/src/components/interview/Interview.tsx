@@ -27,6 +27,7 @@ const Interview = () => {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraError, setCameraError] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
@@ -44,17 +45,33 @@ const Interview = () => {
     }
   }, [sessionId, questions.length])
 
+  // Attach stream to video element AFTER it renders (fixes race condition)
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [cameraActive])
+
   const startCamera = async () => {
     try {
+      setCameraError('')
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
       }
       setCameraActive(true)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Camera access error:', err)
       setCameraActive(false)
+      if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraError('No camera or microphone detected. Please connect a camera and microphone to continue.')
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera/microphone permission denied. Please allow access in your browser settings and try again.')
+      } else {
+        setCameraError('Unable to access camera/microphone. Please check your device and browser settings.')
+      }
     }
   }
 
@@ -364,6 +381,35 @@ const Interview = () => {
                     transform: 'scaleX(-1)',
                   }}
                 />
+              ) : cameraError ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', px: 2, textAlign: 'center' }}>
+                  <Box sx={{
+                    width: 48, height: 48, borderRadius: '50%',
+                    background: 'rgba(239,68,68,0.2)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <i className="fas fa-video-slash" style={{ color: '#ef4444', fontSize: '20px' }}></i>
+                  </Box>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#ef4444' }}>
+                    Camera Required
+                  </Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
+                    {cameraError}
+                  </Typography>
+                  <Button
+                    onClick={startCamera}
+                    size="small"
+                    sx={{
+                      mt: 0.5, textTransform: 'none', fontSize: '11px', fontWeight: 600,
+                      color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)',
+                      borderRadius: '8px', px: 2,
+                      '&:hover': { background: 'rgba(245,158,11,0.1)' },
+                    }}
+                  >
+                    <i className="fas fa-redo" style={{ marginRight: 6, fontSize: '10px' }}></i>
+                    Retry Camera
+                  </Button>
+                </Box>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                   <Box sx={{ fontSize: '48px', opacity: 0.6 }}>

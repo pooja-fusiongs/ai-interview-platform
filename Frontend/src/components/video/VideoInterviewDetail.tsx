@@ -13,7 +13,6 @@ import {
   Person,
   Work,
   Security,
-  Save,
   ContentCopy,
   OpenInNew,
   PlayArrow,
@@ -43,8 +42,7 @@ const VideoInterviewDetail: React.FC = () => {
   const [interview, setInterview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [, setNotes] = useState('');
   const [transcript, setTranscript] = useState<string | null>(null);
   const [transcriptText, setTranscriptText] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -133,17 +131,6 @@ const VideoInterviewDetail: React.FC = () => {
     }
   };
 
-  const handleSaveNotes = async () => {
-    try {
-      setSaving(true);
-      await videoInterviewService.updateNotes(Number(videoId), notes);
-      toast.success('Notes saved successfully');
-    } catch {
-      toast.error('Failed to save notes');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -429,55 +416,7 @@ const VideoInterviewDetail: React.FC = () => {
                 </Box>
               </Box>
 
-              {/* Notes Section */}
-              <Box sx={{
-                background: 'white',
-                borderRadius: '16px',
-                border: '1px solid #e2e8f0',
-                padding: { xs: '16px', sm: '20px', md: '24px' },
-                maxWidth: '100%',
-                boxSizing: 'border-box'
-              }}>
-                <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="fas fa-sticky-note" style={{ color: '#f59e0b' }}></i>
-                  Interview Notes
-                </Typography>
-                <TextField
-                  multiline
-                  rows={5}
-                  fullWidth
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add notes about the interview, candidate performance, observations..."
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '12px',
-                      background: '#f8fafc',
-                      '&:hover': { background: '#f1f5f9' },
-                      '&.Mui-focused': { background: 'white' }
-                    }
-                  }}
-                />
-                <Button
-                  variant="contained"
-                  startIcon={saving ? <CircularProgress size={18} sx={{ color: 'white' }} /> : <Save />}
-                  onClick={handleSaveNotes}
-                  disabled={saving}
-                  sx={{
-                    mt: 2,
-                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                    padding: '10px 24px',
-                    borderRadius: '10px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
-                    }
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Notes'}
-                </Button>
-              </Box>
+             
 
               {/* Transcript Section */}
               <Box sx={{
@@ -699,26 +638,58 @@ const VideoInterviewDetail: React.FC = () => {
                   boxSizing: 'border-box',
                   overflow: 'hidden'
                 }}>
-                  <Typography sx={{
-                    fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, color: '#1e293b',
-                    display: 'flex', alignItems: 'center', gap: 1, mb: 2
-                  }}>
-                    <FiberManualRecord sx={{ color: '#ef4444', fontSize: 20 }} />
-                    Interview Recording
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                    <Typography sx={{
+                      fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, color: '#1e293b',
+                      display: 'flex', alignItems: 'center', gap: 1
+                    }}>
+                      <FiberManualRecord sx={{ color: '#ef4444', fontSize: 20 }} />
+                      Interview Recording
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<CloudUpload sx={{ transform: 'rotate(180deg)' }} />}
+                      href={`${API_BASE_URL}${interview.recording_url}`}
+                      target="_blank"
+                      download
+                      sx={{
+                        textTransform: 'none', fontWeight: 600, fontSize: '12px',
+                        borderColor: '#e2e8f0', color: '#64748b', borderRadius: '8px',
+                        '&:hover': { borderColor: '#f59e0b', color: '#f59e0b' }
+                      }}
+                    >
+                      Download
+                    </Button>
+                  </Box>
                   <Box sx={{
                     borderRadius: '12px',
                     overflow: 'hidden',
-                    background: '#0f172a',
-                    border: '1px solid #e2e8f0'
+                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                    border: '1px solid #e2e8f0',
+                    padding: { xs: '16px', sm: '24px' },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2
                   }}>
-                    <video
+                    <Box sx={{
+                      width: 56, height: 56, borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Videocam sx={{ color: 'white', fontSize: 28 }} />
+                    </Box>
+                    <Typography sx={{ color: '#94a3b8', fontSize: '13px' }}>
+                      Audio recording of the interview
+                    </Typography>
+                    <audio
                       controls
-                      style={{ width: '100%', maxHeight: '500px', display: 'block' }}
+                      style={{ width: '100%', maxWidth: '500px' }}
                       src={`${API_BASE_URL}${interview.recording_url}`}
                     >
-                      Your browser does not support the video tag.
-                    </video>
+                      Your browser does not support audio playback.
+                    </audio>
                   </Box>
                   <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: 1.5 }}>
                     Recording is stored securely and only accessible to authorized recruiters.

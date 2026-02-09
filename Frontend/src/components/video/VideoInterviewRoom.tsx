@@ -45,7 +45,13 @@ const VideoInterviewRoom: React.FC = () => {
         const data = await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
         if (data.status === 'in_progress') {
-          setIsActive(true);
+          if (user?.role === 'candidate') {
+            // Candidate joining an in-progress interview: show consent dialog first
+            setShowConsentDialog(true);
+          } else {
+            // Recruiter/Admin: auto-join directly
+            setIsActive(true);
+          }
           if (data.started_at) {
             // Ensure timestamp is parsed as UTC (append 'Z' if no timezone info)
             const ts = data.started_at;
@@ -56,7 +62,6 @@ const VideoInterviewRoom: React.FC = () => {
             const now = Date.now();
             const diff = Math.floor((now - startTime) / 1000);
             // If elapsed time is unreasonably large (>24 hours), reset to 0
-            // This handles cases where interview was left in_progress from a previous session
             setElapsed(diff > 86400 ? 0 : Math.max(0, diff));
           }
         }
@@ -178,7 +183,7 @@ const VideoInterviewRoom: React.FC = () => {
             DISABLE_PRESENCE_STATUS: true,
           },
           userInfo: {
-            displayName: interview?.candidate_name || user?.name || 'Participant'
+            displayName: user?.name || 'Participant'
           }
         });
 
@@ -225,9 +230,12 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const handleStart = () => {
+    console.log('🎬 handleStart called, user role:', user?.role);
     if (user?.role === 'candidate') {
+      console.log('🎬 Showing consent dialog for candidate');
       setShowConsentDialog(true);
     } else {
+      console.log('🎬 Starting directly for role:', user?.role);
       // Recruiter/Admin — start directly without consent popup
       startInterviewDirectly();
     }
@@ -235,17 +243,6 @@ const VideoInterviewRoom: React.FC = () => {
 
   const startInterviewDirectly = async () => {
     try {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        stream.getTracks().forEach(track => track.stop());
-      } catch (err: any) {
-        if (err.name === 'NotFoundError') {
-          toast('No camera/mic found. Video call will open anyway.', { icon: '⚠️' });
-        } else {
-          toast('Camera access issue. Video call will open anyway.', { icon: '⚠️' });
-        }
-      }
-
       await videoInterviewService.startInterview(Number(videoId));
       const data = await videoInterviewService.getInterview(Number(videoId));
       setInterview(data);
@@ -253,7 +250,7 @@ const VideoInterviewRoom: React.FC = () => {
       setElapsed(0);
       toast.success('Interview started! Connecting to video call...');
 
-      // Start recording for recruiter/admin
+      // Start audio recording (uses mic only, no camera conflict with Jitsi)
       startRecording();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to start interview');
@@ -266,34 +263,22 @@ const VideoInterviewRoom: React.FC = () => {
       // Save consent to backend
       await videoInterviewService.updateRecordingConsent(Number(videoId), true);
 
-      // Try to request permissions, but don't block if no camera
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        stream.getTracks().forEach(track => track.stop());
-        console.log('✅ Media permissions granted');
-      } catch (err: any) {
-        console.warn('⚠️ Media device warning:', err.name);
-        if (err.name === 'NotFoundError') {
-          toast('No camera/mic found. Video call will open anyway.', { icon: '⚠️' });
-        } else {
-          toast('Camera access issue. Video call will open anyway.', { icon: '⚠️' });
-        }
+      // If interview is already in_progress (started by recruiter), just join
+      if (interview?.status !== 'in_progress') {
+        await videoInterviewService.startInterview(Number(videoId));
+        // Refresh interview data to get the meeting URL
+        const data = await videoInterviewService.getInterview(Number(videoId));
+        setInterview(data);
+        setElapsed(0);
       }
 
-      await videoInterviewService.startInterview(Number(videoId));
-
-      // Refresh interview data to get the meeting URL
-      const data = await videoInterviewService.getInterview(Number(videoId));
-      setInterview(data);
-
       setIsActive(true);
-      setElapsed(0);
-      toast.success('Interview started! Connecting to video call...');
+      toast.success('Joining interview...');
 
-      // Start recording
+      // Start audio recording (mic only, no camera conflict with Jitsi)
       startRecording();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to start interview');
+      toast.error(err.response?.data?.detail || 'Failed to join interview');
     }
   };
 
@@ -304,15 +289,37 @@ const VideoInterviewRoom: React.FC = () => {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      let stream: MediaStream;
+
+      // Try real microphone first
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('🎤 Real microphone detected, using hardware audio');
+      } catch (micErr: any) {
+        // No mic available — create a silent audio stream using Web Audio API
+        // This allows recording pipeline to work for testing without hardware
+        console.warn('No microphone found, using silent audio stream for recording test');
+        const audioCtx = new AudioContext();
+        const oscillator = audioCtx.createOscillator();
+        oscillator.frequency.value = 0; // Silent
+        const dest = audioCtx.createMediaStreamDestination();
+        oscillator.connect(dest);
+        oscillator.start();
+        stream = dest.stream;
+        toast('No microphone — using silent recording for testing.', { icon: '🔇', duration: 4000 });
+      }
+
       recordingStreamRef.current = stream;
       recordedChunksRef.current = [];
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ? 'video/webm;codecs=vp9'
-          : 'video/webm',
-      });
+      // Pick best available audio format
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'video/webm';
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -327,10 +334,15 @@ const VideoInterviewRoom: React.FC = () => {
       mediaRecorder.start(1000); // Collect data every second
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
-      console.log('🎥 Recording started');
-    } catch (err) {
+      toast.success('Recording started!');
+      console.log('🎥 Audio recording started with mimeType:', mimeType);
+    } catch (err: any) {
       console.error('Failed to start recording:', err);
-      toast('Recording could not start. Interview will continue without recording.', { icon: '⚠️' });
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        toast.error('Microphone permission denied. Please allow microphone access and try again.');
+      } else {
+        toast.error('Recording could not start. Please check browser permissions.');
+      }
     }
   };
 
@@ -357,7 +369,7 @@ const VideoInterviewRoom: React.FC = () => {
           return;
         }
 
-        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'audio/webm' });
         console.log(`🎥 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
 
         // Upload to backend
@@ -415,6 +427,13 @@ const VideoInterviewRoom: React.FC = () => {
       const result = await videoInterviewService.endInterview(Number(videoId));
       setInterview(result);
       toast.success('Interview completed!');
+
+      // Redirect recruiter to detail page to view recording
+      if (user?.role !== 'candidate') {
+        setTimeout(() => {
+          navigate(`/video-detail/${videoId}`);
+        }, 1500);
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     } finally {

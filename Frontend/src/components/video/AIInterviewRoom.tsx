@@ -222,7 +222,7 @@ const AIInterviewRoom: React.FC = () => {
             DISABLE_PRESENCE_STATUS: true,
           },
           userInfo: {
-            displayName: interview?.candidate_name || user?.name || 'Candidate'
+            displayName: user?.name || 'Candidate'
           }
         });
 
@@ -332,7 +332,7 @@ const AIInterviewRoom: React.FC = () => {
     }
 
     // Prepare all answers
-    const finalAnswers: Answer[] = questions.map((q, idx) => {
+    const finalAnswers: Answer[] = questions.map((q, ) => {
       const existing = answers.find(a => a.question_id === q.id);
       return {
         question_id: q.id,
