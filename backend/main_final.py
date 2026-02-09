@@ -81,17 +81,41 @@ def health_check():
 def debug_daily_test():
     """Debug: Test if Daily.co room creation works from this server."""
     import config as cfg
-    from services.zoom_service import create_daily_room
+    import requests as req
+    import time as t
+    import uuid as uid
     has_key = bool(cfg.DAILY_API_KEY)
     key_prefix = cfg.DAILY_API_KEY[:10] + "..." if cfg.DAILY_API_KEY else "NOT SET"
-    result = create_daily_room("debug-test-room")
-    return {
-        "daily_api_key_set": has_key,
-        "key_prefix": key_prefix,
-        "room_created": result is not None,
-        "room_url": result.get("join_url") if result else None,
-        "error": None if result else "Room creation failed - check server logs"
-    }
+    # Direct API call to see exact error
+    try:
+        room_name = f"debug-test-{uid.uuid4().hex[:8]}"
+        url = "https://api.daily.co/v1/rooms"
+        headers = {
+            "Authorization": f"Bearer {cfg.DAILY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "name": room_name,
+            "privacy": "public",
+            "properties": {
+                "exp": int(t.time()) + (24 * 60 * 60),
+            }
+        }
+        response = req.post(url, json=payload, headers=headers, timeout=10)
+        return {
+            "daily_api_key_set": has_key,
+            "key_prefix": key_prefix,
+            "status_code": response.status_code,
+            "response": response.json(),
+            "room_created": response.status_code in [200, 201],
+        }
+    except Exception as e:
+        return {
+            "daily_api_key_set": has_key,
+            "key_prefix": key_prefix,
+            "error_type": type(e).__name__,
+            "error": str(e),
+        }
 
 # Mount auth router
 app.include_router(auth_router)
