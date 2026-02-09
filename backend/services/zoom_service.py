@@ -43,8 +43,19 @@ def create_jitsi_meeting(topic, start_time=None, duration=None):
     unique_id = uuid.uuid4().hex[:8]
     room_name = f"{room_name}-{unique_id}"
 
-    # Jitsi Meet URL - skip pre-join lobby, auto-join directly
-    join_url = f"https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false&config.disableDeepLinking=true"
+    # Jitsi Meet URL - config params for direct browser access fallback
+    # Add comprehensive lobby bypass and security settings
+    join_url = (
+        f"https://meet.jit.si/{room_name}"
+        f"#config.prejoinPageEnabled=false"
+        f"&config.disableDeepLinking=true"
+        f"&config.enableLobby=false"
+        f"&config.requireDisplayName=false"
+        f"&config.disableModeratedRooms=true"
+        f"&config.enableInsecureRoomNameWarning=false"
+        f"&config.disableLobbyPassword=true"
+        f"&config.enableLobbyChat=false"
+    )
 
     return {
         "meeting_id": room_name,

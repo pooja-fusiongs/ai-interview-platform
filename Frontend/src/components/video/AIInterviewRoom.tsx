@@ -49,6 +49,7 @@ const AIInterviewRoom: React.FC = () => {
   const [camOn, setCamOn] = useState(true);
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const jitsiApiRef = useRef<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const questionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -57,6 +58,10 @@ const AIInterviewRoom: React.FC = () => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+      if (jitsiApiRef.current) {
+        try { jitsiApiRef.current.dispose(); } catch (e) { /* ignore */ }
+        jitsiApiRef.current = null;
+      }
       if (videoContainerRef.current) {
         videoContainerRef.current.innerHTML = '';
       }
@@ -141,7 +146,22 @@ const AIInterviewRoom: React.FC = () => {
     }
   }, [isActive, interview]);
 
-  const initializeVideo = () => {
+  const loadJitsiScript = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if ((window as any).JitsiMeetExternalAPI) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://meet.jit.si/external_api.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load Jitsi API'));
+      document.head.appendChild(script);
+    });
+  };
+
+  const initializeVideo = async () => {
     if (!videoContainerRef.current) {
       console.error('Video container not available');
       return;
@@ -154,16 +174,75 @@ const AIInterviewRoom: React.FC = () => {
       return;
     }
 
-    // Add Jitsi config to skip pre-join lobby and auto-join
-    let jitsiUrl = meetingUrl;
-    if (meetingUrl.includes('meet.jit.si') && !meetingUrl.includes('prejoinPageEnabled')) {
-      const separator = meetingUrl.includes('#') ? '&' : '#';
-      jitsiUrl = `${meetingUrl}${separator}config.prejoinPageEnabled=false&config.disableDeepLinking=true`;
+    // Use Jitsi IFrame API for proper embedding (bypasses lobby/moderator screen)
+    if (meetingUrl.includes('meet.jit.si')) {
+      try {
+        await loadJitsiScript();
+
+        const roomName = meetingUrl.split('meet.jit.si/')[1]?.split('#')[0]?.split('?')[0];
+        if (!roomName) {
+          toast.error('Invalid meeting URL');
+          return;
+        }
+
+        videoContainerRef.current.innerHTML = '';
+
+        const api = new (window as any).JitsiMeetExternalAPI('meet.jit.si', {
+          roomName: roomName,
+          parentNode: videoContainerRef.current,
+          width: '100%',
+          height: '100%',
+          configOverwrite: {
+            prejoinPageEnabled: false,
+            disableDeepLinking: true,
+            enableLobby: false,
+            startWithAudioMuted: false,
+            startWithVideoMuted: false,
+            enableWelcomePage: false,
+            enableClosePage: false,
+            disableModeratedRooms: true,
+            // Additional security bypass settings
+            requireDisplayName: false,
+            enableInsecureRoomNameWarning: false,
+            enableNoisyMicDetection: false,
+            // Disable lobby completely
+            lobby: {
+              autoKnock: false,
+              enableChat: false,
+            },
+            // Allow everyone to join without approval
+            disableLobbyPassword: true,
+            enableLobbyChat: false,
+          },
+          interfaceConfigOverwrite: {
+            SHOW_JITSI_WATERMARK: false,
+            SHOW_WATERMARK_FOR_GUESTS: false,
+            DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+            HIDE_INVITE_MORE_HEADER: true,
+            DISABLE_PRESENCE_STATUS: true,
+          },
+          userInfo: {
+            displayName: interview?.candidate_name || user?.name || 'Candidate'
+          }
+        });
+
+        api.addEventListener('videoConferenceJoined', () => {
+          setCallJoined(true);
+          toast.success('Connected! AI Interview starting...');
+        });
+
+        jitsiApiRef.current = api;
+        console.log('🎥 Jitsi IFrame API initialized for AI Interview room:', roomName);
+        return;
+      } catch (err) {
+        console.error('Failed to load Jitsi API, falling back to iframe:', err);
+      }
     }
 
-    console.log('🎥 Initializing Jitsi meeting for AI Interview:', jitsiUrl);
+    // Fallback: plain iframe
+    console.log('🎥 Initializing video via iframe:', meetingUrl);
     const iframe = document.createElement('iframe');
-    iframe.src = jitsiUrl;
+    iframe.src = meetingUrl;
     iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
     iframe.style.width = '100%';
     iframe.style.height = '100%';
@@ -264,7 +343,11 @@ const AIInterviewRoom: React.FC = () => {
     try {
       setCompleting(true);
 
-      // Clean up video call iframe
+      // Clean up video call
+      if (jitsiApiRef.current) {
+        try { jitsiApiRef.current.dispose(); } catch (e) { /* ignore */ }
+        jitsiApiRef.current = null;
+      }
       if (videoContainerRef.current) {
         videoContainerRef.current.innerHTML = '';
       }
@@ -289,13 +372,17 @@ const AIInterviewRoom: React.FC = () => {
   };
 
   const toggleMic = () => {
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.executeCommand('toggleAudio');
+    }
     setMicOn(!micOn);
-    toast('Use Jitsi controls inside the video to toggle mic', { icon: '🎙️' });
   };
 
   const toggleCam = () => {
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.executeCommand('toggleVideo');
+    }
     setCamOn(!camOn);
-    toast('Use Jitsi controls inside the video to toggle camera', { icon: '📷' });
   };
 
   if (loading) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
@@ -26,10 +26,48 @@ const Interview = () => {
   const [currentAnswer, setCurrentAnswer] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [cameraActive, setCameraActive] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
     loadJobs()
   }, [])
+
+  // Start camera when interview session begins, stop on unmount
+  useEffect(() => {
+    if (sessionId && questions.length > 0) {
+      startCamera()
+    }
+    return () => {
+      stopCamera()
+    }
+  }, [sessionId, questions.length])
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+      setCameraActive(true)
+    } catch (err) {
+      console.error('Camera access error:', err)
+      setCameraActive(false)
+    }
+  }
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setCameraActive(false)
+  }
 
   const loadJobs = async () => {
     try {
@@ -116,6 +154,7 @@ const Interview = () => {
       if (sessionId) {
         await interviewService.completeSession(sessionId)
       }
+      stopCamera()
       setMessage('Interview completed! Redirecting to results...')
       setTimeout(() => navigate(`/results?session=${sessionId}`), 1500)
     } catch (error: any) {
@@ -291,7 +330,7 @@ const Interview = () => {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '340px 1fr' }, gap: '20px' }}>
         {/* Left: Video / Info panel */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Video placeholder */}
+          {/* Camera Preview */}
           <Card
             sx={{
               borderRadius: '16px',
@@ -309,14 +348,41 @@ const Interview = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#94a3b8',
-                gap: '8px',
+                position: 'relative',
               }}
             >
-              <Box sx={{ fontSize: '48px', opacity: 0.6 }}>
-                <i className="fas fa-video"></i>
-              </Box>
-              <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>Camera Preview</Typography>
-              <Typography sx={{ fontSize: '11px', opacity: 0.6 }}>Video placeholder</Typography>
+              {cameraActive ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transform: 'scaleX(-1)',
+                  }}
+                />
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <Box sx={{ fontSize: '48px', opacity: 0.6 }}>
+                    <i className="fas fa-video"></i>
+                  </Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>Camera Preview</Typography>
+                  <Typography sx={{ fontSize: '11px', opacity: 0.6 }}>Starting camera...</Typography>
+                </Box>
+              )}
+              {cameraActive && (
+                <Box sx={{
+                  position: 'absolute', top: 8, left: 8,
+                  background: 'rgba(239,68,68,0.9)', borderRadius: '6px',
+                  px: 1, py: 0.3, display: 'flex', alignItems: 'center', gap: 0.5,
+                }}>
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: 'white', animation: 'blink 1s infinite', '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />
+                  <Typography sx={{ color: 'white', fontSize: '10px', fontWeight: 700 }}>LIVE</Typography>
+                </Box>
+              )}
             </Box>
           </Card>
 
