@@ -47,7 +47,7 @@ router = APIRouter(tags=["Video Interviews"])
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewResponse:
+def _build_response(vi: VideoInterview, db: Session = None, questions_approved: bool = True) -> VideoInterviewResponse:
     """Build a VideoInterviewResponse from an ORM object with joined names."""
     candidate_name = None
     application = None
@@ -150,6 +150,7 @@ def _build_response(vi: VideoInterview, db: Session = None) -> VideoInterviewRes
         weaknesses=weaknesses,
         per_question_scores=per_question_scores,
         interview_session_id=interview_session_id,
+        questions_approved=questions_approved,
     )
 
 
@@ -264,60 +265,6 @@ def schedule_video_interview(
             candidate_name_for_email = candidate.full_name or candidate.username
             candidate_email_for_notification = candidate.email
 
-        # Check questions status for this candidate
-        from models import InterviewQuestion
-        from services.ai_question_generator import get_question_generator
-
-        candidate_id_for_questions = application.id if application else body.candidate_id
-
-        # Check for existing questions
-        existing_questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id == body.job_id,
-            InterviewQuestion.candidate_id == candidate_id_for_questions
-        ).all()
-
-        questions_generated = False
-
-        if len(existing_questions) == 0:
-            # No questions exist - auto-generate them
-            print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating...")
-            try:
-                generator = get_question_generator()
-                result = generator.generate_questions(
-                    db=db,
-                    job_id=body.job_id,
-                    candidate_id=candidate_id_for_questions,
-                    total_questions=10
-                )
-                questions_generated = True
-                print(f"✅ Auto-generated {result['total_questions']} questions for video interview")
-                # After generating, notify that questions need approval
-                raise HTTPException(
-                    status_code=400,
-                    detail="Questions have been auto-generated for this candidate. Please review and approve the questions in Manage Candidates before scheduling the interview."
-                )
-            except HTTPException:
-                raise  # Re-raise our custom exception
-            except Exception as e:
-                print(f"⚠️ Failed to auto-generate questions: {e}")
-                import traceback
-                traceback.print_exc()
-                raise HTTPException(
-                    status_code=400,
-                    detail="Failed to generate questions for this candidate. Please generate questions manually in Manage Candidates first."
-                )
-        else:
-            # Questions exist - check if they are approved
-            approved_count = sum(1 for q in existing_questions if q.is_approved)
-            print(f"✅ Found {len(existing_questions)} existing questions ({approved_count} approved) for candidate {candidate_id_for_questions}")
-
-            if approved_count == 0:
-                # Questions exist but none are approved
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Questions exist but none are approved. Please approve questions in Manage Candidates before scheduling the interview. ({len(existing_questions)} questions pending approval)"
-                )
-
         # Attempt to create a Zoom meeting
         topic = f"Interview: {job.title} - {candidate_name_for_email}"
         zoom_data = create_zoom_meeting(
@@ -370,7 +317,45 @@ def schedule_video_interview(
         except Exception as e:
             print(f"⚠️ Failed to send email notification: {e}")
 
-        return _build_response(vi, db)
+        # Check questions status for this candidate (after interview is created)
+        from models import InterviewQuestion
+        from services.ai_question_generator import get_question_generator
+
+        candidate_id_for_questions = application.id if application else body.candidate_id
+        questions_approved = True
+
+        # Check for existing questions
+        existing_questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == body.job_id,
+            InterviewQuestion.candidate_id == candidate_id_for_questions
+        ).all()
+
+        if len(existing_questions) == 0:
+            # No questions exist - auto-generate them
+            print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating...")
+            try:
+                generator = get_question_generator()
+                result = generator.generate_questions(
+                    db=db,
+                    job_id=body.job_id,
+                    candidate_id=candidate_id_for_questions,
+                    total_questions=10
+                )
+                print(f"✅ Auto-generated {result['total_questions']} questions for video interview")
+            except Exception as e:
+                print(f"⚠️ Failed to auto-generate questions: {e}")
+                import traceback
+                traceback.print_exc()
+            questions_approved = False
+        else:
+            # Questions exist - check if they are approved
+            approved_count = sum(1 for q in existing_questions if q.is_approved)
+            print(f"✅ Found {len(existing_questions)} existing questions ({approved_count} approved) for candidate {candidate_id_for_questions}")
+
+            if approved_count == 0:
+                questions_approved = False
+
+        return _build_response(vi, db, questions_approved=questions_approved)
     
     except HTTPException:
         raise  # Re-raise HTTP exceptions

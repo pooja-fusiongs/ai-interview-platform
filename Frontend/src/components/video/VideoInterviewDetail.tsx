@@ -681,15 +681,15 @@ const VideoInterviewDetail: React.FC = () => {
                       <Videocam sx={{ color: 'white', fontSize: 28 }} />
                     </Box>
                     <Typography sx={{ color: '#94a3b8', fontSize: '13px' }}>
-                      Audio recording of the interview
+                      Video recording of the interview
                     </Typography>
-                    <audio
+                    <video
                       controls
-                      style={{ width: '100%', maxWidth: '500px' }}
+                      style={{ width: '100%', maxWidth: '640px', borderRadius: '8px' }}
                       src={`${API_BASE_URL}${interview.recording_url}`}
                     >
-                      Your browser does not support audio playback.
-                    </audio>
+                      Your browser does not support video playback.
+                    </video>
                   </Box>
                   <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: 1.5 }}>
                     Recording is stored securely and only accessible to authorized recruiters.

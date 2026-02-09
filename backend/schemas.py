@@ -603,6 +603,7 @@ class VideoInterviewResponse(BaseModel):
     weaknesses: Optional[str] = None
     per_question_scores: Optional[List[dict]] = None
     interview_session_id: Optional[int] = None  # ID to navigate to Results page
+    questions_approved: bool = True
 
     class Config:
         from_attributes = True

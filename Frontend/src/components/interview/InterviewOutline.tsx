@@ -68,6 +68,7 @@ const InterviewOutline: React.FC = () => {
     const fromPage = searchParams.get('from');
     const jobId = searchParams.get('jobId');
     const jobTitle = searchParams.get('jobTitle');
+    const interviewId = searchParams.get('interviewId');
 
     useEffect(() => {
         if (setId) {
@@ -222,9 +223,13 @@ const InterviewOutline: React.FC = () => {
 
             if (failCount === 0) {
                 toast.success(`All ${successCount} questions approved successfully!`);
-                // Redirect to video interviews after approval
+                // Redirect after approval
                 setTimeout(() => {
-                    navigate('/video-interviews');
+                    if (interviewId) {
+                        navigate(`/video-detail/${interviewId}`);
+                    } else {
+                        navigate('/video-interviews');
+                    }
                 }, 1500);
             } else {
                 toast.success(`${successCount} questions approved, ${failCount} failed.`);

@@ -15,6 +15,7 @@ const RecruiterCandidates = () => {
   const navigate = useNavigate()
   const jobId = parseInt(searchParams.get('jobId') || '0')
   const jobTitle = searchParams.get('jobTitle') || 'Job'
+  const interviewId = searchParams.get('interviewId') || ''
 
   const [candidates, setCandidates] = useState<RecruiterCandidate[]>([])
   const [filteredCandidates, setFilteredCandidates] = useState<RecruiterCandidate[]>([])
@@ -397,7 +398,7 @@ const RecruiterCandidates = () => {
                 {candidate.has_questions && candidate.question_session_id && (
                   <Button
                     size="medium"
-                    onClick={() => navigate(`/interview-outline/${candidate.question_session_id}?from=manage-candidates&jobId=${jobId}&jobTitle=${encodeURIComponent(jobTitle)}`)}
+                    onClick={() => navigate(`/interview-outline/${candidate.question_session_id}?from=manage-candidates&jobId=${jobId}&jobTitle=${encodeURIComponent(jobTitle)}${interviewId ? `&interviewId=${interviewId}` : ''}`)}
                     sx={{
                       minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
@@ -462,19 +463,20 @@ const RecruiterCandidates = () => {
           </Card>
         ))}
 
-        {/* Pagination - Same as CandidateMatching */}
+        {/* Pagination - Fixed with blur on mobile only, normal on desktop */}
         <Box sx={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 1000,
+          position: { xs: 'fixed', md: 'relative' },
+          bottom: { xs: 0, md: 'auto' },
+          left: { xs: 0, md: 'auto' },
+          right: { xs: 0, md: 'auto' },
+          zIndex: { xs: 1000, md: 1 },
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
           py: 1.5,
-          background: 'linear-gradient(to top, rgba(255,255,255,0.95) 60%, rgba(255,255,255,0))',
-          backdropFilter: 'blur(8px)',
+          mt: { xs: 0, md: 3 },
+          background: { xs: 'linear-gradient(to top, rgba(255,255,255,0.95) 60%, rgba(255,255,255,0))', md: 'transparent' },
+          backdropFilter: { xs: 'blur(8px)', md: 'none' },
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
 

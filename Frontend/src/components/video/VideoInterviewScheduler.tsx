@@ -267,23 +267,23 @@ const VideoInterviewScheduler: React.FC = () => {
         scheduled_at: scheduledDateTime,
         duration_minutes: duration,
       });
-      setSuccess(result);
-      // Redirect to video interviews list on success
-      setTimeout(() => {
-        navigate('/video-interviews');
-      }, 1500);
+
+      if (result.questions_approved === false) {
+        // Interview created but questions need approval
+        setError('Interview scheduled! Please approve the interview questions first, then the interview will be ready.');
+        setTimeout(() => {
+          navigate(`/recruiter-candidates?jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}&interviewId=${result.id}`);
+        }, 2500);
+      } else {
+        setSuccess(result);
+        // Redirect to video interviews list on success
+        setTimeout(() => {
+          navigate('/video-interviews');
+        }, 1500);
+      }
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to schedule interview. Please try again.';
       setError(errorMsg);
-
-      // Check if error is about questions not approved
-      const lowerMsg = errorMsg.toLowerCase();
-      if (lowerMsg.includes('approve') || lowerMsg.includes('question')) {
-        // Redirect to manage candidates page after showing error
-        setTimeout(() => {
-          navigate(`/recruiter-candidates?jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}`);
-        }, 2500);
-      }
     } finally {
       setLoading(false);
     }

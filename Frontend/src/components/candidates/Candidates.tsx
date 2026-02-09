@@ -50,7 +50,6 @@ const Candidates = () => {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCandidate, setMenuCandidate] = useState<Candidate | null>(null)
-  const [, setIsProfileOpen] = useState<boolean>(false)
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false)
   const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
@@ -240,14 +239,6 @@ const Candidates = () => {
 
   const handleCloseMenu = () => {
     setMenuAnchorEl(null)
-  }
-
-  const handleViewProfile = () => {
-    if (menuCandidate) {
-      setIsProfileOpen(true)
-      fetchCandidateInterviews(menuCandidate.id)
-      handleCloseMenu()
-    }
   }
 
   const handleViewDetails = (candidate: Candidate) => {
@@ -1989,14 +1980,14 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             }
           }}
         >
-          <MenuItem onClick={handleViewProfile} sx={{ padding: '12px 20px', fontSize: '14px' }}>
+          <MenuItem onClick={() => { if (menuCandidate) { handleViewDetails(menuCandidate); handleCloseMenu(); } }} sx={{ padding: '12px 20px', fontSize: '14px' }}>
             <i className="fas fa-user" style={{ marginRight: '12px', color: '#64748b' }}></i>
             View Profile
           </MenuItem>
          
 
           
-          <MenuItem onClick={handleCloseMenu} sx={{ padding: '12px 20px', fontSize: '14px' }}>
+          <MenuItem onClick={() => { navigate('/video-scheduler'); }} sx={{ padding: '12px 20px', fontSize: '14px' }}>
             <i className="fas fa-video" style={{ marginRight: '12px', color: '#64748b' }}></i>
             Schedule Interview
           </MenuItem>

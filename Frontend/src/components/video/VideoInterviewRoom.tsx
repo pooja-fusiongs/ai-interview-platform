@@ -291,33 +291,52 @@ const VideoInterviewRoom: React.FC = () => {
     try {
       let stream: MediaStream;
 
-      // Try real microphone first
+      // Try video + audio first (best for anti-cheating evidence)
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('🎤 Real microphone detected, using hardware audio');
-      } catch (micErr: any) {
-        // No mic available — create a silent audio stream using Web Audio API
-        // This allows recording pipeline to work for testing without hardware
-        console.warn('No microphone found, using silent audio stream for recording test');
-        const audioCtx = new AudioContext();
-        const oscillator = audioCtx.createOscillator();
-        oscillator.frequency.value = 0; // Silent
-        const dest = audioCtx.createMediaStreamDestination();
-        oscillator.connect(dest);
-        oscillator.start();
-        stream = dest.stream;
-        toast('No microphone — using silent recording for testing.', { icon: '🔇', duration: 4000 });
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        console.log('🎥🎤 Camera + microphone detected, recording video+audio');
+      } catch (videoErr: any) {
+        // Video failed — try audio only
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log('🎤 Microphone only detected, recording audio');
+          toast('No camera — recording audio only.', { icon: '🎤', duration: 4000 });
+        } catch (micErr: any) {
+          // No mic/camera — create silent audio stream for testing
+          console.warn('No mic/camera found, using silent audio stream for recording test');
+          const audioCtx = new AudioContext();
+          const oscillator = audioCtx.createOscillator();
+          oscillator.frequency.value = 0;
+          const dest = audioCtx.createMediaStreamDestination();
+          oscillator.connect(dest);
+          oscillator.start();
+          stream = dest.stream;
+          toast('No mic/camera — using silent recording for testing.', { icon: '🔇', duration: 4000 });
+        }
       }
 
       recordingStreamRef.current = stream;
       recordedChunksRef.current = [];
 
-      // Pick best available audio format
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'video/webm';
+      // Pick best format based on stream tracks
+      const hasVideo = stream.getVideoTracks().length > 0;
+      let mimeType: string;
+
+      if (hasVideo) {
+        // Video+audio: prefer VP8/VP9 codecs
+        mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+          ? 'video/webm;codecs=vp9,opus'
+          : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+            ? 'video/webm;codecs=vp8,opus'
+            : 'video/webm';
+      } else {
+        // Audio only
+        mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/webm')
+            ? 'audio/webm'
+            : 'video/webm';
+      }
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
@@ -334,12 +353,12 @@ const VideoInterviewRoom: React.FC = () => {
       mediaRecorder.start(1000); // Collect data every second
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
-      toast.success('Recording started!');
-      console.log('🎥 Audio recording started with mimeType:', mimeType);
+      toast.success(hasVideo ? 'Video + Audio recording started!' : 'Audio recording started!');
+      console.log(`🎥 Recording started (${hasVideo ? 'video+audio' : 'audio-only'}) with mimeType:`, mimeType);
     } catch (err: any) {
       console.error('Failed to start recording:', err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        toast.error('Microphone permission denied. Please allow microphone access and try again.');
+        toast.error('Camera/microphone permission denied. Please allow access and try again.');
       } else {
         toast.error('Recording could not start. Please check browser permissions.');
       }
@@ -369,7 +388,7 @@ const VideoInterviewRoom: React.FC = () => {
           return;
         }
 
-        const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'audio/webm' });
+        const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'video/webm' });
         console.log(`🎥 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
 
         // Upload to backend
