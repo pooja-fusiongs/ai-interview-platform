@@ -79,9 +79,14 @@ const VideoInterviewRoom: React.FC = () => {
         if (data.status === 'in_progress') {
           setIsActive(true);
           if (data.started_at) {
-            const startTime = new Date(data.started_at).getTime();
+            const ts = data.started_at;
+            const utcTimestamp = ts.endsWith('Z') || ts.includes('+') || ts.includes('-', ts.indexOf('T'))
+              ? ts
+              : ts + 'Z';
+            const startTime = new Date(utcTimestamp).getTime();
             const now = Date.now();
-            setElapsed(Math.floor((now - startTime) / 1000));
+            const diff = Math.floor((now - startTime) / 1000);
+            setElapsed(diff > 86400 ? 0 : Math.max(0, diff));
           }
         }
       } catch (err: any) {
@@ -110,9 +115,12 @@ const VideoInterviewRoom: React.FC = () => {
           setElapsed((prev) => prev + 1);
         }, 1000);
       }
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     return () => {
-      if (!isActive && intervalRef.current) {
+      if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
@@ -163,7 +171,7 @@ const VideoInterviewRoom: React.FC = () => {
       interfaceConfigOverwrite: {
         TOOLBAR_BUTTONS: [
           'microphone', 'camera', 'desktop', 'fullscreen',
-          'fodeviceselection', 'hangup', 'chat', 'settings',
+          'fodeviceselection', 'chat', 'settings',
           'raisehand', 'videoquality', 'tileview'
         ],
         SHOW_JITSI_WATERMARK: false,
@@ -198,7 +206,8 @@ const VideoInterviewRoom: React.FC = () => {
       });
 
       jitsiApiRef.current.addListener('readyToClose', () => {
-        console.log('Jitsi ready to close');
+        console.log('📴 Jitsi ready to close - triggering cleanup');
+        handleEnd();
       });
 
       console.log('✅ Jitsi Meet initialized with room:', roomName);

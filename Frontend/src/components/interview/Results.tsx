@@ -64,10 +64,12 @@ const Results = () => {
   }
   useEffect(() => {
     loadData()
-  }, [])
+  }, [sessionIdParam])
 
   const loadData = async () => {
     try {
+      setLoading(true)
+      setError('')
       if (sessionIdParam) {
         const session = await interviewService.getResults(Number(sessionIdParam))
         setSelectedSession(session)
@@ -87,10 +89,13 @@ const Results = () => {
   const viewSession = async (id: number) => {
     try {
       setLoading(true)
+      setError('')
       const session = await interviewService.getResults(id)
       setSelectedSession(session)
-    } catch {
-      setError('Failed to load session details.')
+    } catch (err: any) {
+      console.error('Error loading session details:', err)
+      const msg = err.response?.data?.detail || err.message || 'Failed to load session details.'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -332,7 +337,10 @@ const Results = () => {
                     {/* Answer text */}
                     <Box sx={{ padding: '10px 14px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #f1f5f9', mb: '10px' }}>
                       <Typography sx={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                        {answer.answer_text && !answer.answer_text.toLowerCase().includes('not found')
+                        {answer.answer_text
+                          && !answer.answer_text.toLowerCase().includes('not found')
+                          && !answer.answer_text.includes('[Extracted from Transcript]')
+                          && !answer.answer_text.startsWith('[')
                           ? answer.answer_text
                           : (
                             <Box component="span" sx={{ color: '#94a3b8', fontStyle: 'italic' }}>
@@ -441,34 +449,25 @@ const Results = () => {
       flexDirection: 'column',
       height: { xs: 'auto', md: 'calc(100vh - 120px)' },
       minHeight: { xs: 'auto', md: '600px' },
-      overflow: "hidden"
+      overflow: { xs: 'visible', md: 'hidden' }
     }}>
-      <Card sx={{
-        borderRadius: { xs: '12px', md: '16px' },
-        border: '1px solid #e2e8f0',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-        flex: 1,
+      {/* Header + Search row */}
+      <Box sx={{
         display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0
+        flexDirection: { xs: 'column', sm: 'row' },
+        alignItems: { xs: 'stretch', sm: 'center' },
+        justifyContent: 'space-between',
+        gap: 2,
+        mb: 2
       }}>
-        <Box sx={{ padding: { xs: '12px 16px', md: '16px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fas fa-chart-bar" style={{ color: '#f59e0b', fontSize: 14 }}></i>
-            <Typography sx={{ fontSize: { xs: '14px', md: '16px' }, fontWeight: 600, color: '#1e293b' }}>Interviews Result</Typography>
-          </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <i className="fas fa-chart-bar" style={{ color: '#f59e0b', fontSize: 16 }}></i>
+          <Typography sx={{ fontSize: { xs: '16px', md: '20px' }, fontWeight: 700, color: '#1e293b' }}>Interviews Result</Typography>
+          <Typography sx={{ fontSize: '13px', color: '#64748b', ml: 1 }}>
+            {filteredSessions.length} result{filteredSessions.length !== 1 ? 's' : ''}
+          </Typography>
         </Box>
-
-        {/* Search and Filter */}
-        <Box sx={{
-          padding: { xs: '12px 16px', md: '16px 24px' },
-          borderBottom: '1px solid #f1f5f9',
-          display: 'flex',
-          gap: 2,
-          flexDirection: { xs: 'column', sm: 'row' },
-          alignItems: { xs: 'stretch', sm: 'center' }
-        }}>
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' } }}>
           <TextField
             placeholder="Search by name or job title..."
             variant="outlined"
@@ -483,8 +482,7 @@ const Results = () => {
               ),
             }}
             sx={{
-              flex: 1,
-              minWidth: { xs: '100%', sm: 250 },
+              minWidth: { xs: '100%', sm: 280 },
               '& .MuiOutlinedInput-root': {
                 backgroundColor: '#fff',
                 borderRadius: '8px',
@@ -513,17 +511,27 @@ const Results = () => {
               <MenuItem value="reject">Rejected</MenuItem>
             </Select>
           </FormControl>
-          <Typography sx={{ fontSize: '13px', color: '#64748b', alignSelf: 'center' }}>
-            {filteredSessions.length} result{filteredSessions.length !== 1 ? 's' : ''}
-          </Typography>
         </Box>
+      </Box>
 
+      <Card sx={{
+        borderRadius: { xs: '12px', md: '16px' },
+        border: '1px solid #e2e8f0',
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        maxWidth: '100%'
+      }}>
         <CardContent sx={{
-          padding: { xs: '12px 16px', md: '16px 24px' },
+          padding: { xs: '12px 12px', md: '16px 24px' },
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 0
+          minHeight: 0,
+          overflow: 'hidden'
         }}>
           {error && (
             <Box sx={{ padding: '12px 16px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '13px', mb: '16px' }}>
@@ -580,11 +588,11 @@ const Results = () => {
                     onClick={() => viewSession(s.id)}
                     sx={{
                       display: 'flex',
-                      flexDirection: { xs: 'column', sm: 'row' },
-                      alignItems: { xs: 'flex-start', sm: 'center' },
+                      flexDirection: 'row',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: { xs: '12px 0', md: '16px 0' },
-                      gap: { xs: '10px', sm: 0 },
+                      padding: { xs: '10px 0', md: '16px 0' },
+                      gap: { xs: '8px', sm: '12px' },
                       borderBottom: '1px solid #f1f5f9',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
@@ -593,7 +601,7 @@ const Results = () => {
                     }}
                   >
                     {/* Left */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' }, flex: 1, minWidth: 0, width: '100%' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', md: '14px' }, flex: 1, minWidth: 0, overflow: 'hidden' }}>
                       <Avatar sx={{ width: { xs: 36, md: 42 }, height: { xs: 36, md: 42 }, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: { xs: '13px', md: '15px' } }}>
                         <i className="fas fa-user"></i>
                       </Avatar>
@@ -613,7 +621,7 @@ const Results = () => {
                     </Box>
 
                     {/* Right: score + rec */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', md: '12px' }, flexShrink: 0, width: { xs: '100%', sm: 'auto' }, justifyContent: { xs: 'flex-end', sm: 'flex-start' }, pl: { xs: '46px', sm: 0 } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '6px', md: '12px' }, flexShrink: 0, width: { xs: 'auto', sm: 'auto' }, justifyContent: 'flex-end', alignSelf: { xs: 'flex-end', sm: 'center' } }}>
                       {s.overall_score != null && (
                         <Box sx={{ width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 }, borderRadius: '12px', background: sc.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                           <Typography sx={{ fontSize: { xs: '14px', md: '16px' }, fontWeight: 800, color: sc.text, lineHeight: 1 }}>
@@ -673,12 +681,12 @@ const Results = () => {
 
   // ─── Main Render ─────────────────────────────────────────────────────────────
   return (
-    <Navigation noScroll={!selectedSession}>
+    <Navigation>
       <Box sx={{
         padding: { xs: '12px', sm: '16px', md: '24px' },
         background: '#f8fafc',
         minHeight: selectedSession ? 'auto' : '900px',
-        overflow: 'hidden',
+        overflow: { xs: 'visible', md: 'hidden' },
       }}>
         {selectedSession ? renderDetail() : renderList()}
       </Box>

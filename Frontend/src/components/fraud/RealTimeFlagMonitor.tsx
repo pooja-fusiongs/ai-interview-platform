@@ -655,9 +655,16 @@ const RealTimeFlagMonitor: React.FC = () => {
                 <Table>
                   <TableHead>
                     <TableRow sx={{ backgroundColor: '#f8fafc' }}>
-                      {['Time', 'Candidate', 'Flag Type', 'Severity', 'Metric', 'Value / Threshold'].map((header) => (
+                      {[
+                        { label: 'Time', hide: false },
+                        { label: 'Candidate', hide: '' },
+                        { label: 'Flag Type', hide: '' },
+                        { label: 'Severity', hide: '' },
+                        { label: 'Metric', hide: 'md' },
+                        { label: 'Value / Threshold', hide: 'md' },
+                      ].map((header: { label: string; hide: string }) => (
                         <TableCell
-                          key={header}
+                          key={header.label}
                           sx={{
                             fontWeight: 600,
                             color: '#475569',
@@ -665,10 +672,11 @@ const RealTimeFlagMonitor: React.FC = () => {
                             textTransform: 'uppercase',
                             letterSpacing: '0.5px',
                             borderBottom: '2px solid #e5e7eb',
-                            padding: '14px 16px',
+                            padding: { xs: '10px 8px', md: '14px 16px' },
+                            ...(header.hide && { display: { xs: 'none', [header.hide]: 'table-cell' } }),
                           }}
                         >
-                          {header}
+                          {header.label}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -688,40 +696,41 @@ const RealTimeFlagMonitor: React.FC = () => {
                                 '&:hover': { backgroundColor: '#f1f5f9' },
                               }}
                             >
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: '14px 16px' }}>
-                                <Typography sx={{ fontSize: '13px', color: '#1e293b', fontWeight: 500 }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: { xs: '10px 8px', md: '14px 16px' } }}>
+                                <Typography sx={{ fontSize: { xs: '12px', md: '13px' }, color: '#1e293b', fontWeight: 500 }}>
                                   {new Date(flag.timestamp).toLocaleTimeString()}
                                 </Typography>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: { xs: '10px 8px', md: '16px' } }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '4px', md: '8px' } }}>
                                   <Box
                                     sx={{
-                                      width: 28,
-                                      height: 28,
+                                      width: { xs: 22, md: 28 },
+                                      height: { xs: 22, md: 28 },
                                       borderRadius: '6px',
                                       backgroundColor: '#f1f5f9',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      fontSize: '12px',
+                                      fontSize: { xs: '10px', md: '12px' },
                                       fontWeight: 600,
                                       color: '#64748b',
+                                      flexShrink: 0,
                                     }}
                                   >
                                     {flag.candidateName[0]}
                                   </Box>
-                                  <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>
+                                  <Typography sx={{ fontSize: { xs: '12px', md: '13px' }, fontWeight: 500, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { xs: '80px', sm: '120px', md: 'none' } }}>
                                     {flag.candidateName}
                                   </Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <Typography sx={{ fontSize: '13px', color: '#475569', textTransform: 'capitalize' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: { xs: '10px 8px', md: '16px' } }}>
+                                <Typography sx={{ fontSize: { xs: '12px', md: '13px' }, color: '#475569', textTransform: 'capitalize' }}>
                                   {flag.type.replace(/_/g, ' ')}
                                 </Typography>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: { xs: '10px 8px', md: '16px' } }}>
                                 <Chip
                                   label={severity.label}
                                   size="small"
@@ -735,12 +744,12 @@ const RealTimeFlagMonitor: React.FC = () => {
                                   }}
                                 />
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', display: { xs: 'none', md: 'table-cell' } }}>
                                 <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
                                   {flag.metric.replace(/_/g, ' ')}
                                 </Typography>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', display: { xs: 'none', md: 'table-cell' } }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                   <Typography sx={{ fontSize: '13px', fontWeight: 600, color: severity.color }}>
                                     {flag.value}

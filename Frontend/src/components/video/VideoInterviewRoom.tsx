@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   Videocam, ArrowBack, AccessTime,
-  Description, Security, 
+  Description, Security, CallEnd,
   Check, SmartToy, Person, Link as LinkIcon, ContentCopy
 } from '@mui/icons-material';
 import Navigation from '../layout/sidebar';
@@ -32,10 +32,12 @@ const VideoInterviewRoom: React.FC = () => {
   const [elapsed, setElapsed] = useState(0);
   const [dailyLoaded, setDailyLoaded] = useState(false);
   const [callJoined, setCallJoined] = useState(false);
+  const [ending, setEnding] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dailyContainerRef = useRef<HTMLDivElement>(null);
   const dailyCallRef = useRef<any>(null);
+  const endingRef = useRef(false);
 
   // Load Daily.co script
   useEffect(() => {
@@ -67,9 +69,17 @@ const VideoInterviewRoom: React.FC = () => {
         if (data.status === 'in_progress') {
           setIsActive(true);
           if (data.started_at) {
-            const startTime = new Date(data.started_at).getTime();
+            // Ensure timestamp is parsed as UTC (append 'Z' if no timezone info)
+            const ts = data.started_at;
+            const utcTimestamp = ts.endsWith('Z') || ts.includes('+') || ts.includes('-', ts.indexOf('T'))
+              ? ts
+              : ts + 'Z';
+            const startTime = new Date(utcTimestamp).getTime();
             const now = Date.now();
-            setElapsed(Math.floor((now - startTime) / 1000));
+            const diff = Math.floor((now - startTime) / 1000);
+            // If elapsed time is unreasonably large (>24 hours), reset to 0
+            // This handles cases where interview was left in_progress from a previous session
+            setElapsed(diff > 86400 ? 0 : Math.max(0, diff));
           }
         }
       } catch (err: any) {
@@ -82,12 +92,7 @@ const VideoInterviewRoom: React.FC = () => {
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      // Leave Daily call when component unmounts
-      if (dailyCallRef.current) {
-        dailyCallRef.current.leave();
-        dailyCallRef.current.destroy();
-        dailyCallRef.current = null;
-      }
+      cleanupVideoCall();
     };
   }, [videoId]);
 
@@ -99,9 +104,12 @@ const VideoInterviewRoom: React.FC = () => {
           setElapsed((prev) => prev + 1);
         }, 1000);
       }
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     return () => {
-      if (!isActive && intervalRef.current) {
+      if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
@@ -159,6 +167,11 @@ const VideoInterviewRoom: React.FC = () => {
 
       dailyCallRef.current.on('participant-left', (event: any) => {
         console.log('👤 Participant left:', event.participant);
+      });
+
+      dailyCallRef.current.on('left-meeting', () => {
+        console.log('📴 Left Daily.co meeting');
+        handleEnd();
       });
 
       dailyCallRef.current.on('error', (error: any) => {
@@ -227,7 +240,48 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
-  
+  const cleanupVideoCall = () => {
+    // Destroy Daily.co SDK instance
+    if (dailyCallRef.current) {
+      try { dailyCallRef.current.leave(); } catch (e) { /* ignore */ }
+      try { dailyCallRef.current.destroy(); } catch (e) { /* ignore */ }
+      dailyCallRef.current = null;
+    }
+    // Manually remove any lingering iframes from the container
+    if (dailyContainerRef.current) {
+      dailyContainerRef.current.innerHTML = '';
+    }
+    // Remove any orphaned Daily.co iframes that may have been appended to body
+    document.querySelectorAll('iframe[allow*="camera"], iframe[src*="daily"], iframe[src*="jit.si"]').forEach(el => {
+      el.remove();
+    });
+  };
+
+  const handleEnd = async () => {
+    // Use ref to prevent double execution (React state isn't immediate)
+    if (endingRef.current) return;
+    endingRef.current = true;
+    try {
+      setEnding(true);
+
+      // Clean up all video call elements
+      cleanupVideoCall();
+
+      // Stop timer
+      setIsActive(false);
+      setCallJoined(false);
+
+      // Tell backend the interview is completed
+      const result = await videoInterviewService.endInterview(Number(videoId));
+      setInterview(result);
+      toast.success('Interview completed!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to end interview');
+    } finally {
+      setEnding(false);
+      endingRef.current = false;
+    }
+  };
 
   const handleCopyMeetingLink = async () => {
     const meetingUrl = interview?.zoom_meeting_url;
@@ -470,29 +524,48 @@ const VideoInterviewRoom: React.FC = () => {
               )}
             </Paper>
 
-            {/* Control Bar - Only show Start button before meeting, hide controls after (Jitsi has its own) */}
-            {!isActive && !isCompleted && (
+            {/* Control Bar */}
+            {!isCompleted && (
               <Paper sx={{
                 background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '12px 16px', sm: '16px 24px' },
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 1, sm: 2 },
                 boxShadow: '0 4px 20px rgba(0,0,0,0.08)', flexWrap: 'wrap'
               }}>
-                <Button
-                  variant="contained"
-                  startIcon={<Videocam />}
-                  onClick={handleStart}
-                  disabled={!dailyLoaded}
-                  sx={{
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
-                    fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
-                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
-                    '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
-                    '&:disabled': { background: '#94a3b8' }
-                  }}
-                >
-                  {dailyLoaded ? 'Start Meeting' : 'Loading...'}
-                </Button>
+                {!isActive ? (
+                  <Button
+                    variant="contained"
+                    startIcon={<Videocam />}
+                    onClick={handleStart}
+                    disabled={!dailyLoaded}
+                    sx={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
+                      fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+                      '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
+                      '&:disabled': { background: '#94a3b8' }
+                    }}
+                  >
+                    {dailyLoaded ? 'Start Meeting' : 'Loading...'}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    startIcon={<CallEnd />}
+                    onClick={handleEnd}
+                    disabled={ending}
+                    sx={{
+                      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                      padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
+                      fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
+                      boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
+                      '&:hover': { background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' },
+                      '&:disabled': { background: '#94a3b8' }
+                    }}
+                  >
+                    {ending ? 'Ending...' : 'End Meeting'}
+                  </Button>
+                )}
               </Paper>
             )}
           </Box>

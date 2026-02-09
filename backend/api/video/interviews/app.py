@@ -10,7 +10,7 @@ fraud analysis records.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 
 import sys
 import os
@@ -538,7 +538,7 @@ def start_video_interview(
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     vi.status = VideoInterviewStatus.IN_PROGRESS
-    vi.started_at = datetime.utcnow()
+    vi.started_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(vi)
     return _build_response(vi, db)
@@ -565,7 +565,7 @@ def end_video_interview(
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     vi.status = VideoInterviewStatus.COMPLETED
-    vi.ended_at = datetime.utcnow()
+    vi.ended_at = datetime.now(timezone.utc)
 
     # Generate transcript automatically
     try:
@@ -649,7 +649,7 @@ def end_video_interview(
             actual_questions=actual_questions if actual_questions else None
         )
         vi.transcript = transcript
-        vi.transcript_generated_at = datetime.utcnow()
+        vi.transcript_generated_at = datetime.now(timezone.utc)
         print(f"Transcript generated for video interview {video_id}")
     except Exception as e:
         print(f"Failed to generate transcript: {e}")
@@ -755,7 +755,7 @@ def get_video_transcript(
                 actual_questions=actual_questions if actual_questions else None
             )
             vi.transcript = transcript
-            vi.transcript_generated_at = datetime.utcnow()
+            vi.transcript_generated_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(vi)
         except Exception as e:
@@ -806,7 +806,7 @@ def create_demo_video_interview(
         db.refresh(job)
 
     # Create demo video interview
-    scheduled_time = datetime.utcnow() + timedelta(minutes=5)
+    scheduled_time = datetime.now(timezone.utc) + timedelta(minutes=5)
 
     vi = VideoInterview(
         job_id=job.id,
@@ -959,9 +959,9 @@ def submit_ai_interview_answers(
 
     # Save transcript to video interview
     vi.transcript = transcript_text
-    vi.transcript_generated_at = datetime.utcnow()
+    vi.transcript_generated_at = datetime.now(timezone.utc)
     vi.status = VideoInterviewStatus.COMPLETED
-    vi.ended_at = datetime.utcnow()
+    vi.ended_at = datetime.now(timezone.utc)
 
     # Prepare questions for scoring
     questions_for_scoring = [
@@ -998,19 +998,21 @@ def submit_ai_interview_answers(
                 candidate_id=vi.candidate_id,
                 application_id=candidate_id_for_questions,
                 status=InterviewSessionStatus.SCORED,
-                interview_mode="ai_interview"
+                interview_mode="ai_interview",
+                started_at=datetime.now(timezone.utc)
             )
             db.add(session)
             db.flush()
 
         session.transcript_text = transcript_text
-        session.overall_score = float(llm_result.get("overall_score", 0))
+        raw_score = float(llm_result.get("overall_score", 0))
+        session.overall_score = raw_score / 10.0 if raw_score > 10 else raw_score
         rec_str = llm_result.get("recommendation", "reject")
         session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
         session.strengths = llm_result.get("strengths", "")
         session.weaknesses = llm_result.get("weaknesses", "")
         session.status = InterviewSessionStatus.SCORED
-        session.completed_at = datetime.utcnow()
+        session.completed_at = datetime.now(timezone.utc)
 
         # Save individual answers with scores
         for answer in answers:
@@ -1062,6 +1064,7 @@ def upload_transcript_and_score(
     """Upload transcript text and generate score using AI."""
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus
     from services.gemini_service import score_transcript_with_gemini
+ 
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -1073,7 +1076,7 @@ def upload_transcript_and_score(
 
     # Save the transcript
     vi.transcript = transcript_text
-    vi.transcript_generated_at = datetime.utcnow()
+    vi.transcript_generated_at = datetime.now(timezone.utc)
 
     # Find JobApplication for this candidate - try multiple methods
     application = None
@@ -1205,32 +1208,44 @@ def upload_transcript_and_score(
                 print(f"❌ {scoring_error}")
                 llm_result = None
 
-        if llm_result:
-            # Create or update interview session for storing scores
+        # Always create or find the interview session (even if scoring fails)
+        session = db.query(InterviewSession).filter(
+            InterviewSession.job_id == vi.job_id,
+            InterviewSession.application_id == candidate_id_for_questions
+        ).first()
+
+        # Fallback: try with candidate_id directly
+        if not session:
             session = db.query(InterviewSession).filter(
                 InterviewSession.job_id == vi.job_id,
-                InterviewSession.application_id == candidate_id_for_questions
+                InterviewSession.candidate_id == vi.candidate_id,
+                InterviewSession.interview_mode == "video_interview"
             ).first()
 
-            if not session:
-                session = InterviewSession(
-                    job_id=vi.job_id,
-                    candidate_id=vi.candidate_id,
-                    application_id=candidate_id_for_questions,
-                    status=InterviewSessionStatus.SCORED,
-                    interview_mode="video_interview"
-                )
-                db.add(session)
-                db.flush()
+        if not session:
+            session = InterviewSession(
+                job_id=vi.job_id,
+                candidate_id=vi.candidate_id,
+                application_id=candidate_id_for_questions,
+                status=InterviewSessionStatus.IN_PROGRESS,
+                interview_mode="video_interview",
+                started_at=datetime.now(timezone.utc)
+            )
+            db.add(session)
+            db.flush()
 
-            session.transcript_text = transcript_text
-            session.overall_score = float(llm_result.get("overall_score", 0))
+        session.transcript_text = transcript_text
+
+        if llm_result:
+            raw_score = float(llm_result.get("overall_score", 0))
+            # Cap to 0-10 range (Gemini sometimes returns 0-100 scale)
+            session.overall_score = raw_score / 10.0 if raw_score > 10 else raw_score
             rec_str = llm_result.get("recommendation", "reject")
             session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
             session.strengths = llm_result.get("strengths", "")
             session.weaknesses = llm_result.get("weaknesses", "")
             session.status = InterviewSessionStatus.SCORED
-            session.completed_at = datetime.utcnow()
+            session.completed_at = datetime.now(timezone.utc)
 
             # Build score_result with session ID for frontend navigation
             score_result = {
@@ -1243,9 +1258,24 @@ def upload_transcript_and_score(
             }
 
             # Save per-question answers with extracted answers from transcript
+            # Build a map of question IDs from the approved questions for validation
+            valid_question_ids = {q.id for q in approved_questions}
+
             for pq in llm_result.get("per_question", []):
                 q_id = pq.get("question_id")
                 if not q_id:
+                    continue
+
+                # Ensure question_id is int (Gemini may return string)
+                try:
+                    q_id = int(q_id)
+                except (ValueError, TypeError):
+                    print(f"⚠️ Invalid question_id from Gemini: {q_id}, skipping")
+                    continue
+
+                # Validate question_id exists in our approved questions
+                if q_id not in valid_question_ids:
+                    print(f"⚠️ question_id {q_id} not in approved questions, skipping")
                     continue
 
                 # Find or create answer record
@@ -1260,14 +1290,32 @@ def upload_transcript_and_score(
                     answer = InterviewAnswer(session_id=session.id, question_id=q_id)
                     db.add(answer)
 
-                # Save extracted answer from transcript (unique per question)
-                answer.answer_text = pq.get("extracted_answer", "")
-                answer.score = float(pq.get("score", 0))
-                answer.relevance_score = float(pq.get("relevance_score", 0))
-                answer.completeness_score = float(pq.get("completeness_score", 0))
-                answer.accuracy_score = float(pq.get("accuracy_score", 0))
-                answer.clarity_score = float(pq.get("clarity_score", 0))
+                # Save extracted answer from transcript
+                extracted = pq.get("extracted_answer", "")
+                # Don't save placeholder texts - keep the actual extracted answer
+                if extracted and extracted not in ("[Extracted from Transcript]", "No answer found in transcript", ""):
+                    answer.answer_text = extracted
+                elif existing_answer and existing_answer.answer_text and existing_answer.answer_text not in ("[Extracted from Transcript]", ""):
+                    pass  # Keep existing non-placeholder answer
+                else:
+                    answer.answer_text = extracted or "Answer not extracted from transcript"
+
+                # Cap scores to 0-10 range (Gemini sometimes returns 0-100)
+                def cap_score(val, max_val=10.0):
+                    s = float(val or 0)
+                    return s / 10.0 if s > max_val else s
+
+                answer.score = cap_score(pq.get("score", 0))
+                answer.relevance_score = cap_score(pq.get("relevance_score", 0))
+                answer.completeness_score = cap_score(pq.get("completeness_score", 0))
+                answer.accuracy_score = cap_score(pq.get("accuracy_score", 0))
+                answer.clarity_score = cap_score(pq.get("clarity_score", 0))
                 answer.feedback = pq.get("feedback", "")
+        else:
+            # Scoring failed but still save session with transcript
+            score_result = {
+                "interview_session_id": session.id
+            }
 
     db.commit()
     db.refresh(vi)

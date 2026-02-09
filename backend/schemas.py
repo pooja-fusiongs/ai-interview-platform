@@ -339,7 +339,7 @@ class InterviewAnswerResponse(BaseModel):
     feedback: Optional[str] = None
     question_text: Optional[str] = None
     sample_answer: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -353,7 +353,7 @@ class InterviewSessionResponse(BaseModel):
     recommendation: Optional[str] = None
     strengths: Optional[str] = None
     weaknesses: Optional[str] = None
-    started_at: datetime
+    started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     job_title: Optional[str] = None
     candidate_name: Optional[str] = None
@@ -369,7 +369,7 @@ class InterviewSessionListResponse(BaseModel):
     status: str
     overall_score: Optional[float] = None
     recommendation: Optional[str] = None
-    started_at: datetime
+    started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     job_title: Optional[str] = None
     candidate_name: Optional[str] = None
@@ -589,6 +589,7 @@ class VideoInterviewResponse(BaseModel):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     recording_consent: bool = False
+    recording_url: Optional[str] = None
     candidate_name: Optional[str] = None
     interviewer_name: Optional[str] = None
     job_title: Optional[str] = None

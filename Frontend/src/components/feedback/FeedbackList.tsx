@@ -261,7 +261,7 @@ const FeedbackList: React.FC = () => {
         }}
       >
         {/* Page Header */}
-        <Box sx={{ mb: { xs: '16px', md: '24px' }, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'stretch', md: 'flex-start' }, justifyContent: 'space-between', gap: { xs: '12px', md: 0 } }}>
+        <Box sx={{ mb: { xs: '16px', md: '24px' }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', gap: { xs: '12px', sm: 0 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' } }}>
             <Box
               sx={{

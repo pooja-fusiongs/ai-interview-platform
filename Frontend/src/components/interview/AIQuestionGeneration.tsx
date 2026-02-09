@@ -27,8 +27,6 @@ import {
 import {
   Search as SearchIcon,
   FilterList as FilterIcon,
-  ThumbUp as ThumbUpIcon,
-  ThumbDown as ThumbDownIcon,
   Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
@@ -62,7 +60,7 @@ interface QuestionSet {
 const ExpertReview: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,73 +147,7 @@ const ExpertReview: React.FC = () => {
     navigate(`/interview-outline/${questionSet.id}`);
   };
 
-  const handleApproveSet = async (setId: string) => {
-    try {
-      // Find the question set
-      const questionSet = questionSets.find(set => set.id === setId);
-      if (!questionSet) return;
-      
-      // Approve all questions in the set
-      const questions = await questionGenerationService.getCandidateQuestions(
-        questionSet.job_id, 
-        questionSet.application_id
-      );
-      
-      // Update each question to approved
-      for (const question of questions) {
-        await questionGenerationService.expertReviewQuestion({
-          question_id: question.id,
-          is_approved: true,
-          expert_notes: 'Approved by expert review'
-        });
-      }
-      
-      // Update local state
-      setQuestionSets(prev => 
-        prev.map(set => 
-          set.id === setId ? { ...set, status: 'approved' } : set
-        )
-      );
-      toast.success('Question set approved successfully!');
-    } catch (error) {
-      console.error('Error approving question set:', error);
-      toast.error('Failed to approve question set');
-    }
-  };
-
-  const handleRejectSet = async (setId: string) => {
-    try {
-      // Find the question set
-      const questionSet = questionSets.find(set => set.id === setId);
-      if (!questionSet) return;
-      
-      // Reject all questions in the set
-      const questions = await questionGenerationService.getCandidateQuestions(
-        questionSet.job_id, 
-        questionSet.application_id
-      );
-      
-      // Update each question to rejected
-      for (const question of questions) {
-        await questionGenerationService.expertReviewQuestion({
-          question_id: question.id,
-          is_approved: false,
-          expert_notes: 'Rejected by expert review'
-        });
-      }
-      
-      // Update local state
-      setQuestionSets(prev => 
-        prev.map(set => 
-          set.id === setId ? { ...set, status: 'rejected' } : set
-        )
-      );
-      toast.success('Question set rejected');
-    } catch (error) {
-      console.error('Error rejecting question set:', error);
-      toast.error('Failed to reject question set');
-    }
-  };
+ 
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -491,32 +423,6 @@ const ExpertReview: React.FC = () => {
                     >
                       {questionSet.status === 'pending' ? 'Review' : 'View'}
                     </Button>
-                    {questionSet.status === 'pending' && (
-                      <>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleApproveSet(questionSet.id)}
-                          sx={{
-                            color: '#4caf50',
-                            border: '1px solid #4caf5040',
-                            '&:hover': { background: '#4caf5010' }
-                          }}
-                        >
-                          <ThumbUpIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRejectSet(questionSet.id)}
-                          sx={{
-                            color: '#f44336',
-                            border: '1px solid #f4433640',
-                            '&:hover': { background: '#f4433610' }
-                          }}
-                        >
-                          <ThumbDownIcon fontSize="small" />
-                        </IconButton>
-                      </>
-                    )}
                   </Box>
                 </CardContent>
               </Card>
@@ -578,6 +484,7 @@ const ExpertReview: React.FC = () => {
                         fontSize: '0.875rem',
                         cursor: 'pointer',
                         userSelect: 'none',
+                        display: { xs: 'none', lg: 'table-cell' },
                         backgroundColor: sortField === 'candidate_email' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
                         transition: 'all 0.2s ease',
                         '&:hover': {
@@ -592,7 +499,7 @@ const ExpertReview: React.FC = () => {
                         {renderSortIcon('candidate_email')}
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Location</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem', display: { xs: 'none', lg: 'table-cell' } }}>Location</TableCell>
                     <TableCell
                       sx={{
                         fontWeight: 600,
@@ -643,12 +550,12 @@ const ExpertReview: React.FC = () => {
                           </Box>
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
                         <Typography variant="body2" sx={{ color: '#666' }}>
                           {questionSet.candidate_email || 'No email provided'}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <Box sx={{ width: 4, height: 4, backgroundColor: '#4caf50', borderRadius: '50%' }} />
                           <Typography variant="body2" sx={{ color: '#666' }}>
@@ -681,34 +588,7 @@ const ExpertReview: React.FC = () => {
                           >
                             <VisibilityIcon fontSize="small" />
                           </IconButton>
-                          {questionSet.status === 'pending' && (
-                            <>
-                              <IconButton
-                                size="small"
-                                sx={{
-                                  color: '#4caf50',
-                                  border: '1px solid #4caf5040',
-                                  '&:hover': { background: '#4caf5010' }
-                                }}
-                                onClick={() => handleApproveSet(questionSet.id)}
-                                title="Approve All"
-                              >
-                                <ThumbUpIcon fontSize="small" />
-                              </IconButton>
-                              <IconButton
-                                size="small"
-                                sx={{
-                                  color: '#f44336',
-                                  border: '1px solid #f4433640',
-                                  '&:hover': { background: '#f4433610' }
-                                }}
-                                onClick={() => handleRejectSet(questionSet.id)}
-                                title="Reject All"
-                              >
-                                <ThumbDownIcon fontSize="small" />
-                              </IconButton>
-                            </>
-                          )}
+                         
                         </Box>
                       </TableCell>
                     </TableRow>

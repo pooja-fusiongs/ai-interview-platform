@@ -255,7 +255,7 @@ const Candidates = () => {
       toast.loading('Generating questions...')
       await apiClient.post(`/api/candidates/${menuCandidate.id}/generate-questions`, {
         job_id: jobId,
-        total_questions: 5 // Default
+        total_questions: 10 // Default
       })
       toast.dismiss()
       toast.success('Questions generated successfully! Added to candidate object.')

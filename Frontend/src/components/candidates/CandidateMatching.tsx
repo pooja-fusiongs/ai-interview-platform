@@ -698,7 +698,7 @@ const CandidateMatching = () => {
 
   return (
     <Navigation noScroll={true}>
-      <Box sx={{ padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '24px' }, background: '#f8fafc', minHeight: '100vh' }}>
 
         {/* Search and Filter Section */}
         <Box sx={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: "space-between" }}>
@@ -801,9 +801,10 @@ const CandidateMatching = () => {
         <Card sx={{
           borderRadius: '12px',
           border: '1px solid #e2e8f0',
-          height: 'calc(100vh - 266px)', // Fixed height
-          minHeight: '677px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          height: { xs: 'auto', md: 'calc(100vh - 266px)' },
+          minHeight: { xs: 'auto', md: '677px' },
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          overflow: 'auto'
         }}>
           <TableContainer>
             <Table>
@@ -813,9 +814,10 @@ const CandidateMatching = () => {
                     sx={{
                       fontWeight: 700,
                       color: sortField === 'matchScore' ? '#f59e0b' : '#374151',
-                      fontSize: '14px',
+                      fontSize: { xs: '12px', sm: '14px' },
                       cursor: 'pointer',
                       userSelect: 'none',
+                      padding: { xs: '10px 8px', sm: '16px' },
                       backgroundColor: sortField === 'matchScore' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
@@ -834,9 +836,10 @@ const CandidateMatching = () => {
                     sx={{
                       fontWeight: 700,
                       color: sortField === 'name' ? '#f59e0b' : '#374151',
-                      fontSize: '14px',
+                      fontSize: { xs: '12px', sm: '14px' },
                       cursor: 'pointer',
                       userSelect: 'none',
+                      padding: { xs: '10px 8px', sm: '16px' },
                       backgroundColor: sortField === 'name' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
@@ -858,6 +861,7 @@ const CandidateMatching = () => {
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
+                      display: { xs: 'none', md: 'table-cell' },
                       backgroundColor: sortField === 'email' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
@@ -879,6 +883,7 @@ const CandidateMatching = () => {
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
+                      display: { xs: 'none', md: 'table-cell' },
                       backgroundColor: sortField === 'location' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
@@ -900,6 +905,7 @@ const CandidateMatching = () => {
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
+                      display: { xs: 'none', sm: 'table-cell' },
                       backgroundColor: sortField === 'category' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
@@ -918,9 +924,10 @@ const CandidateMatching = () => {
                     sx={{
                       fontWeight: 700,
                       color: sortField === 'status' ? '#f59e0b' : '#374151',
-                      fontSize: '14px',
+                      fontSize: { xs: '12px', sm: '14px' },
                       cursor: 'pointer',
                       userSelect: 'none',
+                      padding: { xs: '10px 8px', sm: '16px' },
                       backgroundColor: sortField === 'status' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
@@ -935,7 +942,7 @@ const CandidateMatching = () => {
                       {renderSortIcon('status')}
                     </Box>
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: '#374151', fontSize: '14px' }}>
+                  <TableCell sx={{ fontWeight: 700, color: '#374151', fontSize: '14px', display: { xs: 'none', sm: 'table-cell' } }}>
                     Actions
                   </TableCell>
                 </TableRow>
@@ -990,9 +997,9 @@ const CandidateMatching = () => {
                         transition: 'background-color 0.2s ease'
                       }}
                     >
-                      <TableCell>
+                      <TableCell sx={{ padding: { xs: '10px 8px', sm: '16px' } }}>
                         <ClickAwayListener onClickAway={handleMatchScoreLeave}>
-                          <Box>
+                          <Box sx={{ transform: { xs: 'scale(0.75)', sm: 'scale(1)' }, transformOrigin: 'center left' }}>
                             <Tooltip
                               title={matchScoreTooltip.candidate ? <MatchScoreTooltip candidate={matchScoreTooltip.candidate} /> : ""}
                               open={matchScoreTooltip.open && matchScoreTooltip.candidate?.id === candidate.id}
@@ -1022,29 +1029,37 @@ const CandidateMatching = () => {
                           </Box>
                         </ClickAwayListener>
                       </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <Avatar sx={{ width: 40, height: 40 }}>
+                      <TableCell sx={{ padding: { xs: '10px 8px', sm: '16px' } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '6px', sm: '12px' } }}>
+                          <Avatar sx={{ width: { xs: 30, sm: 40 }, height: { xs: 30, sm: 40 }, fontSize: { xs: '13px', sm: '16px' } }}>
                             {candidate.name.charAt(0)}
                           </Avatar>
-                          <Box>
+                          <Box sx={{ minWidth: 0 }}>
                             <Typography sx={{
                               fontWeight: 600,
                               color: '#1e293b',
-                              fontSize: '14px'
+                              fontSize: { xs: '12px', sm: '14px' },
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: { xs: '80px', sm: 'none' }
                             }}>
                               {candidate.name}
                             </Typography>
                             <Typography sx={{
                               color: '#64748b',
-                              fontSize: '12px'
+                              fontSize: { xs: '10px', sm: '12px' },
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: { xs: '80px', sm: 'none' }
                             }}>
                               {candidate.jobTitle}
                             </Typography>
                           </Box>
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                         <Typography sx={{
                           color: '#64748b',
                           fontSize: '14px'
@@ -1052,7 +1067,7 @@ const CandidateMatching = () => {
                           {candidate.email}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <i className="fas fa-map-marker-alt" style={{
                             color: '#64748b',
@@ -1066,7 +1081,7 @@ const CandidateMatching = () => {
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                         <Chip
                           label={candidate.category}
                           size="small"
@@ -1078,7 +1093,7 @@ const CandidateMatching = () => {
                           }}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ padding: { xs: '10px 8px', sm: '16px' } }}>
                         <Chip
                           label={candidate.status}
                           size="small"
@@ -1091,7 +1106,7 @@ const CandidateMatching = () => {
                               candidate.status === 'Shortlisted' ? '#166534' :
                                 candidate.status === 'Rejected' ? '#dc2626' :
                                   candidate.status === 'Applied' ? '#1d4ed8' : '#374151',
-                            fontSize: '12px',
+                            fontSize: { xs: '11px', sm: '12px' },
                             fontWeight: 600,
                             border: `1px solid ${candidate.status === 'Shortlisted' ? '#bbf7d0' :
                                 candidate.status === 'Rejected' ? '#fecaca' :
@@ -1100,7 +1115,7 @@ const CandidateMatching = () => {
                           }}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                         <Box sx={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <Tooltip title="👍 Shortlist" arrow>
                             <IconButton

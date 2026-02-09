@@ -615,13 +615,19 @@ const FraudDashboard: React.FC = () => {
                 <EmptyState />
               ) : (
                 <TableContainer sx={{ overflowX: 'auto' }}>
-                  <Table sx={{ minWidth: { xs: 700, md: 'auto' } }}>
+                  <Table>
                     <TableHead>
                       <TableRow sx={{ backgroundColor: '#f8fafc' }}>
-                        {['Interview', 'Candidate', 'Trust Score', 'Flags', 'Analyzed', 'Action'].map(
-                          (header, idx) => (
+                        {([
+                          { label: 'Interview', hide: 'sm' },
+                          { label: 'Candidate', hide: '' },
+                          { label: 'Trust Score', hide: '' },
+                          { label: 'Flags', hide: 'md' },
+                          { label: 'Analyzed', hide: 'md' },
+                          { label: 'Action', hide: '' },
+                        ] as { label: string; hide: string }[]).map((header, idx) => (
                             <TableCell
-                              key={header}
+                              key={header.label}
                               sx={{
                                 fontWeight: 600,
                                 color: '#475569',
@@ -630,10 +636,11 @@ const FraudDashboard: React.FC = () => {
                                 letterSpacing: '0.5px',
                                 borderBottom: '2px solid #e5e7eb',
                                 padding: idx === 0 ? '14px 20px' : '14px 16px',
-                                textAlign: header === 'Action' ? 'center' : 'left',
+                                textAlign: header.label === 'Action' ? 'center' : 'left',
+                                ...(header.hide && { display: { xs: 'none', [header.hide]: 'table-cell' } }),
                               }}
                             >
-                              {header}
+                              {header.label}
                             </TableCell>
                           )
                         )}
@@ -659,7 +666,7 @@ const FraudDashboard: React.FC = () => {
                                 },
                               }}
                             >
-                              <TableCell sx={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+                              <TableCell sx={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: { xs: 'none', sm: 'table-cell' } }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <Box
                                     sx={{
@@ -674,12 +681,12 @@ const FraudDashboard: React.FC = () => {
                                   </Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: { xs: '10px 8px', sm: '16px' } }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '6px', sm: '10px' } }}>
                                   <Box
                                     sx={{
-                                      width: 38,
-                                      height: 38,
+                                      width: { xs: 30, sm: 38 },
+                                      height: { xs: 30, sm: 38 },
                                       borderRadius: '10px',
                                       background: `linear-gradient(135deg, ${trustColor.text}20 0%, ${trustColor.text}40 100%)`,
                                       display: 'flex',
@@ -705,20 +712,19 @@ const FraudDashboard: React.FC = () => {
                                   </Box>
                                 </Box>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <Box sx={{ width: 90 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '4px' }}>
-                                      <Typography sx={{ fontSize: '15px', fontWeight: 700, color: trustColor.text }}>
-                                        {row.overall_trust_score || 0}%
-                                      </Typography>
-                                    </Box>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', padding: { xs: '10px 8px', sm: '16px' } }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '6px', sm: '12px' } }}>
+                                  <Box sx={{ width: { xs: 'auto', sm: 90 } }}>
+                                    <Typography sx={{ fontSize: { xs: '13px', sm: '15px' }, fontWeight: 700, color: trustColor.text, mb: { xs: 0, sm: '4px' } }}>
+                                      {row.overall_trust_score || 0}%
+                                    </Typography>
                                     <LinearProgress
                                       variant="determinate"
                                       value={row.overall_trust_score || 0}
                                       sx={{
                                         height: 6,
                                         borderRadius: 3,
+                                        display: { xs: 'none', sm: 'block' },
                                         backgroundColor: `${trustColor.text}20`,
                                         '& .MuiLinearProgress-bar': {
                                           backgroundColor: trustColor.text,
@@ -742,7 +748,7 @@ const FraudDashboard: React.FC = () => {
                                   />
                                 </Box>
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', display: { xs: 'none', md: 'table-cell' } }}>
                                 <Chip
                                   icon={<Flag sx={{ fontSize: '14px !important' }} />}
                                   label={`${row.flag_count || 0} ${flagSeverity.label}`}
@@ -752,7 +758,7 @@ const FraudDashboard: React.FC = () => {
                                   sx={{ fontWeight: 600, fontSize: '12px' }}
                                 />
                               </TableCell>
-                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <TableCell sx={{ borderBottom: '1px solid #f1f5f9', display: { xs: 'none', md: 'table-cell' } }}>
                                 <Tooltip
                                   title={
                                     row.analyzed_at

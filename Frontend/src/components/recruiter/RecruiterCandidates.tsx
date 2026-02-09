@@ -169,35 +169,30 @@ const RecruiterCandidates = () => {
 
   return (
     <Navigation>
-      <Box sx={{ padding: '24px', paddingBottom: '100px' }}>
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '24px' }, paddingBottom: '100px' }}>
         {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: "10px", gap: 3 }}>
-          <Box sx={{ flex: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'flex-start' }, mb: "10px", gap: { xs: 1.5, sm: 3 } }}>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, mb: { xs: 0, sm: 2 } }}>
               <IconButton onClick={() => navigate(-1)} sx={{ color: '#64748b' }}>
                 <i className="fas fa-arrow-left" />
               </IconButton>
-              <Box>
-                <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b' }}>
-                  Manage Candidates
-                </Typography>
-
-              </Box>
+              <Typography sx={{ fontSize: { xs: '18px', sm: '24px' }, fontWeight: 700, color: '#1e293b' }}>
+                Manage Candidates
+              </Typography>
             </Box>
-
-
           </Box>
 
-          <Box sx={{ display: "flex", gap: "10px" }}>
-            <Box>
+          <Box sx={{ display: "flex", gap: "10px", flexShrink: 0 }}>
+            <Box sx={{ flex: 1 }}>
               {/* Search Bar */}
               <TextField
                 fullWidth
-                placeholder="Search candidates here..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={handleSearchChange}
                 sx={{
-                  maxWidth: '500px',
+                  maxWidth: { xs: 'none', sm: '500px' },
                   padding: 0,
                   '& .MuiOutlinedInput-root': {
                     height: "40px",
@@ -239,14 +234,15 @@ const RecruiterCandidates = () => {
             <Button
               onClick={() => setAddDialogOpen(true)}
               sx={{
-                flex: 1,
                 background: 'rgba(245, 158, 11, 0.1)',
                 color: '#f59e0b',
                 border: '2px solid #f59f0baf',
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
+                whiteSpace: 'nowrap',
+                px: { xs: 1.5, sm: 2 },
                 '&:hover': {
                   background: 'rgba(245, 158, 11, 0.1)',
                   borderColor: '#f59e0b',
@@ -255,7 +251,7 @@ const RecruiterCandidates = () => {
                 }
               }}
             >
-              <i className="fas fa-plus" style={{ marginRight: 8 }} /> Add Candidate
+              <i className="fas fa-plus" style={{ marginRight: 6 }} /> Add
             </Button>
           </Box>
         </Box>
@@ -332,47 +328,49 @@ const RecruiterCandidates = () => {
             mb: 2, p: 0, borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white',
             transition: 'all 0.2s', '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderColor: '#f59e0b40' }
           }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', p: 2.5, gap: 2.5 }}>
-              {/* Avatar */}
-              <Avatar sx={{
-                width: 48, height: 48, background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                fontSize: '18px', fontWeight: 700, flexShrink: 0
-              }}>
-                {candidate.applicant_name.charAt(0).toUpperCase()}
-              </Avatar>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, p: { xs: 2, sm: 2.5 }, gap: { xs: 1.5, sm: 2.5 } }}>
+              {/* Top row: Avatar + Info */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2.5 }, flex: 1, minWidth: 0 }}>
+                <Avatar sx={{
+                  width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 }, background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, flexShrink: 0
+                }}>
+                  {candidate.applicant_name.charAt(0).toUpperCase()}
+                </Avatar>
 
-              {/* Info */}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5, flexWrap: 'wrap' }}>
-                  <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>
-                    {candidate.applicant_name}
-                  </Typography>
-                  {getScoreDisplay(candidate)}
-                </Box>
-                <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                  <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                    <i className="fas fa-envelope" style={{ marginRight: 6, fontSize: 11 }} />{candidate.applicant_email}
-                  </Typography>
-                  {candidate.experience_years ? (
-                    <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                      <i className="fas fa-briefcase" style={{ marginRight: 6, fontSize: 11 }} />{candidate.experience_years} years
+                {/* Info */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5, flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontSize: { xs: '14px', sm: '15px' }, fontWeight: 600, color: '#1e293b' }}>
+                      {candidate.applicant_name}
                     </Typography>
-                  ) : null}
-                  {candidate.current_position && (
-                    <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                      <i className="fas fa-user-tie" style={{ marginRight: 6, fontSize: 11 }} />{candidate.current_position}
+                    {getScoreDisplay(candidate)}
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 3 }, flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontSize: { xs: '12px', sm: '13px' }, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: { xs: '160px', sm: 'none' } }}>
+                      <i className="fas fa-envelope" style={{ marginRight: 6, fontSize: 11 }} />{candidate.applicant_email}
                     </Typography>
-                  )}
-                  {candidate.parsed_skills.length > 0 && (
-                    <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                      <i className="fas fa-code" style={{ marginRight: 6, fontSize: 11 }} />{candidate.parsed_skills.slice(0, 3).join(', ')}{candidate.parsed_skills.length > 3 ? ` +${candidate.parsed_skills.length - 3}` : ''}
-                    </Typography>
-                  )}
+                    {candidate.experience_years ? (
+                      <Typography sx={{ fontSize: { xs: '12px', sm: '13px' }, color: '#64748b' }}>
+                        <i className="fas fa-briefcase" style={{ marginRight: 6, fontSize: 11 }} />{candidate.experience_years} years
+                      </Typography>
+                    ) : null}
+                    {candidate.current_position && (
+                      <Typography sx={{ fontSize: { xs: '12px', sm: '13px' }, color: '#64748b', display: { xs: 'none', sm: 'block' } }}>
+                        <i className="fas fa-user-tie" style={{ marginRight: 6, fontSize: 11 }} />{candidate.current_position}
+                      </Typography>
+                    )}
+                    {candidate.parsed_skills.length > 0 && (
+                      <Typography sx={{ fontSize: { xs: '12px', sm: '13px' }, color: '#64748b', display: { xs: 'none', sm: 'block' } }}>
+                        <i className="fas fa-code" style={{ marginRight: 6, fontSize: 11 }} />{candidate.parsed_skills.slice(0, 3).join(', ')}{candidate.parsed_skills.length > 3 ? ` +${candidate.parsed_skills.length - 3}` : ''}
+                      </Typography>
+                    )}
+                  </Box>
                 </Box>
               </Box>
 
               {/* Actions */}
-              <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
                 {/* Generate Questions */}
                 {candidate.has_resume && !candidate.has_questions && (
                   <Button
@@ -380,7 +378,7 @@ const RecruiterCandidates = () => {
                     disabled={generatingFor === candidate.id}
                     onClick={() => handleGenerateQuestions(candidate)}
                     sx={{
-                      minWidth: '140px',
+                      minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
                       background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', border: '1px solid #fbbf2480',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
@@ -401,7 +399,7 @@ const RecruiterCandidates = () => {
                     size="medium"
                     onClick={() => navigate(`/interview-outline/${candidate.question_session_id}?from=manage-candidates&jobId=${jobId}&jobTitle=${encodeURIComponent(jobTitle)}`)}
                     sx={{
-                      minWidth: '140px',
+                      minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
                       background: candidate.questions_status === 'approved' ? '#dcfce720' : '#fef3c720',
                       color: candidate.questions_status === 'approved' ? '#16a34a' : '#d97706',
@@ -421,7 +419,7 @@ const RecruiterCandidates = () => {
                     size="small"
                     onClick={() => { setSelectedCandidate(candidate); setTranscriptDialogOpen(true) }}
                     sx={{
-                      minWidth: '140px',
+                      minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
                       background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid #2563eb40',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
@@ -438,7 +436,7 @@ const RecruiterCandidates = () => {
                     size="medium"
                     onClick={() => navigate(`/results?session=${candidate.session_id}`)}
                     sx={{
-                      minWidth: '140px',
+                      minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
                       background: '#7c3aed17',
                       color: '#7C3AED',
@@ -467,16 +465,16 @@ const RecruiterCandidates = () => {
         {/* Pagination - Same as CandidateMatching */}
         <Box sx={{
           position: 'fixed',
-          width: "200px",
           bottom: 0,
-          left: "50%",
+          left: 0,
           right: 0,
-          mb: 3,
           zIndex: 1000,
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          borderRadius: "10px"
+          py: 1.5,
+          background: 'linear-gradient(to top, rgba(255,255,255,0.95) 60%, rgba(255,255,255,0))',
+          backdropFilter: 'blur(8px)',
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
 

@@ -9,6 +9,7 @@ import { Visibility, PlayArrow, Cancel, Search, FilterList, Close } from '@mui/i
 import { useNavigate } from 'react-router-dom';
 import Navigation from '../layout/sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
+import { useAuth } from '../../contexts/AuthContext';
 
 const statusColorMap: Record<string, 'primary' | 'warning' | 'success' | 'error'> = {
   scheduled: 'primary',
@@ -20,7 +21,9 @@ const statusColorMap: Record<string, 'primary' | 'warning' | 'success' | 'error'
 const VideoInterviewList: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { user } = useAuth();
+  const isCandidate = user?.role === 'candidate';
   const [interviews, setInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -135,10 +138,10 @@ const VideoInterviewList: React.FC = () => {
       <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', minHeight: '100vh' }}>
         <Box sx={{
           display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
+          flexDirection: { xs: 'column', sm: 'row' },
           justifyContent: 'space-between',
-          alignItems: { xs: 'stretch', md: 'center' },
-          gap: { xs: 2, md: 0 },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: { xs: 2, sm: 0 },
           mb: 2
         }}>
           <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b', fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Video Interviews</Typography>
@@ -301,7 +304,7 @@ const VideoInterviewList: React.FC = () => {
                 <Typography color="textSecondary">No video interviews found</Typography>
               </Paper>
             ) : (
-              paginatedInterviews.map((row, index) => (
+              paginatedInterviews.map((row, ) => (
                 <Card
                   key={row.id}
                   sx={{
@@ -368,14 +371,7 @@ const VideoInterviewList: React.FC = () => {
                           {row.duration_minutes} min
                         </Typography>
                       </Box>
-                      <Box>
-                        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>
-                          Trust Score
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
-                          {row.trust_score ?? '—'}
-                        </Typography>
-                      </Box>
+                      
                       <Box>
                         <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>
                           Flags
@@ -388,15 +384,17 @@ const VideoInterviewList: React.FC = () => {
 
                     {/* Action buttons */}
                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', pt: 1.5, mt: 1 }}>
-                      <Tooltip title="View Details">
-                        <IconButton
-                          size="small"
-                          onClick={() => navigate(`/video-detail/${row.id}`)}
-                          sx={{ backgroundColor: '#f1f5f9', '&:hover': { backgroundColor: '#e2e8f0' } }}
-                        >
-                          <Visibility fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {!isCandidate && (
+                        <Tooltip title="View Details">
+                          <IconButton
+                            size="small"
+                            onClick={() => navigate(`/video-detail/${row.id}`)}
+                            sx={{ backgroundColor: '#f1f5f9', '&:hover': { backgroundColor: '#e2e8f0' } }}
+                          >
+                            <Visibility fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
                         <span>
                           <IconButton
@@ -410,19 +408,21 @@ const VideoInterviewList: React.FC = () => {
                           </IconButton>
                         </span>
                       </Tooltip>
-                      <Tooltip title="Cancel">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleCancel(row.id)}
-                            disabled={row.status === 'cancelled' || row.status === 'completed'}
-                            sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
-                          >
-                            <Cancel fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
+                      {!isCandidate && (
+                        <Tooltip title="Cancel">
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleCancel(row.id)}
+                              disabled={row.status === 'cancelled' || row.status === 'completed'}
+                              sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                            >
+                              <Cancel fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
                     </Box>
                   </CardContent>
                 </Card>
@@ -475,10 +475,9 @@ const VideoInterviewList: React.FC = () => {
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Job Title</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Candidate</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Scheduled At</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Duration</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Trust Score</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Flags</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', lg: 'table-cell' } }}>Scheduled At</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', md: 'table-cell' } }}>Duration</TableCell>
+                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', md: 'table-cell' } }}>Flags</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
@@ -515,12 +514,13 @@ const VideoInterviewList: React.FC = () => {
                         <TableCell>
                           <Chip label={row.status} color={statusColorMap[row.status] || 'default'} size="small" />
                         </TableCell>
-                        <TableCell>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
-                        <TableCell>{row.duration_minutes} min</TableCell>
-                        <TableCell>{row.trust_score ?? '—'}</TableCell>
-                        <TableCell>{row.flag_count ?? 0}</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.duration_minutes} min</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.flag_count ?? 0}</TableCell>
                         <TableCell>
-                          <Tooltip title="View Details"><IconButton onClick={() => navigate(`/video-detail/${row.id}`)}><Visibility /></IconButton></Tooltip>
+                          {!isCandidate && (
+                            <Tooltip title="View Details"><IconButton onClick={() => navigate(`/video-detail/${row.id}`)}><Visibility /></IconButton></Tooltip>
+                          )}
                           <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
                             <span>
                               <IconButton
@@ -532,17 +532,19 @@ const VideoInterviewList: React.FC = () => {
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Cancel">
-                            <span>
-                              <IconButton
-                                color="error"
-                                onClick={() => handleCancel(row.id)}
-                                disabled={row.status === 'cancelled' || row.status === 'completed'}
-                              >
-                                <Cancel />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                          {!isCandidate && (
+                            <Tooltip title="Cancel">
+                              <span>
+                                <IconButton
+                                  color="error"
+                                  onClick={() => handleCancel(row.id)}
+                                  disabled={row.status === 'cancelled' || row.status === 'completed'}
+                                >
+                                  <Cancel />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))

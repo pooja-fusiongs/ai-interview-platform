@@ -25,7 +25,7 @@ export interface InterviewSession {
   recommendation: string | null;
   strengths: string | null;
   weaknesses: string | null;
-  started_at: string;
+  started_at: string | null;
   completed_at: string | null;
   job_title: string | null;
   candidate_name: string | null;
@@ -45,7 +45,7 @@ export interface InterviewAnswer {
   feedback: string | null;
   question_text: string | null;
   sample_answer: string | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface InterviewListItem {
@@ -55,7 +55,7 @@ export interface InterviewListItem {
   status: string;
   overall_score: number | null;
   recommendation: string | null;
-  started_at: string;
+  started_at: string | null;
   completed_at: string | null;
   job_title: string | null;
   candidate_name: string | null;

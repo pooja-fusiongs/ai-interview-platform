@@ -402,142 +402,120 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             </Box>
           </Box>
 
-          <CanApplyJobs fallback={
-            <Button
-              disabled
-              sx={{
-                background: '#f1f5f9',
-                color: '#94a3b8',
-                padding: '12px 32px',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 600,
-                textTransform: 'none',
-                marginRight: '12px',
-                cursor: 'not-allowed'
-              }}
-            >
-              View Only
-            </Button>
-          }>
-            {hasApplied ? (
-              // Already Applied state
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: '8px', sm: '12px' }, alignItems: 'center' }}>
+            <CanApplyJobs fallback={
               <Button
                 disabled
                 sx={{
-                  background: '#dcfce7',
-                  color: '#166534',
-                  border: '2px solid #bbf7d0',
-                  // padding: '12px 32px',
+                  background: '#f1f5f9',
+                  color: '#94a3b8',
+                  padding: { xs: '8px 16px', sm: '12px 32px' },
                   borderRadius: '8px',
-                  fontSize: '16px',
+                  fontSize: { xs: '13px', sm: '16px' },
                   fontWeight: 600,
                   textTransform: 'none',
-                  marginRight: '12px',
                   cursor: 'not-allowed'
                 }}
               >
-                <i className="fas fa-check-circle" style={{ marginRight: '8px' }}></i>
-                 Applied
+                View Only
               </Button>
-            ) : (
-              // Apply Now state (default)
-              <Button
-                onClick={() => onApplyNow(selectedJob)}
-                sx={{
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  color: '#f59e0b',
-                  padding: '12px 32px',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  marginRight: '12px',
-                  '&:hover': {
-                    background: 'rgba(245, 158, 11, 0.2)'
-                  }
-                }}
-              >
-                Apply Now
-              </Button>
-            )}
-          </CanApplyJobs>
-          
-          <CanViewCandidates>
-            {onViewCandidates && (
-              <Button
-                onClick={() => onViewCandidates(selectedJob)}
-                sx={{
-                  background: 'rgba(139, 92, 246, 0.1)',
-                  color: '#8b5cf6',
-                  padding: '12px 32px',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  marginRight: '12px',
-                  '&:hover': {
-                    background: 'rgba(139, 92, 246, 0.2)'
-                  }
-                }}
-              >
-                <i className="fas fa-users" style={{ marginRight: '8px' }}></i>
-                View Candidates
-              </Button>
-            )}
-            {(user?.role === 'recruiter' || user?.role === 'admin') && (
-              <Button
-                onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
-                sx={{
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  color: '#d97706',
-                  padding: '12px 32px',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  marginRight: '12px',
-                  '&:hover': {
-                    background: 'rgba(245, 158, 11, 0.2)'
-                  }
-                }}
-              >
-                <i className="fas fa-user-plus" style={{ marginRight: '8px' }}></i>
-                Manage Candidates
-              </Button>
-            )}
-          </CanViewCandidates>
-          {/* <Button
-            onClick={() => onViewCandidates(selectedJob)}
-            sx={{
-              background: 'rgba(139, 92, 246, 0.1)',
-              color: '#8b5cf6',
-              padding: '12px 32px',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: 600,
-              textTransform: 'none',
-              marginRight: '12px',
-              '&:hover': {
-                background: 'rgba(139, 92, 246, 0.2)'
-              }
-            }}
-          >
-            View Candidates
-          </Button> */}
-          <IconButton sx={{ 
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            marginRight: '8px'
-          }}>
-            <i className="fas fa-star" style={{ color: '#fbbf24' }}></i>
-          </IconButton>
-          <IconButton sx={{ 
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0'
-          }}>
-            <i className="fas fa-share" style={{ color: '#64748b' }}></i>
-          </IconButton>
+            }>
+              {hasApplied ? (
+                // Already Applied state
+                <Button
+                  disabled
+                  sx={{
+                    background: '#dcfce7',
+                    color: '#166534',
+                    border: '2px solid #bbf7d0',
+                    padding: { xs: '8px 16px', sm: '12px 32px' },
+                    borderRadius: '8px',
+                    fontSize: { xs: '13px', sm: '16px' },
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    cursor: 'not-allowed'
+                  }}
+                >
+                  <i className="fas fa-check-circle" style={{ marginRight: '8px' }}></i>
+                   Applied
+                </Button>
+              ) : (
+                // Apply Now state (default)
+                <Button
+                  onClick={() => onApplyNow(selectedJob)}
+                  sx={{
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    color: '#f59e0b',
+                    padding: { xs: '8px 16px', sm: '12px 32px' },
+                    borderRadius: '8px',
+                    fontSize: { xs: '13px', sm: '16px' },
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    '&:hover': {
+                      background: 'rgba(245, 158, 11, 0.2)'
+                    }
+                  }}
+                >
+                  Apply Now
+                </Button>
+              )}
+            </CanApplyJobs>
+
+            <CanViewCandidates>
+              {onViewCandidates && (
+                <Button
+                  onClick={() => onViewCandidates(selectedJob)}
+                  sx={{
+                    background: 'rgba(139, 92, 246, 0.1)',
+                    color: '#8b5cf6',
+                    padding: { xs: '8px 16px', sm: '12px 32px' },
+                    borderRadius: '8px',
+                    fontSize: { xs: '13px', sm: '16px' },
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    '&:hover': {
+                      background: 'rgba(139, 92, 246, 0.2)'
+                    }
+                  }}
+                >
+                  <i className="fas fa-users" style={{ marginRight: '8px' }}></i>
+                  View Candidates
+                </Button>
+              )}
+              {(user?.role === 'recruiter' || user?.role === 'admin') && (
+                <Button
+                  onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
+                  sx={{
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    color: '#d97706',
+                    padding: { xs: '8px 16px', sm: '12px 32px' },
+                    borderRadius: '8px',
+                    fontSize: { xs: '13px', sm: '16px' },
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    '&:hover': {
+                      background: 'rgba(245, 158, 11, 0.2)'
+                    }
+                  }}
+                >
+                  <i className="fas fa-user-plus" style={{ marginRight: '8px' }}></i>
+                  Manage Candidates
+                </Button>
+              )}
+            </CanViewCandidates>
+            <IconButton sx={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0'
+            }}>
+              <i className="fas fa-star" style={{ color: '#fbbf24' }}></i>
+            </IconButton>
+            <IconButton sx={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0'
+            }}>
+              <i className="fas fa-share" style={{ color: '#64748b' }}></i>
+            </IconButton>
+          </Box>
         </Box>
 
         {/* Job Status and Stats */}

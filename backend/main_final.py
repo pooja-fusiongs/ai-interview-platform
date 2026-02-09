@@ -1267,7 +1267,7 @@ def test_endpoint():
 
 class CandidateQuestionGenerateRequest(BaseModel):
     job_id: int
-    total_questions: int = 5
+    total_questions: int = 10
     generation_mode: str = "balanced"
 
 @app.post("/api/candidates/{candidate_id}/generate-questions")
@@ -1489,31 +1489,102 @@ def generate_score_for_candidate(
     total_score = 0
     scored_items = 0
     
-    for q in questions:
-        # Placeholder scoring logic
-        score = 85.5 # Mock score
-        
-        # Upsert answer
-        answer = db.query(InterviewAnswer).filter(
-            InterviewAnswer.session_id == session.id,
-            InterviewAnswer.question_id == q.id
-        ).first()
-        
-        if not answer:
-            answer = InterviewAnswer(
-                session_id=session.id,
-                question_id=q.id,
-                answer_text="[Extracted from Transcript]",
-                score=score
-            )
-            db.add(answer)
-        else:
-            answer.score = score
+    # Try to score with AI (Gemini or Groq)
+    from services.gemini_service import score_transcript_with_gemini
+    import config
+    
+    # Prepare questions for scoring
+    questions_for_scoring = [
+        {
+            "question_id": q.id,
+            "question_text": q.question_text,
+            "sample_answer": q.sample_answer or ""
+        }
+        for q in questions
+    ]
+    
+    llm_result = None
+    
+    # Try Gemini first
+    if config.GEMINI_API_KEY:
+        try:
+            print(f"🤖 Trying Gemini API for scoring...")
+            llm_result = score_transcript_with_gemini(transcript, questions_for_scoring)
+        except Exception as e:
+            print(f"⚠️ Gemini failed: {e}")
+    
+    # Try Groq if Gemini failed
+    if not llm_result and config.GROQ_API_KEY:
+        try:
+            print(f"🤖 Trying Groq API for scoring...")
+            from services.groq_service import score_transcript_with_groq
+            llm_result = score_transcript_with_groq(transcript, questions_for_scoring)
+        except Exception as e:
+            print(f"⚠️ Groq failed: {e}")
+    
+    # Use AI results if available
+    if llm_result:
+        print(f"✅ AI scoring successful!")
+        for pq in llm_result.get("per_question", []):
+            q_id = pq.get("question_id")
             
-        total_score += score
-        scored_items += 1
+            # Find or create answer
+            answer = db.query(InterviewAnswer).filter(
+                InterviewAnswer.session_id == session.id,
+                InterviewAnswer.question_id == q_id
+            ).first()
+            
+            if not answer:
+                answer = InterviewAnswer(
+                    session_id=session.id,
+                    question_id=q_id
+                )
+                db.add(answer)
+            
+            # Save AI-generated scores and answers
+            answer.answer_text = pq.get("extracted_answer", "[Extracted from Transcript]")
+            answer.score = float(pq.get("score", 0))
+            answer.relevance_score = float(pq.get("relevance_score", 0))
+            answer.completeness_score = float(pq.get("completeness_score", 0))
+            answer.accuracy_score = float(pq.get("accuracy_score", 0))
+            answer.clarity_score = float(pq.get("clarity_score", 0))
+            answer.feedback = pq.get("feedback", "")
+            
+            total_score += answer.score
+            scored_items += 1
         
-    avg_score = total_score / scored_items if scored_items > 0 else 0
+        avg_score = llm_result.get("overall_score", total_score / scored_items if scored_items > 0 else 0)
+        session.recommendation = llm_result.get("recommendation", "next_round")
+        session.strengths = llm_result.get("strengths", "")
+        session.weaknesses = llm_result.get("weaknesses", "")
+    else:
+        # Fallback to mock scoring if AI fails
+        print(f"⚠️ AI scoring failed, using mock scores")
+        for q in questions:
+            # Mock score (fallback)
+            score = 85.5
+            
+            # Upsert answer
+            answer = db.query(InterviewAnswer).filter(
+                InterviewAnswer.session_id == session.id,
+                InterviewAnswer.question_id == q.id
+            ).first()
+            
+            if not answer:
+                answer = InterviewAnswer(
+                    session_id=session.id,
+                    question_id=q.id,
+                    answer_text="[Extracted from Transcript]",
+                    score=score
+                )
+                db.add(answer)
+            else:
+                answer.score = score
+                
+            total_score += score
+            scored_items += 1
+        
+        avg_score = total_score / scored_items if scored_items > 0 else 0
     
     session.overall_score = avg_score
     session.status = InterviewSessionStatus.SCORED
