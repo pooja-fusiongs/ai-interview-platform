@@ -769,19 +769,6 @@ async def apply_for_job_with_resume(
 
         print(f"✅ Application submitted successfully: ID={new_application.id}")
 
-        # Trigger automatic question generation
-        try:
-            generator = get_question_generator()
-            result = generator.generate_questions(
-                db=db,
-                job_id=job_id,
-                candidate_id=new_application.id,
-                total_questions=10
-            )
-            print(f"✅ Questions generated: {result['total_questions']} questions")
-        except Exception as e:
-            print(f"⚠️ Question generation failed (non-critical): {e}")
-
         return {
             "message": "Application submitted successfully",
             "application_id": new_application.id,
