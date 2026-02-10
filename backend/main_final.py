@@ -69,6 +69,7 @@ def auto_migrate():
         ("users", "internship_stipend", "VARCHAR"),
         ("users", "languages", "TEXT"),
         ("users", "profile_image", "VARCHAR"),
+        ("video_interviews", "transcript_source", "VARCHAR"),
     ]
 
     with engine.begin() as conn:
