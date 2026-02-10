@@ -41,7 +41,7 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import { CloudUpload as CloudUploadIcon, Visibility as VisibilityIcon } from '@mui/icons-material'
 
 const Candidates = () => {

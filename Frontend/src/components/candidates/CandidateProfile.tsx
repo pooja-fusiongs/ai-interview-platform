@@ -42,7 +42,7 @@ import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { candidateProfileService } from '../../services/candidateProfileService'
 import { CandidateProfileData, EducationData } from '../../types'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 
 // API base URL from environment
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com'

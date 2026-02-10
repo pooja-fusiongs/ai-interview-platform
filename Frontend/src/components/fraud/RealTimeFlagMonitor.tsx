@@ -32,7 +32,7 @@ import {
   MonitorHeart,
   Circle,
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 
 interface LiveFlag {
   id: string;

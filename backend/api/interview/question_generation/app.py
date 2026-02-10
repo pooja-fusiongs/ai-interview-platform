@@ -13,19 +13,46 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
-from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession
+from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion
 from schemas import (
-    QuestionGenerateRequest, 
-    InterviewQuestionResponse, 
+    QuestionGenerateRequest,
+    InterviewQuestionResponse,
     QuestionGenerationSessionResponse,
     ExpertReviewRequest,
-    InterviewQuestionUpdate
+    InterviewQuestionUpdate,
+    InterviewQuestionVersionResponse
 )
+from sqlalchemy import func as sqla_func
 from api.auth.jwt_handler import get_current_active_user
 from api.auth.role_manager import RoleManager
 from services.ai_question_generator import get_question_generator
 
 router = APIRouter(prefix="/api/interview", tags=["Question Generation"])
+
+
+def _save_question_version(db: Session, question, change_type: str, changed_by: int, change_summary: str = None):
+    """Save a snapshot of the question as a version record."""
+    max_ver = db.query(sqla_func.max(InterviewQuestionVersion.version_number)).filter(
+        InterviewQuestionVersion.question_id == question.id
+    ).scalar()
+    next_ver = (max_ver or 0) + 1
+
+    version = InterviewQuestionVersion(
+        question_id=question.id,
+        version_number=next_ver,
+        changed_by=changed_by,
+        change_type=change_type,
+        question_text=question.question_text,
+        sample_answer=question.sample_answer,
+        question_type=question.question_type.value if hasattr(question.question_type, 'value') else str(question.question_type) if question.question_type else None,
+        difficulty=question.difficulty.value if hasattr(question.difficulty, 'value') else str(question.difficulty) if question.difficulty else None,
+        skill_focus=question.skill_focus,
+        is_approved=question.is_approved or False,
+        expert_notes=question.expert_notes,
+        change_summary=change_summary,
+    )
+    db.add(version)
+
 
 @router.post("/generate-questions", response_model=dict)
 def generate_questions(
@@ -221,10 +248,14 @@ def update_question(
     question.expert_reviewed = True
     question.reviewed_by = current_user.id
     question.reviewed_at = datetime.utcnow()
-    
+
+    # Save version history
+    changed_fields = list(update_data.dict(exclude_unset=True).keys())
+    _save_question_version(db, question, "edit", current_user.id, f"Updated: {', '.join(changed_fields)}")
+
     db.commit()
     db.refresh(question)
-    
+
     return InterviewQuestionResponse(
         id=question.id,
         question_text=question.question_text,
@@ -276,7 +307,16 @@ def expert_review_question(
         question.question_text = review.updated_question
     if review.updated_answer:
         question.sample_answer = review.updated_answer
-    
+
+    # Save version history
+    change_type = "approve" if review.is_approved else "reject"
+    summary_parts = ["Approved" if review.is_approved else "Rejected"]
+    if review.updated_question:
+        summary_parts.append("question text updated")
+    if review.updated_answer:
+        summary_parts.append("sample answer updated")
+    _save_question_version(db, question, change_type, current_user.id, "; ".join(summary_parts))
+
     db.commit()
     
     # Update session approved count
@@ -308,11 +348,29 @@ def expert_review_question(
         
         if reviewed_questions == total_questions:
             session.expert_review_status = "completed"
+
+            # Notify recruiter that review is completed
+            try:
+                from services.email_service import send_review_completed_notification
+                recruiter = db.query(User).filter(User.id == session.generated_by).first()
+                job = db.query(Job).filter(Job.id == session.job_id).first()
+                candidate = db.query(JobApplication).filter(JobApplication.id == session.candidate_id).first()
+                if recruiter and job and candidate:
+                    send_review_completed_notification(
+                        recruiter_email=recruiter.email,
+                        recruiter_name=recruiter.full_name or recruiter.username,
+                        job_title=job.title,
+                        candidate_name=candidate.applicant_name,
+                        approved_count=approved_count,
+                        total_count=total_questions,
+                    )
+            except Exception as e:
+                print(f"[WARN] Failed to send review completed notification: {e}")
         else:
             session.expert_review_status = "in_review"
-        
+
         db.commit()
-    
+
     return {
         "message": "Question review completed successfully",
         "question_id": question.id,
@@ -559,3 +617,46 @@ def get_question_sets_test(db: Session = Depends(get_db)):
         })
 
     return result
+
+
+# ─── Question Version History ────────────────────────────────────────────────
+
+@router.get("/questions/{question_id}/history", response_model=List[InterviewQuestionVersionResponse])
+def get_question_history(
+    question_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get version history for a specific question."""
+    question = db.query(InterviewQuestion).filter(InterviewQuestion.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    versions = db.query(InterviewQuestionVersion).filter(
+        InterviewQuestionVersion.question_id == question_id
+    ).order_by(InterviewQuestionVersion.version_number.desc()).all()
+
+    changer_ids = [v.changed_by for v in versions if v.changed_by]
+    changers = db.query(User).filter(User.id.in_(changer_ids)).all() if changer_ids else []
+    changer_map = {u.id: u.full_name or u.username for u in changers}
+
+    return [
+        InterviewQuestionVersionResponse(
+            id=v.id,
+            question_id=v.question_id,
+            version_number=v.version_number,
+            changed_by=v.changed_by,
+            changer_name=changer_map.get(v.changed_by),
+            changed_at=v.changed_at,
+            change_type=v.change_type,
+            question_text=v.question_text,
+            sample_answer=v.sample_answer,
+            question_type=v.question_type,
+            difficulty=v.difficulty,
+            skill_focus=v.skill_focus,
+            is_approved=v.is_approved,
+            expert_notes=v.expert_notes,
+            change_summary=v.change_summary,
+        )
+        for v in versions
+    ]

@@ -8,7 +8,7 @@ import {
   ArrowBack, AccessTime, NavigateNext, Check, SmartToy,
   FiberManualRecord, Mic, MicOff, Videocam, VideocamOff, Timer
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';

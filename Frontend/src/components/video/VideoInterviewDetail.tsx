@@ -22,7 +22,7 @@ import {
   Assessment,
   FiberManualRecord,
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 

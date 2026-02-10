@@ -60,26 +60,28 @@ def get_candidate_profile(
             except Exception:
                 certifications_list = []
 
+        # Decrypt PII fields
+        from services.encryption_service import safe_decrypt
         return {
             "success": True,
             "data": {
                 "id": current_user.id,
                 "email": current_user.email,
-                "full_name": current_user.full_name or "",
-                "mobile": current_user.mobile or current_user.phone or "",
-                "gender": current_user.gender or "male",
-                "location": current_user.location or "",
-                "bio": current_user.bio or "",
+                "full_name": safe_decrypt(current_user.full_name) or "",
+                "mobile": safe_decrypt(current_user.mobile or current_user.phone) or "",
+                "gender": safe_decrypt(current_user.gender) or "male",
+                "location": safe_decrypt(current_user.location) or "",
+                "bio": safe_decrypt(current_user.bio) or "",
                 "education": education_list,
                 "has_internship": current_user.has_internship or False,
-                "internship_company": current_user.internship_company or "",
-                "internship_position": current_user.internship_position or "",
+                "internship_company": safe_decrypt(current_user.internship_company) or "",
+                "internship_position": safe_decrypt(current_user.internship_position) or "",
                 "internship_duration": current_user.internship_duration or "",
                 "internship_salary": current_user.internship_salary or "",
                 "skills": skills_list,
                 "languages": languages_list,
-                "preferred_location": current_user.preferred_location or "",
-                "preferred_job_title": current_user.preferred_job_title or "",
+                "preferred_location": safe_decrypt(current_user.preferred_location) or "",
+                "preferred_job_title": safe_decrypt(current_user.preferred_job_title) or "",
                 "preferred_job_type": current_user.preferred_job_type or "full-time",
                 "profile_image": current_user.profile_image or "",
                 "resume_url": current_user.resume_url or "",
@@ -181,6 +183,10 @@ def update_candidate_profile(
             current_user.bio = profile_data["bio"]
         if "company" in profile_data:
             current_user.company = profile_data["company"]
+
+        # Encrypt PII fields before writing to DB
+        from services.encryption_service import encrypt_user_fields
+        encrypt_user_fields(current_user)
 
         db.commit()
         print("🔍 Debug - Profile update committed to database")

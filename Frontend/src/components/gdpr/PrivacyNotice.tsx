@@ -27,7 +27,7 @@ import {
   ContactSupport,
   AccessTime,
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 import html2pdf from 'html2pdf.js';

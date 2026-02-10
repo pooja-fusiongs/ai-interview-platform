@@ -11,7 +11,7 @@ import {
   Check, SmartToy, Person, Link as LinkIcon, ContentCopy,
   FiberManualRecord
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -391,15 +391,22 @@ const VideoInterviewRoom: React.FC = () => {
         const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'video/webm' });
         console.log(`🎥 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
 
-        // Upload to backend
+        // Upload to backend (silently for candidates)
+        const isCandidate = user?.role === 'candidate';
         try {
-          setUploadingRecording(true);
-          toast('Uploading recording...', { icon: '📤' });
+          if (!isCandidate) {
+            setUploadingRecording(true);
+            toast('Uploading recording...', { icon: '📤' });
+          }
           await videoInterviewService.uploadRecording(Number(videoId), blob);
-          toast.success('Recording uploaded successfully!');
+          if (!isCandidate) {
+            toast.success('Recording uploaded successfully!');
+          }
         } catch (err) {
           console.error('Failed to upload recording:', err);
-          toast.error('Failed to upload recording.');
+          if (!isCandidate) {
+            toast.error('Failed to upload recording.');
+          }
         } finally {
           setUploadingRecording(false);
           recordedChunksRef.current = [];

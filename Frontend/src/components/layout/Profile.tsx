@@ -26,7 +26,7 @@ import {
 import { toast } from 'react-hot-toast'
 import { profileService } from '../../services/profileService'
 import { ProfileData } from '../../types'
-import Navigation from './sidebar'
+import Navigation from './Sidebar'
 
 const Profile = () => {
   const [profile, setProfile] = useState<ProfileData | null>(null)

@@ -59,6 +59,22 @@ INTERVIEW_TEMPLATES = {
 }
 
 FILLER_WORDS = ["um", "uh", "you know", "like", "so", "actually", "basically"]
+HESITATION_PHRASES = [
+    "Let me think about that...",
+    "That's a good question.",
+    "Hmm, so",
+    "Well, from my experience,",
+    "I'd say that",
+    "If I recall correctly,",
+    "So basically,",
+]
+TRAILING_PHRASES = [
+    "...and yeah, that's roughly how I'd approach it.",
+    "...something along those lines.",
+    "...I think that covers the main points.",
+    "...if that makes sense.",
+    "...at least that's been my experience so far.",
+]
 COMPANIES = ["Tech Corp", "Innovate Inc", "Digital Solutions", "StartUp Labs", "Enterprise Systems"]
 TECHNOLOGIES = ["React", "Python", "Node.js", "AWS", "Docker", "Kubernetes", "PostgreSQL", "MongoDB"]
 PROJECTS = ["e-commerce platform", "real-time analytics dashboard", "mobile app", "API gateway", "microservices migration"]
@@ -76,6 +92,50 @@ def _add_natural_speech(text: str) -> str:
             words.insert(insert_pos, filler + ",")
             return " ".join(words)
     return text
+
+
+def _generate_candidate_response(sample_answer: str) -> str:
+    """
+    Generate a plausible but imperfect candidate response based on a sample answer.
+    Instead of copying the full sample answer, this creates a partial, realistic version
+    that a real candidate might give — with hesitations, missing details, and varied phrasing.
+    """
+    if not sample_answer or len(sample_answer.strip()) < 10:
+        return _add_natural_speech(
+            "That's a great question. I have some experience in that area, "
+            "though I'd need to think about the specifics a bit more."
+        )
+
+    sentences = [s.strip() for s in sample_answer.replace("\n", " ").split(".") if s.strip()]
+
+    if not sentences:
+        return _add_natural_speech(sample_answer[:80] + "...")
+
+    # Take only a subset of sentences (40-70% of the answer)
+    num_to_keep = max(1, int(len(sentences) * random.uniform(0.3, 0.6)))
+    # Prefer earlier sentences (intro context) but randomly drop some middle ones
+    kept = []
+    for i, s in enumerate(sentences):
+        if i == 0:
+            # Always keep the first sentence but sometimes rephrase loosely
+            if random.random() < 0.4:
+                kept.append("So, " + s[0].lower() + s[1:] if len(s) > 1 else s)
+            else:
+                kept.append(s)
+        elif len(kept) < num_to_keep and random.random() < 0.6:
+            kept.append(s)
+
+    if not kept:
+        kept = [sentences[0]]
+
+    # Add hesitation at the start
+    response = random.choice(HESITATION_PHRASES) + " " + ". ".join(kept) + "."
+
+    # Sometimes add a trailing phrase instead of a clean ending
+    if random.random() < 0.5:
+        response = response.rstrip(".") + random.choice(TRAILING_PHRASES)
+
+    return _add_natural_speech(response)
 
 
 def _generate_answer(template: str) -> str:
@@ -322,9 +382,9 @@ def generate_transcript_with_actual_questions(
         minutes = current_time // 60
         seconds = current_time % 60
 
-        # Candidate answers - use sample_answer as base and add natural speech
+        # Candidate answers - generate a plausible but imperfect response
         if sample_answer:
-            answer = _add_natural_speech(sample_answer)
+            answer = _generate_candidate_response(sample_answer)
         else:
             # Generate a generic answer if no sample provided
             answer = _add_natural_speech(f"That's a great question. Based on my experience, I would say that {question_text.lower().replace('?', '')} is something I have dealt with extensively in my career.")

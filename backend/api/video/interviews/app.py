@@ -39,6 +39,7 @@ from api.auth.jwt_handler import get_current_active_user, require_any_role
 from services.zoom_service import create_zoom_meeting, delete_zoom_meeting
 from services.email_service import send_interview_notification
 from services.transcript_generator import generate_transcript_for_video_interview
+from services.groq_service import transcribe_audio_with_groq
 
 router = APIRouter(tags=["Video Interviews"])
 
@@ -610,7 +611,7 @@ def end_video_interview(
     db: Session = Depends(get_db),
 ):
     """Mark a video interview as completed and generate transcript."""
-    from models import InterviewQuestion, JobApplication
+    from models import InterviewQuestion, JobApplication, InterviewSessionStatus
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -619,7 +620,7 @@ def end_video_interview(
     vi.status = VideoInterviewStatus.COMPLETED
     vi.ended_at = datetime.now(timezone.utc)
 
-    # Generate transcript automatically
+    # Generate transcript — try REAL transcription first, fall back to mock
     try:
         candidate_name = None
         interviewer_name = None
@@ -671,7 +672,7 @@ def end_video_interview(
                     InterviewQuestion.is_approved == True
                 ).all()
                 if questions:
-                    print(f"✅ Found {len(questions)} approved questions with candidate_id={cid}")
+                    print(f"[end_interview] Found {len(questions)} approved questions with candidate_id={cid}")
                     break
 
             # If no approved questions, try all questions
@@ -682,7 +683,7 @@ def end_video_interview(
                         InterviewQuestion.candidate_id == cid
                     ).all()
                     if questions:
-                        print(f"⚠️ Found {len(questions)} questions (not all approved) with candidate_id={cid}")
+                        print(f"[end_interview] Found {len(questions)} questions (not all approved) with candidate_id={cid}")
                         break
 
             if questions:
@@ -690,21 +691,69 @@ def end_video_interview(
                     {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
                     for q in questions
                 ]
-                print(f"📝 Using {len(actual_questions)} questions for transcript generation")
+                print(f"[end_interview] Using {len(actual_questions)} questions for transcript generation")
 
-        transcript = generate_transcript_for_video_interview(
-            video_interview_id=vi.id,
-            candidate_name=candidate_name,
-            interviewer_name=interviewer_name,
-            job_title=job_title,
-            duration_minutes=vi.duration_minutes or 30,
-            actual_questions=actual_questions if actual_questions else None
-        )
-        vi.transcript = transcript
+        # --- Try REAL transcription from recording file ---
+        real_transcript = None
+        if vi.recording_url:
+            recording_path = vi.recording_url
+            # Resolve relative paths to absolute
+            if not os.path.isabs(recording_path):
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                backend_dir = os.path.join(base_dir, '..', '..', '..')
+                recording_path = os.path.normpath(os.path.join(backend_dir, recording_path))
+            print(f"[end_interview] Attempting real transcription from: {recording_path}")
+            real_transcript = transcribe_audio_with_groq(recording_path)
+
+        if real_transcript:
+            print(f"[end_interview] Using REAL transcript ({len(real_transcript)} chars)")
+            vi.transcript = real_transcript
+            vi.transcript_source = "recording"
+        else:
+            # Fall back to mock transcript generator
+            print(f"[end_interview] No real recording/transcription, using mock generator")
+            transcript = generate_transcript_for_video_interview(
+                video_interview_id=vi.id,
+                candidate_name=candidate_name,
+                interviewer_name=interviewer_name,
+                job_title=job_title,
+                duration_minutes=vi.duration_minutes or 30,
+                actual_questions=actual_questions if actual_questions else None
+            )
+            vi.transcript = transcript
+            vi.transcript_source = "mock"
+
         vi.transcript_generated_at = datetime.now(timezone.utc)
-        print(f"Transcript generated for video interview {video_id}")
+        print(f"[end_interview] Transcript saved for video interview {video_id}")
     except Exception as e:
-        print(f"Failed to generate transcript: {e}")
+        print(f"[end_interview] Failed to generate transcript: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Create InterviewSession to link video interview with scoring pipeline
+    try:
+        application = None
+        if vi.candidate:
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email
+            ).first()
+
+        session = InterviewSession(
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            application_id=application.id if application else None,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="video_interview",
+            transcript_text=vi.transcript,
+            started_at=vi.started_at or vi.scheduled_at,
+        )
+        db.add(session)
+        db.flush()
+        vi.session_id = session.id
+        print(f"[end_interview] Created InterviewSession id={session.id} for video interview {video_id}")
+    except Exception as e:
+        print(f"[end_interview] Failed to create InterviewSession: {e}")
         import traceback
         traceback.print_exc()
 
@@ -808,6 +857,7 @@ def get_video_transcript(
             )
             vi.transcript = transcript
             vi.transcript_generated_at = datetime.now(timezone.utc)
+            vi.transcript_source = "mock"
             db.commit()
             db.refresh(vi)
         except Exception as e:
@@ -969,7 +1019,7 @@ def submit_ai_interview_answers(
 ):
     """Submit answers from AI interview and generate score."""
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus, JobApplication
-    from services.gemini_service import score_transcript_with_gemini
+    from services.groq_service import score_transcript_with_groq
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -1012,6 +1062,7 @@ def submit_ai_interview_answers(
     # Save transcript to video interview
     vi.transcript = transcript_text
     vi.transcript_generated_at = datetime.now(timezone.utc)
+    vi.transcript_source = "recording"  # AI interview answers come from live session
     vi.status = VideoInterviewStatus.COMPLETED
     vi.ended_at = datetime.now(timezone.utc)
 
@@ -1025,9 +1076,9 @@ def submit_ai_interview_answers(
         for q in questions
     ]
 
-    # Score with Gemini
+    # Score with Groq
     score_result = None
-    llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+    llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
 
     if llm_result:
         score_result = {
@@ -1115,8 +1166,7 @@ def upload_transcript_and_score(
 ):
     """Upload transcript text and generate score using AI."""
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus
-    from services.gemini_service import score_transcript_with_gemini
- 
+    from services.groq_service import score_transcript_with_groq
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -1129,6 +1179,7 @@ def upload_transcript_and_score(
     # Save the transcript
     vi.transcript = transcript_text
     vi.transcript_generated_at = datetime.now(timezone.utc)
+    vi.transcript_source = "upload"
 
     # Find JobApplication for this candidate - try multiple methods
     application = None
@@ -1243,28 +1294,35 @@ def upload_transcript_and_score(
             for q in approved_questions
         ]
 
-        # Check if GEMINI_API_KEY is configured
+        # Check if GROQ_API_KEY is configured
         import config
-        if not config.GEMINI_API_KEY:
-            scoring_error = "GEMINI_API_KEY not configured. Please add it to .env and restart the backend server."
+        if not config.GROQ_API_KEY:
+            scoring_error = "GROQ_API_KEY not configured. Please add it to .env and restart the backend server."
             print(f"❌ {scoring_error}")
         else:
-            # Score with Gemini
-            print(f"🤖 Calling Gemini API to score transcript with {len(questions_for_scoring)} questions...")
-            print(f"🔑 Using API key: {config.GEMINI_API_KEY[:20]}...")
+            # Score with Groq
+            print(f"🤖 Calling Groq API to score transcript with {len(questions_for_scoring)} questions...")
             try:
-                llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
-                print(f"🤖 Gemini result: {'Success' if llm_result else 'Failed - returned None'}")
+                llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
+                print(f"🤖 Groq result: {'Success' if llm_result else 'Failed - returned None'}")
             except Exception as e:
-                scoring_error = f"Gemini API error: {str(e)}"
+                scoring_error = f"Groq API error: {str(e)}"
                 print(f"❌ {scoring_error}")
                 llm_result = None
 
         # Always create or find the interview session (even if scoring fails)
-        session = db.query(InterviewSession).filter(
-            InterviewSession.job_id == vi.job_id,
-            InterviewSession.application_id == candidate_id_for_questions
-        ).first()
+        # Check via vi.session_id first (created by end_interview)
+        session = None
+        if vi.session_id:
+            session = db.query(InterviewSession).filter(
+                InterviewSession.id == vi.session_id
+            ).first()
+
+        if not session:
+            session = db.query(InterviewSession).filter(
+                InterviewSession.job_id == vi.job_id,
+                InterviewSession.application_id == candidate_id_for_questions
+            ).first()
 
         # Fallback: try with candidate_id directly
         if not session:
@@ -1290,7 +1348,7 @@ def upload_transcript_and_score(
 
         if llm_result:
             raw_score = float(llm_result.get("overall_score", 0))
-            # Cap to 0-10 range (Gemini sometimes returns 0-100 scale)
+            # Cap to 0-10 range (LLM sometimes returns 0-100 scale)
             session.overall_score = raw_score / 10.0 if raw_score > 10 else raw_score
             rec_str = llm_result.get("recommendation", "reject")
             session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
@@ -1318,11 +1376,11 @@ def upload_transcript_and_score(
                 if not q_id:
                     continue
 
-                # Ensure question_id is int (Gemini may return string)
+                # Ensure question_id is int (LLM may return string)
                 try:
                     q_id = int(q_id)
                 except (ValueError, TypeError):
-                    print(f"⚠️ Invalid question_id from Gemini: {q_id}, skipping")
+                    print(f"⚠️ Invalid question_id from LLM: {q_id}, skipping")
                     continue
 
                 # Validate question_id exists in our approved questions
@@ -1352,7 +1410,7 @@ def upload_transcript_and_score(
                 else:
                     answer.answer_text = extracted or "Answer not extracted from transcript"
 
-                # Cap scores to 0-10 range (Gemini sometimes returns 0-100)
+                # Cap scores to 0-10 range (LLM sometimes returns 0-100)
                 def cap_score(val, max_val=10.0):
                     s = float(val or 0)
                     return s / 10.0 if s > max_val else s

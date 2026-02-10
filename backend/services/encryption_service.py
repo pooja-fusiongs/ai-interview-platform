@@ -59,3 +59,55 @@ def decrypt_pii(ciphertext: str) -> str:
     f = Fernet(key.encode() if isinstance(key, str) else key)
     decrypted = f.decrypt(ciphertext.encode())
     return decrypted.decode()
+
+
+def safe_decrypt(value: str) -> str:
+    """Decrypt a value, falling back to the original if it's not encrypted or key is missing."""
+    if not value:
+        return value
+    try:
+        return decrypt_pii(value)
+    except Exception:
+        return value
+
+
+# PII field lists
+USER_PII_FIELDS = [
+    "full_name", "phone", "mobile", "gender", "location", "bio",
+    "internship_company", "internship_position",
+    "preferred_location", "preferred_job_title",
+]
+
+APPLICATION_PII_FIELDS = ["applicant_phone"]
+
+
+def encrypt_user_fields(user_obj) -> None:
+    """Encrypt PII fields on a User ORM object in-place."""
+    for field in USER_PII_FIELDS:
+        val = getattr(user_obj, field, None)
+        if val and isinstance(val, str):
+            setattr(user_obj, field, encrypt_pii(val))
+
+
+def decrypt_user_fields(user_obj) -> None:
+    """Decrypt PII fields on a User ORM object in-place."""
+    for field in USER_PII_FIELDS:
+        val = getattr(user_obj, field, None)
+        if val and isinstance(val, str):
+            setattr(user_obj, field, safe_decrypt(val))
+
+
+def encrypt_application_fields(app_obj) -> None:
+    """Encrypt PII fields on a JobApplication ORM object in-place."""
+    for field in APPLICATION_PII_FIELDS:
+        val = getattr(app_obj, field, None)
+        if val and isinstance(val, str):
+            setattr(app_obj, field, encrypt_pii(val))
+
+
+def decrypt_application_fields(app_obj) -> None:
+    """Decrypt PII fields on a JobApplication ORM object in-place."""
+    for field in APPLICATION_PII_FIELDS:
+        val = getattr(app_obj, field, None)
+        if val and isinstance(val, str):
+            setattr(app_obj, field, safe_decrypt(val))

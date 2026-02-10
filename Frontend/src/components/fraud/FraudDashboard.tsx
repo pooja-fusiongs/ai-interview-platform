@@ -31,7 +31,7 @@ import {
   VerifiedUser,
   Warning,
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 // Helper to get trust score color

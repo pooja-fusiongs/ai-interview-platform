@@ -28,7 +28,6 @@ auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 auth_router.include_router(signup_router)
 auth_router.include_router(signin_router)
 auth_router.include_router(change_password_router)
-auth_router.include_router(change_password_router)
 
 # User info endpoint
 @auth_router.get("/me", response_model=UserResponse)

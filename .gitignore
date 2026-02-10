@@ -14,5 +14,11 @@ __pycache__/
 # Uploaded files
 backend/uploads/
 
+# Windows artifacts
+nul
+
+# Production env
+.env.production
+
 # Claude Code
 .claude/

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, FormControlLabel, Checkbox, Button, Alert, Divider
 } from '@mui/material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import gdprService from '../../services/gdprService';
 
 const CandidateVideoConsent: React.FC = () => {

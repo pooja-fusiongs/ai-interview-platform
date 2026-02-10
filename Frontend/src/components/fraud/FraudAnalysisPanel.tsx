@@ -17,7 +17,7 @@ import {
   TrendingUp,
   Flag
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 const getScoreColor = (score: number): string => {

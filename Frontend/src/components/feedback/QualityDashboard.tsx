@@ -30,7 +30,7 @@ import {
   CheckCircleOutline,
   BarChart,
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface DashboardData {

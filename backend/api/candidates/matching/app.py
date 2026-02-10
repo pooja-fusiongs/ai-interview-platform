@@ -134,11 +134,12 @@ async def get_matching_candidates(
             if not skills:
                 skills = ["General Skills"]
             
+            from services.encryption_service import safe_decrypt
             candidate_data = CandidateMatchResponse(
                 id=application.id,
                 name=application.applicant_name,
                 email=application.applicant_email,
-                phone=application.applicant_phone,
+                phone=safe_decrypt(application.applicant_phone) if application.applicant_phone else application.applicant_phone,
                 location=job.location,  # Using job location as candidate location for now
                 category=job.department,
                 matchScore=match_score,
@@ -148,10 +149,19 @@ async def get_matching_candidates(
                 industry=job.department,
                 languages=["English"],  # Default language
                 resumeId=resume.id if resume else None,
-                hasResume=resume is not None,
+                hasResume=resume is not None,  # Show resume button if resume record exists (even if path is NULL)
                 appliedAt=application.applied_at.strftime("%Y-%m-%d %H:%M:%S"),
                 status=application.status  # Add current status
             )
+            
+            # Debug log for resume status
+            if resume:
+                if resume.resume_path:
+                    print(f"✅ Resume found for {application.applicant_name}: ID={resume.id}, Path={resume.resume_path}")
+                else:
+                    print(f"⚠️  Resume found but path is NULL for {application.applicant_name}: ID={resume.id}, will try to find by pattern")
+            else:
+                print(f"⚠️  No resume for {application.applicant_name} (Application ID: {application.id})")
             
             candidates.append(candidate_data)
         

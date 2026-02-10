@@ -141,3 +141,108 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
         traceback.print_exc()
         return False
 
+
+def send_expert_review_request(expert_email: str, expert_name: str, job_title: str, candidate_name: str, question_count: int):
+    """Notify domain expert that new questions need review."""
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@ai-interview-platform.com")
+
+    if not SENDGRID_API_KEY:
+        print("[Email] SENDGRID_API_KEY not set, skipping expert review notification")
+        return False
+
+    try:
+        subject = f"Questions Ready for Review: {job_title}"
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+        <tr><td align="center">
+            <table width="560" cellpadding="0" cellspacing="0" style="background:#fff; border-radius:8px; border:1px solid #e5e7eb;">
+                <tr><td style="padding:40px;">
+                    <h2 style="margin:0 0 20px; color:#f59e0b; font-size:22px;">Questions Need Your Review</h2>
+                    <p style="color:#374151; font-size:15px;">Dear <strong>{expert_name}</strong>,</p>
+                    <p style="color:#374151; font-size:15px;">{question_count} AI-generated questions for <strong>{candidate_name}</strong> (position: <strong>{job_title}</strong>) are ready for your expert review.</p>
+                    <table width="100%" style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin:20px 0;">
+                        <tr><td style="padding:15px 20px; font-size:14px; color:#374151;">
+                            <strong>Position:</strong> {job_title}<br>
+                            <strong>Candidate:</strong> {candidate_name}<br>
+                            <strong>Questions:</strong> {question_count}
+                        </td></tr>
+                    </table>
+                    <p style="color:#374151; font-size:14px;">Please log in to the platform to review and approve these questions.</p>
+                    <p style="color:#6b7280; font-size:14px; margin-top:20px;">- <strong>AI Interview Platform Team</strong></p>
+                </td></tr>
+            </table>
+        </td></tr>
+    </table>
+</body>
+</html>"""
+
+        message = Mail(
+            from_email=Email(SENDER_EMAIL, "AI Interview Platform"),
+            to_emails=To(expert_email),
+            subject=subject,
+            html_content=Content("text/html", html_content)
+        )
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        print(f"[Email] Expert review request sent to {expert_email}, status: {response.status_code}")
+        return True
+    except Exception as e:
+        print(f"[Email] Failed to send expert review request: {e}")
+        return False
+
+
+def send_review_completed_notification(recruiter_email: str, recruiter_name: str, job_title: str, candidate_name: str, approved_count: int, total_count: int):
+    """Notify recruiter that expert has completed reviewing all questions."""
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@ai-interview-platform.com")
+
+    if not SENDGRID_API_KEY:
+        print("[Email] SENDGRID_API_KEY not set, skipping review completed notification")
+        return False
+
+    try:
+        subject = f"Expert Review Completed: {job_title}"
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+        <tr><td align="center">
+            <table width="560" cellpadding="0" cellspacing="0" style="background:#fff; border-radius:8px; border:1px solid #e5e7eb;">
+                <tr><td style="padding:40px;">
+                    <h2 style="margin:0 0 20px; color:#10b981; font-size:22px;">Expert Review Completed</h2>
+                    <p style="color:#374151; font-size:15px;">Dear <strong>{recruiter_name}</strong>,</p>
+                    <p style="color:#374151; font-size:15px;">The expert review for <strong>{candidate_name}</strong> (position: <strong>{job_title}</strong>) has been completed.</p>
+                    <table width="100%" style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin:20px 0;">
+                        <tr><td style="padding:15px 20px; font-size:14px; color:#374151;">
+                            <strong>Approved:</strong> {approved_count} / {total_count} questions<br>
+                            <strong>Status:</strong> Review Complete
+                        </td></tr>
+                    </table>
+                    <p style="color:#374151; font-size:14px;">You can now proceed with scheduling the interview.</p>
+                    <p style="color:#6b7280; font-size:14px; margin-top:20px;">- <strong>AI Interview Platform Team</strong></p>
+                </td></tr>
+            </table>
+        </td></tr>
+    </table>
+</body>
+</html>"""
+
+        message = Mail(
+            from_email=Email(SENDER_EMAIL, "AI Interview Platform"),
+            to_emails=To(recruiter_email),
+            subject=subject,
+            html_content=Content("text/html", html_content)
+        )
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        print(f"[Email] Review completed notification sent to {recruiter_email}, status: {response.status_code}")
+        return True
+    except Exception as e:
+        print(f"[Email] Failed to send review completed notification: {e}")
+        return False
+

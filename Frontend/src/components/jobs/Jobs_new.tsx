@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { jobService } from '../../services/jobService'
 import { jobApplicationService } from '../../services/jobApplicationService'
@@ -21,14 +21,15 @@ import {
   MenuItem,
   IconButton
 } from '@mui/material'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import JobCreationForm from './JobCreationForm'
 import JobApplicationForm from './JobApplicationForm'
-import JobDetails from './jobDetails'
+import JobDetails from './JobDetails'
 import { CanCreateJob, CanApplyJobs } from '../common/RoleBasedComponent'
 
 const Jobs = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchQuery, setSearchQuery] = useState('')
   const [openAddJobDialog, setOpenAddJobDialog] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
@@ -214,6 +215,19 @@ const Jobs = () => {
       setFilteredJobs(staticJobs)
     }
   }
+
+  // Auto-open job details when navigating back from Manage/View Candidates
+  useEffect(() => {
+    const state = location.state as { openJobId?: number | string } | null
+    if (state?.openJobId && allJobs.length > 0) {
+      const job = allJobs.find((j: any) => String(j.id) === String(state.openJobId))
+      if (job) {
+        setSelectedJob(job)
+        setShowJobDetails(true)
+      }
+      navigate('/jobs', { replace: true })
+    }
+  }, [allJobs, location.state])
 
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString)

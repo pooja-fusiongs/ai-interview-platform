@@ -3,7 +3,7 @@ import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Divider
 } from '@mui/material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import atsService from '../../services/atsService';
 
 interface JobMapping {

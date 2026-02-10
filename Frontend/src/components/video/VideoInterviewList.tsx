@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import { Visibility, PlayArrow, Cancel, Search, FilterList, Close } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { useAuth } from '../../contexts/AuthContext';
 

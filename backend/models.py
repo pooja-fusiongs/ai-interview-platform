@@ -202,6 +202,31 @@ class InterviewQuestion(Base):
     candidate = relationship("JobApplication")
     reviewer = relationship("User")
 
+class InterviewQuestionVersion(Base):
+    __tablename__ = "interview_question_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_at = Column(DateTime(timezone=True), server_default=func.now())
+    change_type = Column(String, nullable=False)  # "created", "edit", "approve", "reject"
+
+    # Snapshot of all fields at this version
+    question_text = Column(Text, nullable=False)
+    sample_answer = Column(Text, nullable=True)
+    question_type = Column(String, nullable=True)
+    difficulty = Column(String, nullable=True)
+    skill_focus = Column(String, nullable=True)
+    is_approved = Column(Boolean, default=False)
+    expert_notes = Column(Text, nullable=True)
+    change_summary = Column(Text, nullable=True)
+
+    # Relationships
+    question = relationship("InterviewQuestion")
+    changer = relationship("User")
+
+
 class QuestionGenerationSession(Base):
     __tablename__ = "question_generation_sessions"
 
@@ -482,6 +507,7 @@ class VideoInterview(Base):
     notes = Column(Text, nullable=True)
     transcript = Column(Text, nullable=True)
     transcript_generated_at = Column(DateTime(timezone=True), nullable=True)
+    transcript_source = Column(String, nullable=True)  # "recording", "upload", or "mock"
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

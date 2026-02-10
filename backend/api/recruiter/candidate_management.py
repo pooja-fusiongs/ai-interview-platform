@@ -34,39 +34,7 @@ def _require_recruiter(user: User):
         raise HTTPException(status_code=403, detail="Recruiter or admin access required")
 
 
-def _parse_resume_text(file_path: str, filename: str) -> str:
-    """Extract text from PDF or DOCX file."""
-    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    text = ""
-
-    if ext == "pdf":
-        try:
-            from PyPDF2 import PdfReader
-            reader = PdfReader(file_path)
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-        except Exception as e:
-            print(f"PDF parsing error: {e}")
-
-    elif ext in ("docx", "doc"):
-        try:
-            from docx import Document
-            doc = Document(file_path)
-            for para in doc.paragraphs:
-                text += para.text + "\n"
-        except Exception as e:
-            print(f"DOCX parsing error: {e}")
-
-    elif ext == "txt":
-        try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                text = f.read()
-        except Exception as e:
-            print(f"TXT parsing error: {e}")
-
-    return text.strip()
+from services.resume_parser import parse_resume as _parse_resume_full
 
 
 # ─────────────────────────────────────────────
@@ -100,11 +68,12 @@ async def add_candidate_to_job(
         raise HTTPException(status_code=400, detail="Candidate with this email already added to this job")
 
     # Create application record
+    from services.encryption_service import encrypt_pii
     application = JobApplication(
         job_id=job_id,
         applicant_name=name,
         applicant_email=email,
-        applicant_phone=phone,
+        applicant_phone=encrypt_pii(phone) if phone else phone,
         experience_years=experience_years,
         current_position=current_position,
         status="Added by Recruiter"
@@ -123,20 +92,18 @@ async def add_candidate_to_job(
         with open(file_path, "wb") as f:
             f.write(content)
 
-        # Parse text
-        parsed_text = _parse_resume_text(file_path, resume.filename)
-
-        # Extract skills by matching against job skills
-        parsed_skills = []
-        if parsed_text and job.skills_required:
+        # Parse resume: extract text, skills, experience level
+        job_skills_list = []
+        if job.skills_required:
             try:
-                job_skills = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
-                text_lower = parsed_text.lower()
-                parsed_skills = [s for s in job_skills if s.lower() in text_lower]
+                job_skills_list = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
             except Exception:
                 pass
 
-        # Create resume record
+        parse_result = _parse_resume_full(file_path, resume.filename, job_skills_list, experience_years)
+        parsed_text = parse_result["parsed_text"]
+        parsed_skills = parse_result["skills"]
+
         candidate_resume = CandidateResume(
             candidate_id=application.id,
             job_id=job_id,
@@ -146,7 +113,8 @@ async def add_candidate_to_job(
             parsed_text=parsed_text,
             skills=json.dumps(parsed_skills),
             experience_years=experience_years,
-            parsing_status="completed" if parsed_text else "failed"
+            experience_level=parse_result["experience_level"],
+            parsing_status=parse_result["parsing_status"]
         )
         db.add(candidate_resume)
         resume_info = {
@@ -267,11 +235,12 @@ def get_job_candidates(
         recommendation = interview.recommendation.value if has_scores and interview.recommendation else None
         session_id = interview.id if interview else None
 
+        from services.encryption_service import safe_decrypt
         result.append(RecruiterCandidateResponse(
             id=app.id,
             applicant_name=app.applicant_name,
             applicant_email=app.applicant_email,
-            applicant_phone=app.applicant_phone,
+            applicant_phone=safe_decrypt(app.applicant_phone) if app.applicant_phone else app.applicant_phone,
             experience_years=app.experience_years,
             current_position=app.current_position,
             status=app.status,

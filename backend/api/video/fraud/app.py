@@ -32,6 +32,7 @@ from schemas import (
     VideoInterviewListResponse,
 )
 from api.auth.jwt_handler import get_current_active_user, require_any_role
+from services.biometric_analyzer import run_real_analysis
 from services.fraud_simulator import run_full_simulated_analysis
 
 router = APIRouter(tags=["Fraud Detection"])
@@ -68,8 +69,13 @@ def trigger_fraud_analysis(
             status_code=404, detail="Video interview not found"
         )
 
-    # Run simulated analysis
-    results = run_full_simulated_analysis(video_interview_id)
+    # Resolve recording file path and run real analysis (falls back to simulator)
+    recording_path = None
+    if vi.recording_url:
+        base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+        recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
+        recording_path = os.path.normpath(recording_path)
+    results = run_real_analysis(video_interview_id, recording_path)
 
     # Upsert: check for existing record
     existing = (

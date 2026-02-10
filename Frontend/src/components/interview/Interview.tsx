@@ -11,7 +11,7 @@ import {
   LinearProgress,
   Chip,
 } from '@mui/material'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import { apiClient } from '../../services/api'
 import { interviewService, ApprovedQuestion } from '../../services/interviewService'
 

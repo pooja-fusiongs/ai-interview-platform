@@ -11,7 +11,7 @@ import {
   CircularProgress,
   Skeleton
 } from '@mui/material'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import { jobService } from '../../services/jobService'
 import { videoInterviewService } from '../../services/videoInterviewService'
 import { questionGenerationService } from '../../services/questionGenerationService'

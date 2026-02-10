@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import {
     Box,
     Typography,
@@ -12,7 +12,10 @@ import {
     Button,
     Tabs,
     Tab,
-    TextField
+    TextField,
+    Dialog,
+    DialogTitle,
+    DialogContent,
 } from '@mui/material';
 import {
     Edit as EditIcon,
@@ -20,6 +23,8 @@ import {
     Lock as LockIcon,
     CheckCircle as CheckCircleIcon,
     Schedule as ScheduleIcon,
+    History as HistoryIcon,
+    Close as CloseIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
 import questionGenerationService from '../../services/questionGenerationService';
@@ -63,6 +68,10 @@ const InterviewOutline: React.FC = () => {
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editedAnswer, setEditedAnswer] = useState<string>('');
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyQuestionLabel, setHistoryQuestionLabel] = useState('');
 
     // Get navigation context from URL parameters
     const fromPage = searchParams.get('from');
@@ -320,6 +329,21 @@ const InterviewOutline: React.FC = () => {
     const handleCancelEdit = () => {
         setEditingQuestionId(null);
         setEditedAnswer('');
+    };
+
+    const handleOpenHistory = async (questionId: string, questionIndex: number) => {
+        setHistoryQuestionLabel(`Question ${questionIndex + 1}`);
+        setHistoryDialogOpen(true);
+        setHistoryLoading(true);
+        try {
+            const data = await questionGenerationService.getQuestionHistory(parseInt(questionId));
+            setHistoryData(data);
+        } catch {
+            toast.error('Failed to load history');
+            setHistoryData([]);
+        } finally {
+            setHistoryLoading(false);
+        }
     };
 
     if (loading) {
@@ -673,6 +697,17 @@ const InterviewOutline: React.FC = () => {
                                             >
                                                 <EditIcon fontSize="small" />
                                             </IconButton>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleOpenHistory(question.id, questionSet?.questions.findIndex(q => q.id === question.id) ?? 0)}
+                                                sx={{
+                                                    color: '#6b7280',
+                                                    cursor: 'pointer'
+                                                }}
+                                                title="View history"
+                                            >
+                                                <HistoryIcon fontSize="small" />
+                                            </IconButton>
                                             {/* Approve Button */}
                                             {question.status === 'pending' && (
                                                 <Button
@@ -910,6 +945,97 @@ const InterviewOutline: React.FC = () => {
 
 
             </Box>
+
+            {/* Version History Dialog */}
+            <Dialog
+                open={historyDialogOpen}
+                onClose={() => setHistoryDialogOpen(false)}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{ sx: { borderRadius: 3 } }}
+            >
+                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                        {historyQuestionLabel} — Edit History
+                    </Typography>
+                    <IconButton size="small" onClick={() => setHistoryDialogOpen(false)}>
+                        <CloseIcon fontSize="small" />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent dividers>
+                    {historyLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                            <CircularProgress size={32} />
+                        </Box>
+                    ) : historyData.length === 0 ? (
+                        <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', py: 4 }}>
+                            No edit history available for this question.
+                        </Typography>
+                    ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {historyData.map((version: any, idx: number) => (
+                                <Box
+                                    key={version.id || idx}
+                                    sx={{
+                                        borderLeft: '3px solid',
+                                        borderColor:
+                                            version.change_type === 'approve' ? '#10b981'
+                                                : version.change_type === 'reject' ? '#ef4444'
+                                                    : version.change_type === 'created' ? '#3b82f6'
+                                                        : '#f59e0b',
+                                        pl: 2,
+                                        py: 1.5,
+                                        backgroundColor: '#f9fafb',
+                                        borderRadius: '0 8px 8px 0',
+                                    }}
+                                >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+                                        <Chip
+                                            label={`v${version.version_number}`}
+                                            size="small"
+                                            sx={{ fontWeight: 700, fontSize: '0.7rem', height: 22, backgroundColor: '#e5e7eb' }}
+                                        />
+                                        <Chip
+                                            label={version.change_type}
+                                            size="small"
+                                            sx={{
+                                                fontWeight: 600,
+                                                fontSize: '0.7rem',
+                                                height: 22,
+                                                backgroundColor:
+                                                    version.change_type === 'approve' ? '#d1fae5'
+                                                        : version.change_type === 'reject' ? '#fee2e2'
+                                                            : version.change_type === 'created' ? '#dbeafe'
+                                                                : '#fef3c7',
+                                                color:
+                                                    version.change_type === 'approve' ? '#065f46'
+                                                        : version.change_type === 'reject' ? '#991b1b'
+                                                            : version.change_type === 'created' ? '#1e40af'
+                                                                : '#92400e',
+                                            }}
+                                        />
+                                        {version.changer_name && (
+                                            <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                                                by {version.changer_name}
+                                            </Typography>
+                                        )}
+                                        {version.changed_at && (
+                                            <Typography variant="caption" sx={{ color: '#9ca3af', ml: 'auto' }}>
+                                                {new Date(version.changed_at).toLocaleString()}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                    {version.change_summary && (
+                                        <Typography variant="body2" sx={{ color: '#374151', fontSize: '0.85rem' }}>
+                                            {version.change_summary}
+                                        </Typography>
+                                    )}
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+                </DialogContent>
+            </Dialog>
         </Navigation>
     );
 };

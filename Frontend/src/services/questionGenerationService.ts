@@ -238,7 +238,21 @@ class QuestionGenerationService {
       }
     }
   }
+
+  /**
+   * Get version history for a specific question
+   */
+  async getQuestionHistory(questionId: number) {
+    try {
+      const response = await apiClient.get(`/api/interview/questions/${questionId}/history`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching question history:', error);
+      return [];
+    }
+  }
 }
+
 
 
 export const questionGenerationService = new QuestionGenerationService();

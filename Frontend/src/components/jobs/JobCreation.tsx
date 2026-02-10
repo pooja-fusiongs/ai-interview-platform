@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import JobCreationForm from './JobCreationForm'
 import { Job } from '../../types'
 

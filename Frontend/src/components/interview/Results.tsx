@@ -27,7 +27,7 @@ import FilterListIcon from '@mui/icons-material/FilterList'
 import CloseIcon from '@mui/icons-material/Close'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import { interviewService, InterviewSession, InterviewListItem } from '../../services/interviewService'
 
 const Results = () => {

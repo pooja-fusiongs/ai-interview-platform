@@ -5,6 +5,7 @@ FREE, FAST, and NO QUOTA LIMITS!
 """
 
 import json
+import os
 import re
 from typing import List, Dict, Any, Optional
 
@@ -34,6 +35,44 @@ def _extract_json(text: str) -> Any:
                 continue
     
     return None
+
+
+def transcribe_audio_with_groq(file_path: str) -> Optional[str]:
+    """Transcribe audio/video file using Groq Whisper API (free)."""
+    try:
+        import config
+        if not config.GROQ_API_KEY:
+            print("[transcribe_audio] GROQ_API_KEY not set, skipping real transcription")
+            return None
+        if not os.path.exists(file_path):
+            print(f"[transcribe_audio] File not found: {file_path}")
+            return None
+        file_size = os.path.getsize(file_path)
+        if file_size < 1000:
+            print(f"[transcribe_audio] File too small ({file_size} bytes), likely no real audio")
+            return None
+        print(f"[transcribe_audio] Transcribing {os.path.basename(file_path)} ({file_size} bytes)...")
+        from groq import Groq
+        client = Groq(api_key=config.GROQ_API_KEY)
+        with open(file_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                file=(os.path.basename(file_path), audio_file),
+                model="whisper-large-v3",
+                language="en",
+                response_format="text"
+            )
+        text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+        if not text or len(text) < 10:
+            print("[transcribe_audio] Transcription too short or empty, falling back to mock")
+            return None
+        print(f"[transcribe_audio] Real transcription done! ({len(text)} chars)")
+        return text
+    except ImportError:
+        print("[transcribe_audio] groq library not installed")
+        return None
+    except Exception as e:
+        print(f"[transcribe_audio] Transcription failed: {e}")
+        return None
 
 
 def score_transcript_with_groq(

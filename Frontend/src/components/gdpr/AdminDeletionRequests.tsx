@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Chip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 

@@ -318,6 +318,27 @@ class ExpertReviewRequest(BaseModel):
     updated_question: Optional[str] = None
     updated_answer: Optional[str] = None
 
+# Question Version History Schemas
+class InterviewQuestionVersionResponse(BaseModel):
+    id: int
+    question_id: int
+    version_number: int
+    changed_by: Optional[int] = None
+    changer_name: Optional[str] = None
+    changed_at: Optional[datetime] = None
+    change_type: str
+    question_text: str
+    sample_answer: Optional[str] = None
+    question_type: Optional[str] = None
+    difficulty: Optional[str] = None
+    skill_focus: Optional[str] = None
+    is_approved: bool = False
+    expert_notes: Optional[str] = None
+    change_summary: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 # Interview Session Schemas
 class InterviewSessionCreate(BaseModel):
     job_id: int

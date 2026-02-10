@@ -4,7 +4,7 @@ import {
   CircularProgress, Alert, Chip
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface FeedbackEntry {

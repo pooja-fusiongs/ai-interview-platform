@@ -4,7 +4,7 @@ import {
   Grid, Divider
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface FeedbackData {

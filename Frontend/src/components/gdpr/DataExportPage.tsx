@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import { gdprService } from '../../services/gdprService';
 import toast from 'react-hot-toast';
 

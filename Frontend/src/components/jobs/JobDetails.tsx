@@ -80,64 +80,29 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         
         if (response.status === 200) {
           const data = response.data
-          
-          // Try different possible data structures
-          let applications = data.applications || data.data || data || []
-          
-          // If it's not an array, try to extract from different properties
-          if (!Array.isArray(applications)) {
-            console.log('📊 Data is not an array, trying to find applications...')
-            applications = []
+          const totalApps = data.total_applications || 0
+
+          // Use backend-computed stats (cross-references InterviewSession data)
+          if (data.stats) {
+            const stats = {
+              total: totalApps,
+              applied: data.stats.applied || 0,
+              interview: data.stats.interview || 0,
+              selected: data.stats.selected || 0,
+              rejected: data.stats.rejected || 0
+            }
+            console.log('Stats from backend:', stats)
+            setApplicationStats(stats)
+          } else {
+            // Fallback: all as applied
+            setApplicationStats({
+              total: totalApps,
+              applied: totalApps,
+              interview: 0,
+              selected: 0,
+              rejected: 0
+            })
           }
-          
-          console.log('📊 Applications array:', applications)
-          console.log('📊 Applications length:', applications.length)
-          console.log('📊 First few applications:', applications.slice(0, 3))
-          
-          if (applications.length > 0) {
-            console.log('📊 Application statuses:', applications.map((app: any) => ({
-              id: app.id,
-              status: app.status,
-              applicant_name: app.applicant_name || app.name
-            })))
-          }
-          
-          // Count applications by status (case-insensitive)
-          const stats = {
-            total: applications.length,
-            applied: applications.filter((app: any) => {
-              if (!app.status) return false
-              const status = app.status.toLowerCase()
-              return status.includes('applied') || status.includes('submitted') || status === 'pending'
-            }).length,
-            interview: applications.filter((app: any) => {
-              if (!app.status) return false
-              const status = app.status.toLowerCase()
-              return status.includes('interview') || status.includes('reviewed') || status.includes('screening')
-            }).length,
-            selected: applications.filter((app: any) => {
-              if (!app.status) return false
-              const status = app.status.toLowerCase()
-              return status.includes('hired') || status.includes('selected') || status.includes('accepted') || status.includes('approved')
-            }).length,
-            rejected: applications.filter((app: any) => {
-              if (!app.status) return false
-              const status = app.status.toLowerCase()
-              return status.includes('rejected') || status.includes('declined')
-            }).length
-          }
-          
-          console.log('📊 Calculated stats:', stats)
-          
-          // If no applications match our status filters but we have applications, 
-          // show them all as "applied" for now
-          if (applications.length > 0 && stats.applied === 0 && stats.interview === 0 && stats.selected === 0 && stats.rejected === 0) {
-            console.log('⚠️ No status matches found, showing all as applied')
-            stats.applied = applications.length
-          }
-          setApplicationStats(stats)
-        } else {
-          console.log('❌ API returned non-200 status:', response.status)
         }
       } catch (error: any) {
         console.error('❌ Error fetching application stats:', error)
@@ -761,12 +726,12 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
         {/* About This Role */}
         <Box sx={{
-          marginBottom: '16px',
+          marginBottom: '8px',
           background: 'white',
-          padding: { xs: '12px', sm: '24px' },
+          padding: { xs: '10px', sm: '16px' },
           borderRadius: '16px'
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <Typography variant="h5" sx={{
               fontSize: '20px',
               fontWeight: 700,
@@ -853,7 +818,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               fontSize: { xs: '14px', sm: '16px' },
               color: '#64748b',
               lineHeight: 1.6,
-              marginBottom: '16px',
+              marginBottom: 0,
               wordBreak: 'break-word'
             }}>
               {selectedJob.fullDescription || selectedJob.description}
@@ -879,16 +844,16 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           if (!skills.length) return null
           return (
             <Box sx={{
-              marginBottom: '16px',
+              marginBottom: '8px',
               background: 'white',
-              padding: { xs: '12px', sm: '24px' },
+              padding: { xs: '10px', sm: '16px' },
               borderRadius: '16px'
             }}>
               <Typography variant="h5" sx={{
                 fontSize: '20px',
                 fontWeight: 700,
                 color: '#1e293b',
-                marginBottom: '16px',
+                marginBottom: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px'
@@ -920,18 +885,18 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         {/* Qualifications */}
         {selectedJob.requirements && (
           <Box sx={{
-            marginBottom: '16px',
+            marginBottom: '8px',
             background: 'white',
-            padding: { xs: '12px', sm: '24px' },
+            padding: { xs: '10px', sm: '16px' },
             borderRadius: '16px'
           }}>
             <Typography variant="h5" sx={{
               fontSize: '20px',
               fontWeight: 700,
               color: '#1e293b',
-              marginBottom: '16px'
+              marginBottom: '10px'
             }}>
-              Qualifications
+              Skills
             </Typography>
             <Box component="ul" sx={{
               margin: 0,
@@ -956,16 +921,16 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         {/* Responsibilities */}
         {selectedJob.responsibilities && (
           <Box sx={{
-            marginBottom: '16px',
+            marginBottom: '8px',
             background: 'white',
-            padding: { xs: '12px', sm: '24px' },
+            padding: { xs: '10px', sm: '16px' },
             borderRadius: '16px'
           }}>
             <Typography variant="h5" sx={{
               fontSize: '20px',
               fontWeight: 700,
               color: '#1e293b',
-              marginBottom: '16px'
+              marginBottom: '10px'
             }}>
               Responsibility
             </Typography>

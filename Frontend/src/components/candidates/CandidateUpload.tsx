@@ -1,6 +1,6 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import axios from 'axios'
 import {
   Box,

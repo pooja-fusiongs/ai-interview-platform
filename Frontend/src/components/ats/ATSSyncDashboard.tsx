@@ -4,7 +4,7 @@ import {
   TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert
 } from '@mui/material';
 import {  Work, People, CloudSync } from '@mui/icons-material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import atsService from '../../services/atsService';
 
 interface SyncLog {

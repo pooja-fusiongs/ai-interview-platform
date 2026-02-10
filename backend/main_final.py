@@ -28,7 +28,6 @@ from crud import (
     get_job, update_job
 )
 from api.auth.app import auth_router, get_current_active_user
-from api.auth.app import auth_router, get_current_active_user
 from api.jobs.create_job.app import router as create_job_router
 from services.ai_question_generator import get_question_generator
 from pydantic import BaseModel
@@ -571,93 +570,7 @@ def check_application_status(
             detail=f"Database error: {str(e)}"
         )
 
-def _parse_resume_text(file_path: str, filename: str) -> str:
-    """Extract text from PDF or DOCX file."""
-    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    text = ""
-
-    if ext == "pdf":
-        try:
-            from PyPDF2 import PdfReader
-            reader = PdfReader(file_path)
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-        except Exception as e:
-            print(f"PDF parsing error: {e}")
-
-    elif ext in ("docx", "doc"):
-        try:
-            from docx import Document
-            doc = Document(file_path)
-            for para in doc.paragraphs:
-                text += para.text + "\n"
-        except Exception as e:
-            print(f"DOCX parsing error: {e}")
-
-    return text.strip()
-
-
-@app.post("/api/job/apply")
-def apply_for_job(
-    application_data: dict,
-    db: Session = Depends(get_db)
-):
-    """Submit job application"""
-    try:
-        # Check if job exists
-        job = db.query(Job).filter(Job.id == application_data["job_id"]).first()
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        # Check if user already applied
-        existing_application = db.query(JobApplication).filter(
-            JobApplication.job_id == application_data["job_id"],
-            JobApplication.applicant_email == application_data["applicant_email"]
-        ).first()
-
-        if existing_application:
-            raise HTTPException(
-                status_code=400,
-                detail="You have already applied for this job"
-            )
-
-        # Create new application
-        new_application = JobApplication(
-            job_id=application_data["job_id"],
-            applicant_name=application_data["applicant_name"],
-            applicant_email=application_data["applicant_email"],
-            applicant_phone=application_data.get("applicant_phone"),
-            resume_url=application_data.get("resume_url"),
-            cover_letter=application_data.get("cover_letter"),
-            experience_years=application_data.get("experience_years"),
-            current_company=application_data.get("current_company"),
-            current_position=application_data.get("current_position"),
-            expected_salary=application_data.get("expected_salary"),
-            availability=application_data.get("availability"),
-            status="Applied"
-        )
-
-        db.add(new_application)
-        db.commit()
-        db.refresh(new_application)
-
-        return {
-            "message": "Application submitted successfully",
-            "application_id": new_application.id,
-            "status": "Applied"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error submitting application: {e}")
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to submit application: {str(e)}"
-        )
+from services.resume_parser import parse_resume as _parse_resume_full
 
 
 @app.post("/api/job/apply-with-resume")
@@ -694,11 +607,12 @@ async def apply_for_job_with_resume(
             raise HTTPException(status_code=400, detail="You have already applied for this job")
 
         # Create new application
+        from services.encryption_service import encrypt_pii as _enc_pii
         new_application = JobApplication(
             job_id=job_id,
             applicant_name=applicant_name,
             applicant_email=applicant_email,
-            applicant_phone=applicant_phone,
+            applicant_phone=_enc_pii(applicant_phone) if applicant_phone else applicant_phone,
             cover_letter=cover_letter,
             experience_years=experience_years,
             current_company=current_company,
@@ -725,21 +639,18 @@ async def apply_for_job_with_resume(
             with open(file_path, "wb") as f:
                 f.write(content)
 
-            # Parse resume text
-            parsed_text = _parse_resume_text(file_path, resume.filename)
-
-            # Extract skills by matching against job skills
-            parsed_skills = []
-            if parsed_text and job.skills_required:
+            # Parse resume: extract text, skills, experience level
+            job_skills_list = []
+            if job.skills_required:
                 try:
-                    job_skills = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
-                    if job_skills:
-                        text_lower = parsed_text.lower()
-                        parsed_skills = [s for s in job_skills if s.lower() in text_lower]
+                    job_skills_list = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
                 except Exception:
                     pass
 
-            # Create CandidateResume record - THIS IS THE KEY FIX!
+            parse_result = _parse_resume_full(file_path, resume.filename, job_skills_list, experience_years)
+            parsed_text = parse_result["parsed_text"]
+            parsed_skills = parse_result["skills"]
+
             candidate_resume = CandidateResume(
                 candidate_id=new_application.id,
                 job_id=job_id,
@@ -749,7 +660,8 @@ async def apply_for_job_with_resume(
                 parsed_text=parsed_text,
                 skills=json.dumps(parsed_skills),
                 experience_years=experience_years,
-                parsing_status="completed" if parsed_text else "failed"
+                experience_level=parse_result["experience_level"],
+                parsing_status=parse_result["parsing_status"]
             )
             db.add(candidate_resume)
 
@@ -788,47 +700,6 @@ async def apply_for_job_with_resume(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to submit application: {str(e)}"
-        )
-
-@app.get("/api/job/{job_id}/applications")
-def get_job_applications(
-    job_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Get all applications for a job (for recruiters/admins)"""
-    try:
-        # Check if job exists
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
-        # Check if user has permission to view applications
-        if current_user.role not in [UserRole.RECRUITER, UserRole.ADMIN, UserRole.DOMAIN_EXPERT]:
-            raise HTTPException(
-                status_code=403, 
-                detail="Not authorized to view job applications"
-            )
-        
-        # Get applications
-        applications = db.query(JobApplication).filter(
-            JobApplication.job_id == job_id
-        ).all()
-        
-        return {
-            "job_id": job_id,
-            "job_title": job.title,
-            "applications": applications,
-            "total_applications": len(applications)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error fetching job applications: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database error: {str(e)}"
         )
 
 @app.get("/api/candidates")
@@ -983,16 +854,17 @@ def get_candidates(
                     question_session_id = qs.id
                     break
 
+            from services.encryption_service import safe_decrypt as _sd
             candidate_data = {
                 "id": candidate.id,
-                "name": candidate.full_name or candidate.username,
+                "name": _sd(candidate.full_name) or candidate.username,
                 "role": "candidate",
                 "experience": f"{candidate.experience_years or (candidate.id % 10) + 1} years",
                 "department": candidate.department or departments[candidate.id % len(departments)],
                 "hireDate": candidate.created_at.strftime("%Y-%m-%d") if candidate.created_at else "2024-01-01",
                 "skills": skills,
                 "email": candidate.email,
-                "phone": candidate.phone or f"+1 (555) {100 + candidate.id:03d}-{1000 + (candidate.id * 7) % 9000:04d}",
+                "phone": _sd(candidate.phone) or f"+1 (555) {100 + candidate.id:03d}-{1000 + (candidate.id * 7) % 9000:04d}",
                 "score": float(candidate.score) if candidate.score is not None else 0.0,
                 "status": "active" if candidate.is_active else "pending",
                 "onlineStatus": "Active" if is_online else "Inactive",
@@ -1180,26 +1052,28 @@ def get_candidate_profile(
             except:
                 certifications_list = []
         
+        # Decrypt PII fields
+        from services.encryption_service import safe_decrypt
         return {
             "success": True,
             "data": {
                 "id": current_user.id,
                 "email": current_user.email,
-                "full_name": current_user.full_name or "",
-                "mobile": current_user.mobile or current_user.phone or "",
-                "gender": current_user.gender or "male",
-                "location": current_user.location or "",
-                "bio": current_user.bio or "",
+                "full_name": safe_decrypt(current_user.full_name) or "",
+                "mobile": safe_decrypt(current_user.mobile or current_user.phone) or "",
+                "gender": safe_decrypt(current_user.gender) or "male",
+                "location": safe_decrypt(current_user.location) or "",
+                "bio": safe_decrypt(current_user.bio) or "",
                 "education": education_list,
                 "has_internship": current_user.has_internship or False,
-                "internship_company": current_user.internship_company or "",
-                "internship_position": current_user.internship_position or "",
+                "internship_company": safe_decrypt(current_user.internship_company) or "",
+                "internship_position": safe_decrypt(current_user.internship_position) or "",
                 "internship_duration": current_user.internship_duration or "",
                 "internship_salary": current_user.internship_salary or "",
                 "skills": skills_list,
                 "languages": languages_list,
-                "preferred_location": current_user.preferred_location or "",
-                "preferred_job_title": current_user.preferred_job_title or "",
+                "preferred_location": safe_decrypt(current_user.preferred_location) or "",
+                "preferred_job_title": safe_decrypt(current_user.preferred_job_title) or "",
                 "preferred_job_type": current_user.preferred_job_type or "full-time",
                 "profile_image": current_user.profile_image or "",
                 "resume_url": current_user.resume_url or "",
@@ -1298,7 +1172,11 @@ def update_candidate_profile(
             current_user.bio = profile_data["bio"]
         if "company" in profile_data:
             current_user.company = profile_data["company"]
-        
+
+        # Encrypt PII fields before writing to DB
+        from services.encryption_service import encrypt_user_fields
+        encrypt_user_fields(current_user)
+
         db.commit()
         print(f"🔍 Debug - Profile update committed to database")
         
@@ -1418,11 +1296,12 @@ def generate_questions_for_candidate(
     
     # If no application, create one
     if not application:
+        from services.encryption_service import encrypt_pii as _enc
         application = JobApplication(
             job_id=request.job_id,
             applicant_name=candidate_user.full_name or candidate_user.username,
             applicant_email=candidate_user.email,
-            applicant_phone=candidate_user.phone,
+            applicant_phone=_enc(candidate_user.phone) if candidate_user.phone else candidate_user.phone,
             status="Applied"
         )
         db.add(application)
@@ -1614,10 +1493,10 @@ def generate_score_for_candidate(
     total_score = 0
     scored_items = 0
     
-    # Try to score with AI (Gemini or Groq)
-    from services.gemini_service import score_transcript_with_gemini
+    # Score with Groq AI
+    from services.groq_service import score_transcript_with_groq
     import config
-    
+
     # Prepare questions for scoring
     questions_for_scoring = [
         {
@@ -1627,25 +1506,17 @@ def generate_score_for_candidate(
         }
         for q in questions
     ]
-    
+
     llm_result = None
-    
-    # Try Gemini first
-    if config.GEMINI_API_KEY:
+
+    if config.GROQ_API_KEY:
         try:
-            print(f"🤖 Trying Gemini API for scoring...")
-            llm_result = score_transcript_with_gemini(transcript, questions_for_scoring)
-        except Exception as e:
-            print(f"⚠️ Gemini failed: {e}")
-    
-    # Try Groq if Gemini failed
-    if not llm_result and config.GROQ_API_KEY:
-        try:
-            print(f"🤖 Trying Groq API for scoring...")
-            from services.groq_service import score_transcript_with_groq
+            print(f"🤖 Scoring transcript with Groq API...")
             llm_result = score_transcript_with_groq(transcript, questions_for_scoring)
         except Exception as e:
-            print(f"⚠️ Groq failed: {e}")
+            print(f"⚠️ Groq scoring failed: {e}")
+    else:
+        print(f"⚠️ GROQ_API_KEY not configured, falling back to mock scoring")
     
     # Use AI results if available
     if llm_result:

@@ -34,7 +34,7 @@ import {
   // MoreVert,
   // Settings,
 } from '@mui/icons-material';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import atsService from '../../services/atsService';
 import ATSConnectionForm from './ATSConnectionForm';
 

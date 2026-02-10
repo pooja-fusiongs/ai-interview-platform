@@ -4,7 +4,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Divider
 } from '@mui/material';
 import { AutoFixHigh } from '@mui/icons-material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface CorrelationData {

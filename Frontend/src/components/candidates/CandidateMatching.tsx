@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '../../services/api'
 import {
   Box,
@@ -30,7 +30,7 @@ import {
   FormControl,
   ClickAwayListener
 } from '@mui/material'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import { candidateService, CandidateMatchResponse, CandidateFilters } from '../../services/candidateService'
 import { showSuccess, showError, showLoading, dismissToast } from '../../utils/toast'
 
@@ -696,73 +696,89 @@ const CandidateMatching = () => {
     setSelectedResume(null)
   }
 
+  const navigate = useNavigate()
+
   return (
     <Navigation noScroll={true}>
       <Box sx={{ padding: { xs: '12px', sm: '16px', md: '24px' }, background: '#f8fafc', minHeight: '100vh' }}>
 
-        {/* Search and Filter Section */}
-        <Box sx={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: "space-between" }}>
+        {/* Header - matches Manage Candidates style */}
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'flex-start' }, mb: '10px', gap: { xs: 1.5, sm: 3 } }}>
           <Box>
-            <TextField
-              fullWidth
-              placeholder="Search here..."
-              value={searchQuery}
-              onChange={handleSearchChange}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <i className="fas fa-search" style={{ color: '#64748b', fontSize: '16px' }} />
-                  </InputAdornment>
-                ),
-                endAdornment: searchQuery && (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setSearchQuery('')
-                        setCurrentPage(1)
-                      }}
-                      sx={{ color: '#64748b' }}
-                    >
-                      <i className="fas fa-times" style={{ fontSize: '14px' }} />
-                    </IconButton>
-                  </InputAdornment>
-                )
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '8px',
-                  backgroundColor: '#f8fafc',
-                  height: "50px",
-                  '&:hover': {
-                    backgroundColor: '#f1f5f9'
-                  },
-                  '&.Mui-focused': {
-                    backgroundColor: 'white'
-                  }
-                }
-              }}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, mb: { xs: 0, sm: 2 } }}>
+              <IconButton onClick={() => navigate('/jobs', { state: { openJobId: jobId } })} sx={{ color: '#64748b' }}>
+                <i className="fas fa-arrow-left" />
+              </IconButton>
+              <Typography sx={{ fontSize: { xs: '18px', sm: '24px' }, fontWeight: 700, color: '#1e293b' }}>
+                View Candidates
+              </Typography>
+            </Box>
           </Box>
 
-          <Box>
+          <Box sx={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+            <Box sx={{ flex: 1 }}>
+              <TextField
+                fullWidth
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                sx={{
+                  maxWidth: { xs: 'none', sm: '500px' },
+                  padding: 0,
+                  '& .MuiOutlinedInput-root': {
+                    height: '40px',
+                    borderRadius: '12px',
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      backgroundColor: '#f8fafc'
+                    },
+                    '&.Mui-focused': {
+                      backgroundColor: 'white'
+                    }
+                  }
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <i className="fas fa-search" style={{ color: '#64748b', fontSize: '16px' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setSearchQuery('')
+                          setCurrentPage(1)
+                        }}
+                        sx={{ color: '#64748b' }}
+                      >
+                        <i className="fas fa-times" style={{ fontSize: '14px' }} />
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Box>
             <Button
               variant="outlined"
               onClick={handleOpenFilterModal}
               sx={{
                 minWidth: '120px',
-                height: '45px',
-                border: '2px solid #f59e0b',
+                height: '40px',
+                background: 'rgba(245, 158, 11, 0.1)',
                 color: '#f59e0b',
+                border: '2px solid #f59f0baf',
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
                 textTransform: 'none',
+                whiteSpace: 'nowrap',
                 position: 'relative',
                 '&:hover': {
                   border: '2px solid #f59e0b',
                   color: '#f59e0b',
-                  background: 'rgba(245, 158, 11, 0.1)',
+                  background: 'rgba(245, 158, 11, 0.15)',
                 }
               }}
             >
@@ -786,15 +802,6 @@ const CandidateMatching = () => {
               )}
             </Button>
           </Box>
-        </Box>
-
-        {/* Results Summary */}
-        <Box sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px'
-        }}>
         </Box>
 
         {/* Candidates Table */}

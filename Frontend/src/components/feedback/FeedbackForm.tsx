@@ -3,7 +3,7 @@ import {
   Box, Typography, TextField, Button, Slider, Switch, FormControlLabel,
   Select, MenuItem, FormControl, InputLabel, Paper, Alert, Grid
 } from '@mui/material';
-import Naivgation from '../layout/sidebar';
+import Naivgation from '../layout/Sidebar';
 import feedbackService from '../../services/feedbackService';
 
 const FeedbackForm: React.FC = () => {

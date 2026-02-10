@@ -7,7 +7,7 @@ import {
   InputAdornment, Skeleton
 } from '@mui/material'
 import { toast } from 'react-hot-toast'
-import Navigation from '../layout/sidebar'
+import Navigation from '../layout/Sidebar'
 import { recruiterService, RecruiterCandidate } from '../../services/recruiterService'
 
 const RecruiterCandidates = () => {
@@ -175,7 +175,7 @@ const RecruiterCandidates = () => {
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'flex-start' }, mb: "10px", gap: { xs: 1.5, sm: 3 } }}>
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, mb: { xs: 0, sm: 2 } }}>
-              <IconButton onClick={() => navigate(-1)} sx={{ color: '#64748b' }}>
+              <IconButton onClick={() => navigate('/jobs', { state: { openJobId: jobId } })} sx={{ color: '#64748b' }}>
                 <i className="fas fa-arrow-left" />
               </IconButton>
               <Typography sx={{ fontSize: { xs: '18px', sm: '24px' }, fontWeight: 700, color: '#1e293b' }}>

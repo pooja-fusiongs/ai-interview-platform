@@ -44,7 +44,7 @@ import {
   PersonOff,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import Navigation from '../layout/sidebar';
+import Navigation from '../layout/Sidebar';
 import feedbackService from '../../services/feedbackService';
 
 interface Feedback {

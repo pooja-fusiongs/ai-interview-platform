@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database import get_db
-from models import Job, JobApplication
+from models import Job, JobApplication, User, InterviewSession, InterviewQuestion, InterviewAnswer
 from schemas import JobApplicationCreate, JobApplicationResponse
 
 router = APIRouter()
@@ -50,11 +50,12 @@ def apply_for_job(
             )
         
         # Create new application
+        from services.encryption_service import encrypt_pii
         new_application = JobApplication(
             job_id=application_data.job_id,
             applicant_name=application_data.applicant_name,
             applicant_email=application_data.applicant_email,
-            applicant_phone=application_data.applicant_phone,
+            applicant_phone=encrypt_pii(application_data.applicant_phone) if application_data.applicant_phone else application_data.applicant_phone,
             resume_url=application_data.resume_url,
             cover_letter=application_data.cover_letter,
             experience_years=application_data.experience_years,
@@ -64,7 +65,7 @@ def apply_for_job(
             availability=application_data.availability,
             status="Applied"
         )
-        
+
         db.add(new_application)
         db.commit()
         db.refresh(new_application)
@@ -87,20 +88,90 @@ def apply_for_job(
 
 @router.get("/api/job/{job_id}/applications")
 def get_job_applications(job_id: int, db: Session = Depends(get_db)):
-    """Get all applications for a specific job"""
+    """Get all applications for a specific job with real stats"""
     try:
         applications = db.query(JobApplication).filter(
             JobApplication.job_id == job_id
         ).all()
-        
+
+        # Compute real stats: match application → session
+        app_ids = [a.id for a in applications]
+        app_to_session = {}
+        if app_ids:
+            # 1) Direct match via InterviewSession.application_id
+            matched_sessions = (
+                db.query(InterviewSession)
+                .filter(
+                    InterviewSession.application_id.in_(app_ids),
+                    InterviewSession.application_id.isnot(None),
+                )
+                .order_by(InterviewSession.created_at.desc())
+                .all()
+            )
+            for s in matched_sessions:
+                if s.application_id not in app_to_session:
+                    app_to_session[s.application_id] = s
+
+            # 2) Fallback for unmatched apps: use InterviewQuestion → InterviewAnswer chain
+            unmatched = [aid for aid in app_ids if aid not in app_to_session]
+            if unmatched:
+                rows = (
+                    db.query(InterviewQuestion.candidate_id, InterviewAnswer.session_id)
+                    .join(InterviewAnswer, InterviewAnswer.question_id == InterviewQuestion.id)
+                    .filter(InterviewQuestion.candidate_id.in_(unmatched))
+                    .distinct()
+                    .all()
+                )
+                if rows:
+                    sids = list(set(r[1] for r in rows))
+                    sess_map = {s.id: s for s in db.query(InterviewSession).filter(InterviewSession.id.in_(sids)).all()}
+                    for aid, sid in rows:
+                        if aid not in app_to_session and sid in sess_map:
+                            s = sess_map[sid]
+                            # Only use sessions that belong to this job
+                            if s.job_id == job_id:
+                                app_to_session[aid] = s
+
+        applied_count = 0
+        interview_count = 0
+        selected_count = 0
+        rejected_count = 0
+
+        for app_item in applications:
+            session = app_to_session.get(app_item.id)
+
+            if session and session.recommendation:
+                rec = session.recommendation.value if hasattr(session.recommendation, 'value') else str(session.recommendation)
+                if rec in ('select', 'next_round'):
+                    selected_count += 1
+                elif rec == 'reject':
+                    rejected_count += 1
+                else:
+                    applied_count += 1
+            elif session and session.status:
+                st = session.status.value if hasattr(session.status, 'value') else str(session.status)
+                if st in ('in_progress', 'completed', 'scored'):
+                    interview_count += 1
+                else:
+                    applied_count += 1
+            else:
+                applied_count += 1
+
         return {
-            "success": True,
-            "data": applications,
-            "total": len(applications)
+            "job_id": job_id,
+            "job_title": "",
+            "applications": applications,
+            "total_applications": len(applications),
+            "stats": {
+                "applied": len(applications),
+                "interview": interview_count,
+                "selected": selected_count,
+                "rejected": rejected_count
+            }
         }
-        
+
     except Exception as e:
-        print(f"❌ Error fetching applications: {e}")
+        print(f"Error fetching applications: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch applications: {str(e)}"
