@@ -21,11 +21,11 @@ sys.path.insert(0, current_dir)
 from database import engine, get_db
 from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, QuestionDifficulty, QuestionType
 from schemas import (
-    JobCreate, JobResponse,
+    JobCreate, JobUpdate, JobResponse,
     CandidateProfileResponse
 )
 from crud import (
-    get_job
+    get_job, update_job
 )
 from api.auth.app import auth_router, get_current_active_user
 from api.auth.app import auth_router, get_current_active_user
@@ -301,7 +301,10 @@ def get_job_stats(db: Session = Depends(get_db)):
             Job.status == "Open",
             Job.is_active == True
         ).count()
-        
+        closed_jobs = db.query(Job).filter(
+            Job.status == "Closed"
+        ).count()
+
         if total_jobs == 0:
             return {
                 "message": "No jobs found in database",
@@ -328,6 +331,7 @@ def get_job_stats(db: Session = Depends(get_db)):
         return {
             "total_jobs": total_jobs,
             "open_jobs": open_jobs,
+            "closed_jobs": closed_jobs,
             "job_types": dict(job_types),
             "experience_levels": dict(experience_levels),
             "companies": dict(companies),
@@ -417,6 +421,32 @@ def read_job(job_id: int, db: Session = Depends(get_db)):
     db_job = get_job(db, job_id=job_id)
     if db_job is None:
         raise HTTPException(status_code=404, detail="Job not found in your database")
+    return db_job
+
+@app.put("/api/jobs/{job_id}", response_model=JobResponse)
+def update_job_endpoint(
+    job_id: int,
+    job_data: JobUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update a job (recruiter/admin only)"""
+    if current_user.role not in [UserRole.RECRUITER, UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="Not authorized to update jobs")
+    db_job = update_job(db, job_id=job_id, job_update=job_data, user_id=current_user.id)
+    if db_job is None:
+        # Fallback: allow update if user is admin even if not the creator
+        if current_user.role == UserRole.ADMIN:
+            db_job = db.query(Job).filter(Job.id == job_id).first()
+            if not db_job:
+                raise HTTPException(status_code=404, detail="Job not found")
+            update_data = job_data.dict(exclude_unset=True)
+            for key, value in update_data.items():
+                setattr(db_job, key, value)
+            db.commit()
+            db.refresh(db_job)
+        else:
+            raise HTTPException(status_code=404, detail="Job not found or not authorized")
     return db_job
 
 @app.get("/api/companies")

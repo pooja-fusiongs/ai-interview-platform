@@ -5,12 +5,16 @@ import {
   Typography,
   Box,
   Button,
-  Chip
+  Chip,
+  TextField,
+  Snackbar,
+  Alert
 } from '@mui/material'
 import { CanApplyJobs, CanViewCandidates } from '../common/RoleBasedComponent'
 import { apiClient } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { jobApplicationService } from '../../services/jobApplicationService'
+import { jobService } from '../../services/jobService'
 
 interface JobDetailsProps {
   selectedJob: any;
@@ -54,7 +58,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   const [otherJobs, setOtherJobs] = useState<any[]>([])
   const [jobsLoading, setJobsLoading] = useState(true)
   const [hasApplied, setHasApplied] = useState(false)
-  
+  const [isEditingDesc, setIsEditingDesc] = useState(false)
+  const [editedDescription, setEditedDescription] = useState('')
+  const [savingDesc, setSavingDesc] = useState(false)
+  const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
+
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -758,24 +766,156 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           padding: { xs: '12px', sm: '24px' },
           borderRadius: '16px'
         }}>
-          <Typography variant="h5" sx={{
-            fontSize: '20px',
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}>
-            About This Role
-          </Typography>
-          <Typography sx={{
-            fontSize: { xs: '14px', sm: '16px' },
-            color: '#64748b',
-            lineHeight: 1.6,
-            marginBottom: '16px',
-            wordBreak: 'break-word'
-          }}>
-            {selectedJob.fullDescription || selectedJob.description}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <Typography variant="h5" sx={{
+              fontSize: '20px',
+              fontWeight: 700,
+              color: '#1e293b',
+            }}>
+              About This Role
+            </Typography>
+            {(user?.role === 'recruiter' || user?.role === 'admin') && !isEditingDesc && (
+              <IconButton
+                onClick={() => {
+                  setEditedDescription(selectedJob.fullDescription || selectedJob.description || '')
+                  setIsEditingDesc(true)
+                }}
+                sx={{ color: '#64748b', '&:hover': { color: '#f59e0b', background: 'rgba(245,158,11,0.1)' } }}
+                size="small"
+              >
+                <i className="fas fa-pen" style={{ fontSize: 14 }}></i>
+              </IconButton>
+            )}
+          </Box>
+          {isEditingDesc ? (
+            <Box>
+              <TextField
+                multiline
+                minRows={4}
+                maxRows={12}
+                fullWidth
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                sx={{
+                  mb: '12px',
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    '& fieldset': { borderColor: '#e2e8f0' },
+                    '&:hover fieldset': { borderColor: '#f59e0b' },
+                    '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
+                  }
+                }}
+              />
+              <Box sx={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <Button
+                  onClick={() => setIsEditingDesc(false)}
+                  disabled={savingDesc}
+                  sx={{
+                    textTransform: 'none', fontWeight: 600, fontSize: '13px',
+                    color: '#64748b', borderRadius: '8px', padding: '6px 16px',
+                    '&:hover': { background: '#f1f5f9' }
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  disabled={savingDesc}
+                  onClick={async () => {
+                    try {
+                      setSavingDesc(true)
+                      await jobService.updateJob(selectedJob.id, { description: editedDescription })
+                      selectedJob.description = editedDescription
+                      selectedJob.fullDescription = editedDescription
+                      setIsEditingDesc(false)
+                      setToast({ open: true, message: 'Description updated successfully', severity: 'success' })
+                    } catch (err) {
+                      console.error('Error updating description:', err)
+                      setToast({ open: true, message: 'Failed to update description', severity: 'error' })
+                    } finally {
+                      setSavingDesc(false)
+                    }
+                  }}
+                  sx={{
+                    textTransform: 'none', fontWeight: 600, fontSize: '13px',
+                    borderRadius: '8px', padding: '6px 20px',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' }
+                  }}
+                >
+                  {savingDesc ? 'Saving...' : 'Save'}
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <Typography sx={{
+              fontSize: { xs: '14px', sm: '16px' },
+              color: '#64748b',
+              lineHeight: 1.6,
+              marginBottom: '16px',
+              wordBreak: 'break-word'
+            }}>
+              {selectedJob.fullDescription || selectedJob.description}
+            </Typography>
+          )}
         </Box>
+
+        {/* Required Skills */}
+        {selectedJob.skills_required && (() => {
+          let skills: string[] = []
+          try {
+            if (typeof selectedJob.skills_required === 'string') {
+              skills = JSON.parse(selectedJob.skills_required)
+            } else if (Array.isArray(selectedJob.skills_required)) {
+              skills = selectedJob.skills_required
+            }
+          } catch {
+            // Try comma-separated fallback
+            if (typeof selectedJob.skills_required === 'string') {
+              skills = selectedJob.skills_required.split(',').map((s: string) => s.trim()).filter(Boolean)
+            }
+          }
+          if (!skills.length) return null
+          return (
+            <Box sx={{
+              marginBottom: '16px',
+              background: 'white',
+              padding: { xs: '12px', sm: '24px' },
+              borderRadius: '16px'
+            }}>
+              <Typography variant="h5" sx={{
+                fontSize: '20px',
+                fontWeight: 700,
+                color: '#1e293b',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <i className="fas fa-code" style={{ color: '#6366f1', fontSize: '18px' }}></i>
+                Required Skills
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {skills.map((skill: string, index: number) => (
+                  <Chip
+                    key={index}
+                    label={skill}
+                    sx={{
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      height: '32px',
+                      backgroundColor: '#ede9fe',
+                      color: '#6d28d9',
+                      border: '1px solid #ddd6fe',
+                      '&:hover': { backgroundColor: '#ddd6fe' }
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )
+        })()}
 
         {/* Qualifications */}
         {selectedJob.requirements && (
@@ -1160,6 +1300,18 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           )}
         </Box>
       </Box>
+
+      {/* Toast notification */}
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3000}
+        onClose={() => setToast(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setToast(prev => ({ ...prev, open: false }))} severity={toast.severity} sx={{ width: '100%' }}>
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

@@ -5,7 +5,7 @@ produces a recommendation (select / next_round / reject),
 and generates strengths/weaknesses summaries.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict
 from config import SCORE_SELECT_THRESHOLD, SCORE_NEXT_ROUND_THRESHOLD
 
 

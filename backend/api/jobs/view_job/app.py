@@ -213,7 +213,10 @@ def get_job_stats(db: Session = Depends(get_db)):
             Job.status == "Open",
             Job.is_active == True
         ).count()
-        
+        closed_jobs = db.query(Job).filter(
+            Job.status == "Closed"
+        ).count()
+
         # Get job counts by type
         job_types = db.query(Job.job_type, db.func.count(Job.id)).filter(
             Job.is_active == True
@@ -227,6 +230,7 @@ def get_job_stats(db: Session = Depends(get_db)):
         return {
             "total_jobs": total_jobs,
             "open_jobs": open_jobs,
+            "closed_jobs": closed_jobs,
             "job_types": dict(job_types),
             "experience_levels": dict(experience_levels)
         }

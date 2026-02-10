@@ -425,7 +425,7 @@ const RecruiterCandidates = () => {
                   </Button>
                 )}
 
-                {/* View/Review Questions */}
+                {/* Review Questions */}
                 {candidate.has_questions && candidate.question_session_id && (
                   <Button
                     size="medium"
@@ -433,20 +433,20 @@ const RecruiterCandidates = () => {
                     sx={{
                       minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
-                      background: candidate.questions_status === 'approved' ? '#dcfce720' : '#fef3c720',
-                      color: candidate.questions_status === 'approved' ? '#16a34a' : '#d97706',
-                      border: `1px solid ${candidate.questions_status === 'approved' ? '#16a34a40' : '#d9770640'}`,
+                      background: '#fef3c720',
+                      color: '#d97706',
+                      border: '1px solid #d9770640',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
-                      '&:hover': { background: candidate.questions_status === 'approved' ? '#dcfce740' : '#fef3c740' }
+                      '&:hover': { background: '#fef3c740' }
                     }}
                   >
                     <i className="fas fa-list-check" style={{ marginRight: 6 }} />
-                    {candidate.questions_status === 'approved' ? 'Questions Approved' : 'Review Questions'}
+                    Review Questions
                   </Button>
                 )}
 
                 {/* Upload Transcript */}
-                {candidate.questions_status === 'approved' && !candidate.has_scores && (
+                {candidate.has_questions && !candidate.has_scores && (
                   <Button
                     size="small"
                     onClick={() => { setSelectedCandidate(candidate); setTranscriptDialogOpen(true) }}

@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
-from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, UserRole
+from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession
 from schemas import (
     QuestionGenerateRequest, 
     InterviewQuestionResponse, 
@@ -489,7 +489,6 @@ def get_question_sets(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch question sets: {str(e)}")
 
-    return result
 @router.get("/question-sets-test")
 def get_question_sets_test(db: Session = Depends(get_db)):
     """

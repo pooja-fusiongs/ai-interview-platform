@@ -53,7 +53,8 @@ const Dashboard = () => {
     activeJobs: 0,
     totalCandidates: 0,
     scheduledInterviews: 0,
-    aiQuestions: 0
+    aiQuestions: 0,
+    closedJobs: 0
   })
   const [recentJobs, setRecentJobs] = useState<Job[]>([])
   const [upcomingInterviews, setUpcomingInterviews] = useState<Interview[]>([])
@@ -79,12 +80,14 @@ const Dashboard = () => {
         setRecentJobs(jobs.slice(0, 3))
 
         const activeJobsCount = jobs.filter((j: Job) => j.status === 'active' || j.status === 'Active').length
+        const closedJobsCount = jobs.filter((j: Job) => j.status === 'Closed' || j.status === 'closed').length
         const totalApplicants = jobs.reduce((sum: number, j: Job) => sum + (j.application_count || 0), 0)
 
         setStats(prev => ({
           ...prev,
           activeJobs: activeJobsCount || jobs.length,
-          totalCandidates: totalApplicants
+          totalCandidates: totalApplicants,
+          closedJobs: closedJobsCount
         }))
       }
 
@@ -159,7 +162,8 @@ const Dashboard = () => {
     { title: 'Active Jobs', value: stats.activeJobs, icon: 'fas fa-briefcase', color: 'blue', change: 'Total active' },
     { title: 'Total Candidates', value: stats.totalCandidates, icon: 'fas fa-users', color: 'green', change: 'Applicants' },
     { title: 'Interviews Scheduled', value: stats.scheduledInterviews, icon: 'fas fa-calendar', color: 'orange', change: 'Upcoming' },
-    { title: 'AI Questions Generated', value: stats.aiQuestions, icon: 'fas fa-robot', color: 'purple', change: 'Total generated' }
+    { title: 'AI Questions Generated', value: stats.aiQuestions, icon: 'fas fa-robot', color: 'purple', change: 'Total generated' },
+    { title: 'Closed Positions', value: stats.closedJobs, icon: 'fas fa-archive', color: 'red', change: 'Archived' }
   ]
 
   const renderOverview = () => (
@@ -171,7 +175,7 @@ const Dashboard = () => {
           gridTemplateColumns: {
             xs: "1fr",
             sm: "repeat(2, 1fr)",
-            md: "repeat(4, 1fr)",
+            md: "repeat(5, 1fr)",
           },
           gap: { xs: "12px", md: "16px" },
           marginBottom: { xs: "16px", md: "20px" },
@@ -214,7 +218,9 @@ const Dashboard = () => {
                       ? "linear-gradient(135deg,#10b981,#059669)"
                       : stat.color === "orange"
                         ? "linear-gradient(135deg,#f59e0b,#d97706)"
-                        : "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                        : stat.color === "red"
+                          ? "linear-gradient(135deg,#ef4444,#dc2626)"
+                          : "linear-gradient(135deg,#8b5cf6,#7c3aed)",
               }}
             >
               <i className={stat.icon}></i>
