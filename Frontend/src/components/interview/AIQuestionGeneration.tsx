@@ -22,12 +22,20 @@ import {
   Card,
   CardContent,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   FilterList as FilterIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
 import questionGenerationService from '../../services/questionGenerationService';
@@ -66,7 +74,11 @@ const ExpertReview: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [filterJob, setFilterJob] = useState<string>('all');
+  const [filterCandidate, setFilterCandidate] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+
   // Sorting state
   const [sortField, setSortField] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -79,7 +91,7 @@ const ExpertReview: React.FC = () => {
     try {
       setLoading(true);
       const response = await questionGenerationService.getQuestionSets();
-      
+
       // Transform the API response to match our interface
       const transformedData = response.data.map((item: any) => ({
         id: item.id,
@@ -96,7 +108,7 @@ const ExpertReview: React.FC = () => {
         total_questions: item.questions?.length || 0,
         experience: item.experience || '2+ years'
       }));
-      
+
       setQuestionSets(transformedData);
     } catch (error) {
       console.error('Error fetching question sets:', error);
@@ -147,7 +159,7 @@ const ExpertReview: React.FC = () => {
     navigate(`/interview-outline/${questionSet.id}`);
   };
 
- 
+
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -165,36 +177,52 @@ const ExpertReview: React.FC = () => {
   const renderSortIcon = (field: string) => {
     if (sortField !== field) {
       return (
-        <i className="fas fa-sort" style={{ 
-          color: '#9ca3af', 
-          fontSize: '12px', 
+        <i className="fas fa-sort" style={{
+          color: '#9ca3af',
+          fontSize: '12px',
           marginLeft: '6px',
           opacity: 0.8,
           transition: 'all 0.2s ease'
         }}></i>
       );
     }
-    
+
     return (
-      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'}`} style={{ 
-        color: '#d97706', 
-        fontSize: '12px', 
+      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'}`} style={{
+        color: '#d97706',
+        fontSize: '12px',
         marginLeft: '6px',
         transition: 'all 0.2s ease'
       }}></i>
     );
   };
 
+  // Unique values for filter dropdowns
+  const uniqueJobs = Array.from(new Set(questionSets.map(s => s.job_title).filter(Boolean))) as string[];
+  const uniqueCandidates = Array.from(new Set(questionSets.map(s => s.candidate_name).filter(Boolean))) as string[];
+
+  const hasActiveFilters = filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all';
+
+  const activeFilterChips = [
+    ...(filterJob !== 'all' ? [{ label: `Job: ${filterJob}`, key: 'job' }] : []),
+    ...(filterCandidate !== 'all' ? [{ label: `Candidate: ${filterCandidate}`, key: 'candidate' }] : []),
+    ...(filterStatus !== 'all' ? [{ label: `Status: ${filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}`, key: 'status' }] : []),
+  ];
+
   const filteredQuestionSets = (questionSets || []).filter((set: QuestionSet) => {
     const jobTitle = set?.job_title || '';
     const candidateName = set?.candidate_name || '';
     const candidateEmail = set?.candidate_email || '';
-    
+
     const matchesSearch = jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         candidateEmail.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    return matchesSearch;
+      candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      candidateEmail.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesJob = filterJob === 'all' || set.job_title === filterJob;
+    const matchesCandidate = filterCandidate === 'all' || set.candidate_name === filterCandidate;
+    const matchesStatus = filterStatus === 'all' || set.status === filterStatus;
+
+    return matchesSearch && matchesJob && matchesCandidate && matchesStatus;
   });
 
   // Sort the filtered data
@@ -278,65 +306,124 @@ const ExpertReview: React.FC = () => {
     <Navigation>
       <Box sx={{ p: { xs: 2, sm: 3 }, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
         {/* Header */}
-        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
-          <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
-            AI Generated Questions
-          </Typography>
-          <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b' }}>
-            Review and approve AI-generated interview questions for candidates
-          </Typography>
+        <Box sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            md: "1fr 1fr"
+          },
+          gap: { xs: 2, md: 3 },
+          alignItems: "center",
+          mb: 3
+        }}>
+          <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+            <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
+              AI Generated Questions
+            </Typography>
+            <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b' }}>
+              Review and approve AI-generated interview questions for candidates
+            </Typography>
+          </Box>
+
+          {/* Search and Filter */}
+          <Box sx={{
+            display: 'flex',
+            gap: { xs: 1, sm: 2 },
+            mb: { xs: 2, sm: 3 },
+            alignItems: { xs: 'stretch', sm: 'center' },
+            flexDirection: { xs: 'column', sm: 'row' }
+          }}>
+            <TextField
+              placeholder="Search here..."
+              variant="outlined"
+              size="small"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: '#999' }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+              sx={{
+                minWidth: { xs: '100%', sm: 300 },
+                flex: { xs: 1, sm: 'none' },
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: '#fff',
+                  borderRadius: 2
+                }
+              }}
+            />
+            <Button
+              variant="outlined"
+              startIcon={<FilterIcon />}
+              onClick={() => setFilterModalOpen(true)}
+              sx={{
+                borderColor: hasActiveFilters ? '#f59e0b' : '#e2e8f0',
+                color: hasActiveFilters ? '#f59e0b' : '#64748b',
+                background: hasActiveFilters ? 'rgba(245,158,11,0.08)' : '#fff',
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                width: { xs: '100%', sm: 'auto' },
+                '&:hover': {
+                  borderColor: '#f59e0b',
+                  color: '#f59e0b',
+                  backgroundColor: 'rgba(245,158,11,0.08)'
+                }
+              }}
+            >
+              Filter
+              {hasActiveFilters && (
+                <Box sx={{
+                  ml: 1, width: 20, height: 20, borderRadius: '50%',
+                  background: '#f59e0b', color: '#fff', fontSize: '11px',
+                  fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {activeFilterChips.length}
+                </Box>
+              )}
+            </Button>
+          </Box>
         </Box>
 
-        {/* Search and Filter */}
-        <Box sx={{
-          display: 'flex',
-          gap: { xs: 1, sm: 2 },
-          mb: { xs: 2, sm: 3 },
-          alignItems: { xs: 'stretch', sm: 'center' },
-          flexDirection: { xs: 'column', sm: 'row' }
-        }}>
-          <TextField
-            placeholder="Search here..."
-            variant="outlined"
-            size="small"
-            value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ color: '#999' }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            sx={{
-              minWidth: { xs: '100%', sm: 300 },
-              flex: { xs: 1, sm: 'none' },
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: '#fff',
-                borderRadius: 2
-              }
-            }}
-          />
-          <Button
-            variant="outlined"
-            startIcon={<FilterIcon />}
-            sx={{
-              borderColor: '#ff9800',
-              color: '#ff9800',
-              borderRadius: 2,
-              textTransform: 'none',
-              width: { xs: '100%', sm: 'auto' },
-              '&:hover': {
-                borderColor: '#f57c00',
-                backgroundColor: '#fff3e0'
-              }
-            }}
-          >
-            Filter
-          </Button>
-        </Box>
+        {/* Active filter chips */}
+        {activeFilterChips.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            {activeFilterChips.map((f) => (
+              <Chip
+                key={f.key}
+                label={f.label}
+                size="small"
+                onDelete={() => {
+                  if (f.key === 'job') setFilterJob('all');
+                  if (f.key === 'candidate') setFilterCandidate('all');
+                  if (f.key === 'status') setFilterStatus('all');
+                  setPage(0);
+                }}
+                sx={{
+                  fontWeight: 600, fontSize: '12px',
+                  backgroundColor: 'rgba(245,158,11,0.1)', color: '#d97706',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  '& .MuiChip-deleteIcon': { color: '#d97706', '&:hover': { color: '#b45309' } },
+                }}
+              />
+            ))}
+            <Chip
+              label="Clear All"
+              size="small"
+              onClick={() => { setFilterJob('all'); setFilterCandidate('all'); setFilterStatus('all'); setPage(0); }}
+              sx={{
+                fontWeight: 600, fontSize: '12px', cursor: 'pointer',
+                backgroundColor: '#f1f5f9', color: '#64748b',
+                '&:hover': { backgroundColor: '#e2e8f0' },
+              }}
+            />
+          </Box>
+        )}
 
         {/* Loading State */}
         {loading ? (
@@ -588,7 +675,7 @@ const ExpertReview: React.FC = () => {
                           >
                             <VisibilityIcon fontSize="small" />
                           </IconButton>
-                         
+
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -639,6 +726,136 @@ const ExpertReview: React.FC = () => {
           />
         </Paper>
       </Box>
+
+      {/* Filter Modal */}
+      <Dialog
+        open={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '16px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' } }}
+      >
+        <DialogTitle sx={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '20px 24px', borderBottom: '1px solid #f1f5f9',
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{
+              width: 36, height: 36, borderRadius: '10px',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <FilterIcon sx={{ color: '#fff', fontSize: 20 }} />
+            </Box>
+            <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>
+              Filter Questions
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setFilterModalOpen(false)} size="small">
+            <CloseIcon sx={{ fontSize: 20 }} />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ padding: '24px !important', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Box>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="fas fa-briefcase" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              Job Position
+            </Typography>
+            <FormControl fullWidth size="small">
+              <Select
+                value={filterJob}
+                onChange={(e) => { setFilterJob(e.target.value); setPage(0); }}
+                sx={{
+                  borderRadius: '10px',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                }}
+              >
+                <MenuItem value="all">All Jobs</MenuItem>
+                {uniqueJobs.map((job) => (
+                  <MenuItem key={job} value={job}>{job}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
+          <Box>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="fas fa-user" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              Candidate Name
+            </Typography>
+            <FormControl fullWidth size="small">
+              <Select
+                value={filterCandidate}
+                onChange={(e) => { setFilterCandidate(e.target.value); setPage(0); }}
+                sx={{
+                  borderRadius: '10px',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                }}
+              >
+                <MenuItem value="all">All Candidates</MenuItem>
+                {uniqueCandidates.map((name) => (
+                  <MenuItem key={name} value={name}>{name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
+          <Box>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="fas fa-flag" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              Status
+            </Typography>
+            <FormControl fullWidth size="small">
+              <Select
+                value={filterStatus}
+                onChange={(e) => { setFilterStatus(e.target.value); setPage(0); }}
+                sx={{
+                  borderRadius: '10px',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                }}
+              >
+                <MenuItem value="all">All Status</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="approved">Approved</MenuItem>
+                <MenuItem value="rejected">Rejected</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', gap: 1.5 }}>
+          <Button
+            onClick={() => { setFilterJob('all'); setFilterCandidate('all'); setFilterStatus('all'); setPage(0); }}
+            sx={{
+              textTransform: 'none', fontWeight: 600, fontSize: '14px',
+              color: '#64748b', borderRadius: '10px', padding: '8px 20px',
+              '&:hover': { background: '#f1f5f9' },
+            }}
+          >
+            Clear All
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setFilterModalOpen(false)}
+            sx={{
+              textTransform: 'none', fontWeight: 600, fontSize: '14px',
+              borderRadius: '10px', padding: '8px 24px',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
+              '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' },
+            }}
+          >
+            Apply Filters
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Navigation>
   );
 };

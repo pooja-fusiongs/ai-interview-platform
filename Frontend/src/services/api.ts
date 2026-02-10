@@ -9,10 +9,20 @@ import toast from 'react-hot-toast';
 // Configure axios base URL - uses environment variable or falls back to production URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
 
+// Log current API configuration (only in development)
+if (import.meta.env.DEV) {
+  console.log('🔧 API Configuration:', {
+    mode: import.meta.env.MODE,
+    baseURL: API_BASE_URL,
+    isDevelopment: import.meta.env.DEV,
+    isProduction: import.meta.env.PROD
+  });
+}
+
 // Create axios instance
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000, // Increased to 60 seconds to prevent premature cancellation
   headers: {
     'Content-Type': 'application/json',
   },

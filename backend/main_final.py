@@ -41,6 +41,55 @@ print("🔧 All data loaded dynamically from your database")
 Base.metadata.create_all(bind=engine)
 print("✅ Database tables created/verified")
 
+# Auto-migrate: add missing columns to existing tables
+def auto_migrate():
+    """Add columns that exist in models but not in the database."""
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+
+    # Define expected columns per table: (table, column, SQL type)
+    expected_columns = [
+        ("users", "is_online", "BOOLEAN DEFAULT FALSE"),
+        ("users", "last_activity", "TIMESTAMP"),
+        ("users", "last_login", "TIMESTAMP"),
+        ("users", "full_name", "VARCHAR"),
+        ("users", "phone", "VARCHAR"),
+        ("users", "department", "VARCHAR"),
+        ("users", "skills", "TEXT"),
+        ("users", "experience_years", "INTEGER"),
+        ("users", "current_position", "VARCHAR"),
+        ("users", "bio", "TEXT"),
+        ("users", "mobile", "VARCHAR"),
+        ("users", "gender", "VARCHAR"),
+        ("users", "location", "VARCHAR"),
+        ("users", "education", "TEXT"),
+        ("users", "has_internship", "BOOLEAN DEFAULT FALSE"),
+        ("users", "internship_company", "VARCHAR"),
+        ("users", "internship_position", "VARCHAR"),
+        ("users", "internship_duration", "VARCHAR"),
+        ("users", "internship_stipend", "VARCHAR"),
+        ("users", "languages", "TEXT"),
+        ("users", "profile_image", "VARCHAR"),
+    ]
+
+    with engine.begin() as conn:
+        for table, column, col_type in expected_columns:
+            if not inspector.has_table(table):
+                continue
+            existing = [c["name"] for c in inspector.get_columns(table)]
+            if column not in existing:
+                try:
+                    conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}'))
+                    print(f"  ✅ Added missing column: {table}.{column}")
+                except Exception as e:
+                    print(f"  ⚠️ Could not add {table}.{column}: {e}")
+
+try:
+    auto_migrate()
+    print("✅ Auto-migration complete")
+except Exception as e:
+    print(f"⚠️ Auto-migration skipped: {e}")
+
 app = FastAPI(
     title="AI Interview Platform API - Database Only", 
     version="1.0.0",
@@ -795,96 +844,127 @@ def get_candidates(
         
         # Apply pagination
         candidates = query.offset(skip).limit(limit).all()
-        
+
         print(f"📊 Found {len(candidates)} candidates in database")
-        
-        # Transform to match frontend expectations with nested data
+
+        if not candidates:
+            return {"success": True, "data": [], "total": 0, "message": "No candidates found"}
+
+        # --- BULK PRE-FETCH all related data (avoid N+1 queries) ---
+        candidate_emails = [c.email for c in candidates]
+
+        # 1. Bulk fetch all job applications for these candidates
+        all_applications = db.query(JobApplication).filter(
+            JobApplication.applicant_email.in_(candidate_emails)
+        ).all()
+
+        # Build email -> [application_ids] map
+        email_to_app_ids = {}
+        for app in all_applications:
+            email_to_app_ids.setdefault(app.applicant_email, []).append(app.id)
+
+        all_app_ids = [app.id for app in all_applications]
+
+        # 2. Bulk fetch all questions for all candidates' applications
+        all_questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.candidate_id.in_(all_app_ids)
+        ).all() if all_app_ids else []
+
+        # Build app_id -> questions map
+        app_id_to_questions = {}
+        for q in all_questions:
+            app_id_to_questions.setdefault(q.candidate_id, []).append(q)
+
+        # 3. Bulk fetch all sessions (without loading full transcript_text for list)
+        all_sessions = db.query(
+            InterviewSession.id,
+            InterviewSession.job_id,
+            InterviewSession.application_id,
+            InterviewSession.overall_score,
+            InterviewSession.interview_mode,
+            InterviewSession.status,
+            InterviewSession.created_at,
+        ).filter(
+            InterviewSession.application_id.in_(all_app_ids)
+        ).all() if all_app_ids else []
+
+        # Build app_id -> sessions map
+        app_id_to_sessions = {}
+        for s in all_sessions:
+            app_id_to_sessions.setdefault(s.application_id, []).append(s)
+
+        # 4. Bulk fetch latest question generation sessions
+        all_q_sessions = db.query(QuestionGenerationSession).filter(
+            QuestionGenerationSession.candidate_id.in_(all_app_ids)
+        ).order_by(QuestionGenerationSession.created_at.desc()).all() if all_app_ids else []
+
+        # Build app_id -> latest session map (first match is latest due to ordering)
+        app_id_to_q_session = {}
+        for qs in all_q_sessions:
+            if qs.candidate_id not in app_id_to_q_session:
+                app_id_to_q_session[qs.candidate_id] = qs
+
+        # --- Build response using pre-fetched data ---
+        departments = ["Engineering", "Marketing", "Sales", "HR", "Finance", "Operations"]
+        skills_pool = ["Python", "JavaScript", "React", "Node.js", "SQL", "AWS", "Docker", "Git"]
+
         candidate_list = []
-        for i, candidate in enumerate(candidates):
-            # Use real profile data if available, otherwise mock data
-            departments = ["Engineering", "Marketing", "Sales", "HR", "Finance", "Operations"]
-            skills_pool = ["Python", "JavaScript", "React", "Node.js", "SQL", "AWS", "Docker", "Git"]
-            
-            # Get real skills or use mock
+        for candidate in candidates:
+            # Skills
             real_skills = []
             if candidate.skills:
                 try:
                     real_skills = json.loads(candidate.skills)
                 except:
-                    real_skills = []
-            
+                    pass
             skills = real_skills if real_skills else skills_pool[:(candidate.id % 5) + 2]
-            
-            # Determine online status
+
             is_online = candidate.is_online if hasattr(candidate, 'is_online') else False
-            online_status = "Active" if is_online else "Inactive"
-            
-            # Get nested questions for this candidate
+
+            # Get this candidate's application IDs
+            app_ids = email_to_app_ids.get(candidate.email, [])
+
+            # Build questions from pre-fetched data
             interview_questions = []
-            questions = db.query(InterviewQuestion).filter(
-                InterviewQuestion.candidate_id.in_(
-                    db.query(JobApplication.id).filter(JobApplication.applicant_email == candidate.email)
-                )
-            ).all()
-            
-            for question in questions:
-                interview_questions.append({
-                    "id": question.id,
-                    "job_id": question.job_id,
-                    "question_text": question.question_text,
-                    "sample_answer": question.sample_answer,
-                    "question_type": question.question_type,
-                    "difficulty": question.difficulty,
-                    "skill_focus": question.skill_focus,
-                    "is_approved": question.is_approved,
-                    "expert_reviewed": question.expert_reviewed,
-                    "expert_notes": question.expert_notes,
-                    "created_at": question.created_at.isoformat() if question.created_at else None
-                })
-            
-            # Get nested transcripts for this candidate
-            interview_transcripts = []
-            sessions = db.query(InterviewSession).filter(
-                InterviewSession.application_id.in_(
-                    db.query(JobApplication.id).filter(JobApplication.applicant_email == candidate.email)
-                )
-            ).all()
-            
-            for session in sessions:
-                if session.transcript_text:
-                    interview_transcripts.append({
-                        "id": session.id,
-                        "job_id": session.job_id,
-                        "session_id": session.id,
-                        "transcript_text": session.transcript_text,
-                        "score": session.overall_score,
-                        "interview_mode": session.interview_mode,
-                        "status": session.status,
-                        "created_at": session.created_at.isoformat() if session.created_at else None
+            for app_id in app_ids:
+                for q in app_id_to_questions.get(app_id, []):
+                    interview_questions.append({
+                        "id": q.id,
+                        "job_id": q.job_id,
+                        "question_text": q.question_text,
+                        "sample_answer": q.sample_answer,
+                        "question_type": q.question_type,
+                        "difficulty": q.difficulty,
+                        "skill_focus": q.skill_focus,
+                        "is_approved": q.is_approved,
+                        "expert_reviewed": q.expert_reviewed,
+                        "expert_notes": q.expert_notes,
+                        "created_at": q.created_at.isoformat() if q.created_at else None
                     })
-            
-            # Update nested data in candidate model if needed
-            if interview_questions or interview_transcripts:
-                candidate.interview_questions = json.dumps(interview_questions)
-                candidate.interview_transcripts = json.dumps(interview_transcripts)
-                db.commit()
 
-            # Get the latest question generation session for this candidate
-            # Find application IDs for this candidate
-            application_ids = db.query(JobApplication.id).filter(
-                JobApplication.applicant_email == candidate.email
-            ).all()
-            application_id_list = [app_id[0] for app_id in application_ids]
+            # Build transcripts from pre-fetched data (without full transcript_text)
+            interview_transcripts = []
+            has_transcript = False
+            for app_id in app_ids:
+                for s in app_id_to_sessions.get(app_id, []):
+                    has_transcript = True
+                    interview_transcripts.append({
+                        "id": s.id,
+                        "job_id": s.job_id,
+                        "session_id": s.id,
+                        "score": s.overall_score,
+                        "interview_mode": s.interview_mode,
+                        "status": s.status,
+                        "created_at": s.created_at.isoformat() if s.created_at else None
+                    })
 
-            latest_question_session = None
+            # Get latest question session from pre-fetched data
             question_session_id = None
-            if application_id_list:
-                latest_question_session = db.query(QuestionGenerationSession).filter(
-                    QuestionGenerationSession.candidate_id.in_(application_id_list)
-                ).order_by(QuestionGenerationSession.created_at.desc()).first()
-
-                if latest_question_session:
-                    question_session_id = latest_question_session.id
+            for app_id in app_ids:
+                qs = app_id_to_q_session.get(app_id)
+                if qs:
+                    question_session_id = qs.id
+                    break
 
             candidate_data = {
                 "id": candidate.id,
@@ -898,14 +978,12 @@ def get_candidates(
                 "phone": candidate.phone or f"+1 (555) {100 + candidate.id:03d}-{1000 + (candidate.id * 7) % 9000:04d}",
                 "score": float(candidate.score) if candidate.score is not None else 0.0,
                 "status": "active" if candidate.is_active else "pending",
-                "onlineStatus": online_status,
+                "onlineStatus": "Active" if is_online else "Inactive",
                 "isOnline": is_online,
-                "has_transcript": getattr(candidate, 'has_transcript', False),
-                "hasTranscript": getattr(candidate, 'has_transcript', False),
+                "has_transcript": has_transcript or getattr(candidate, 'has_transcript', False),
+                "hasTranscript": has_transcript or getattr(candidate, 'has_transcript', False),
                 "lastActivity": candidate.last_activity.isoformat() if candidate.last_activity else None,
-                # Question session for Review button
                 "questionSessionId": question_session_id,
-                # Nested objects
                 "interview_questions": interview_questions,
                 "interview_transcripts": interview_transcripts
             }
@@ -983,8 +1061,8 @@ def update_candidate_activity(
         if not candidate:
             raise HTTPException(status_code=404, detail="User not found")
         
-        from datetime import datetime
-        candidate.last_activity = datetime.utcnow()
+        from datetime import datetime, timezone
+        candidate.last_activity = datetime.now(timezone.utc)
         candidate.is_online = True
         db.commit()
         
@@ -1011,24 +1089,36 @@ def update_user_activity(
 ):
     """Update current user's activity timestamp"""
     try:
-        from datetime import datetime
-        current_user.last_activity = datetime.utcnow()
+        from datetime import datetime, timezone
+        current_user.last_activity = datetime.now(timezone.utc)
         current_user.is_online = True
         db.commit()
-        
+
         return {
             "success": True,
             "message": "Activity updated",
             "isOnline": True,
             "lastActivity": current_user.last_activity.isoformat()
         }
-        
+
     except Exception as e:
+        db.rollback()
         print(f"❌ Error updating user activity: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database error: {str(e)}"
-        )
+        return {"success": False, "message": "Activity update failed"}
+
+@app.post("/api/auth/logout")
+def logout_user(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Set user offline on logout"""
+    try:
+        current_user.is_online = False
+        db.commit()
+        return {"success": True, "message": "Logged out"}
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "message": "Logout failed"}
 
 @app.get("/api/candidate/profile")
 def get_candidate_profile(
@@ -1212,48 +1302,64 @@ def update_candidate_profile(
 def get_candidates_online_status(db: Session = Depends(get_db)):
     """Get real-time online status for all candidates"""
     try:
-        from datetime import datetime, timedelta
-        
+        from datetime import datetime, timedelta, timezone
+
         # Consider users offline if no activity in last 5 minutes
-        offline_threshold = datetime.utcnow() - timedelta(minutes=5)
-        
-        candidates = db.query(User).filter(
+        now = datetime.now(timezone.utc)
+        offline_threshold = now - timedelta(minutes=5)
+
+        candidates = db.query(
+            User.id,
+            User.is_online,
+            User.last_activity,
+        ).filter(
             User.role == UserRole.CANDIDATE,
             User.is_active == True
         ).all()
-        
+
         status_updates = []
-        for candidate in candidates:
-            # Update online status based on last activity
-            is_online = (
-                candidate.is_online and 
-                candidate.last_activity and 
-                candidate.last_activity > offline_threshold
+        ids_to_set_offline = []
+        for c_id, c_is_online, c_last_activity in candidates:
+            # Make both datetimes comparable (handle naive vs aware)
+            last_act = c_last_activity
+            if last_act and last_act.tzinfo is None:
+                last_act = last_act.replace(tzinfo=timezone.utc)
+
+            is_online = bool(
+                c_is_online and
+                last_act and
+                last_act > offline_threshold
             )
-            
-            # Update database if status changed
-            if candidate.is_online != is_online:
-                candidate.is_online = is_online
-                db.commit()
-            
+
+            if c_is_online and not is_online:
+                ids_to_set_offline.append(c_id)
+
             status_updates.append({
-                "id": candidate.id,
+                "id": c_id,
                 "isOnline": is_online,
                 "onlineStatus": "Active" if is_online else "Inactive",
-                "lastActivity": candidate.last_activity.isoformat() if candidate.last_activity else None
+                "lastActivity": c_last_activity.isoformat() if c_last_activity else None
             })
-        
+
+        # Batch update offline users in one query
+        if ids_to_set_offline:
+            db.query(User).filter(User.id.in_(ids_to_set_offline)).update(
+                {User.is_online: False}, synchronize_session=False
+            )
+            db.commit()
+
         return {
             "success": True,
             "data": status_updates
         }
-        
+
     except Exception as e:
+        db.rollback()
         print(f"❌ Error getting online status: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database error: {str(e)}"
-        )
+        return {
+            "success": False,
+            "data": []
+        }
 
 # Candidate Profile endpoints
 @app.get("/test")

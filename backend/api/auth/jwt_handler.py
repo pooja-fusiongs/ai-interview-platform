@@ -59,59 +59,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    """
-    Extract user from JWT token
-    """
-    try:
-        token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        token_data = TokenData(username=username)
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    
-    user = db.query(User).filter(User.username == token_data.username).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
-
-def get_current_active_user(current_user: User = Depends(get_current_user)):
-    """
-    Get current active user from token
-    """
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-def require_role(required_role: UserRole):
-    """
-    Dependency to require specific role
-    """
-    def role_checker(current_user: User = Depends(get_current_active_user)):
-        if current_user.role != required_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required role: {required_role.value}"
-            )
-        return current_user
-    return role_checker
-
-def require_any_role(allowed_roles: list[UserRole]):
-    """
-    Dependency to require any of the specified roles
-    """
-    def role_checker(current_user: User = Depends(get_current_active_user)):
-        if current_user.role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required roles: {[role.value for role in allowed_roles]}"
-            )
-        return current_user
-    return role_checker
-
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
     Verify JWT token and extract user information
@@ -153,18 +100,30 @@ def get_current_user(token_data: TokenData = Depends(verify_token), db: Session 
         )
     return user
 
-def get_current_active_user(current_user: User = Depends(get_current_user)):
+def get_current_active_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
-    Get current active user (role-based access ready)
+    Get current active user (role-based access ready).
+    Also updates last_activity so online status stays accurate.
     """
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+
+    # Auto-update activity: only write to DB if stale (>2 min)
+    try:
+        now = datetime.utcnow()
+        if not current_user.last_activity or (now - current_user.last_activity).total_seconds() > 120:
+            current_user.last_activity = now
+            current_user.is_online = True
+            db.commit()
+    except Exception:
+        pass  # Non-critical, don't break the request
+
     return current_user
 
 def require_role(required_role: UserRole):
     """
     Dependency factory for role-based access control
-    
+
     Usage: @app.get("/admin-only", dependencies=[Depends(require_role(UserRole.ADMIN))])
     """
     def role_checker(current_user: User = Depends(get_current_active_user)):

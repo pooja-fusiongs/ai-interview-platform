@@ -74,7 +74,8 @@ class AIQuestionGenerator:
                     question_type=q_data["question_type"],
                     difficulty=q_data["difficulty"],
                     skill_focus=q_data["skill_focus"],
-                    generation_mode=self.mode
+                    generation_mode=self.mode,
+                    is_approved=True
                 )
                 db.add(question)
                 saved_questions.append(question)

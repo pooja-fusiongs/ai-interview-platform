@@ -9,7 +9,7 @@ fraud analysis records.
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime, timezone
 
@@ -386,12 +386,68 @@ def list_video_interviews(
     List video interviews.
     Recruiters/Admins see all; Candidates see only their own.
     """
-    query = db.query(VideoInterview)
-    if current_user.role == UserRole.CANDIDATE:
-        query = query.filter(VideoInterview.candidate_id == current_user.id)
+    try:
+        query = db.query(VideoInterview).options(
+            joinedload(VideoInterview.candidate),
+            joinedload(VideoInterview.interviewer),
+            joinedload(VideoInterview.job),
+        )
+        if current_user.role == UserRole.CANDIDATE:
+            query = query.filter(VideoInterview.candidate_id == current_user.id)
 
-    interviews = query.order_by(VideoInterview.scheduled_at.desc()).all()
-    return [_build_list_item(vi, db) for vi in interviews]
+        interviews = query.order_by(VideoInterview.scheduled_at.desc()).limit(100).all()
+        
+        # Optimize: Fetch all fraud analyses in one query
+        interview_ids = [vi.id for vi in interviews]
+        fraud_map = {}
+        if interview_ids:
+            frauds = db.query(FraudAnalysis).filter(
+                FraudAnalysis.video_interview_id.in_(interview_ids)
+            ).all()
+            fraud_map = {f.video_interview_id: f for f in frauds}
+        
+        # Bulk pre-fetch job applications for candidate names
+        candidate_emails = [vi.candidate.email for vi in interviews if vi.candidate]
+        job_ids_list = list(set(vi.job_id for vi in interviews if vi.job_id))
+        all_applications = []
+        if candidate_emails and job_ids_list:
+            all_applications = db.query(JobApplication).filter(
+                JobApplication.job_id.in_(job_ids_list),
+                JobApplication.applicant_email.in_(candidate_emails)
+            ).all()
+        app_name_map = {(a.job_id, a.applicant_email): a.applicant_name for a in all_applications}
+
+        # Build responses with pre-fetched data
+        result = []
+        for vi in interviews:
+            fraud = fraud_map.get(vi.id)
+
+            candidate_name = ""
+            if vi.candidate:
+                candidate_name = app_name_map.get((vi.job_id, vi.candidate.email), "")
+                if not candidate_name:
+                    candidate_name = vi.candidate.full_name or vi.candidate.username or ""
+
+            job_title = vi.job.title if vi.job else ""
+            
+            result.append(VideoInterviewListResponse(
+                id=vi.id,
+                job_title=job_title,
+                candidate_name=candidate_name,
+                status=vi.status.value if hasattr(vi.status, "value") else vi.status,
+                scheduled_at=vi.scheduled_at,
+                duration_minutes=vi.duration_minutes,
+                has_fraud_analysis=fraud is not None,
+                flag_count=fraud.flag_count if fraud else 0,
+                overall_trust_score=fraud.overall_trust_score if fraud else None,
+            ))
+        
+        return result
+    except Exception as e:
+        print(f"❌ Error listing video interviews: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to list interviews: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +465,11 @@ def get_my_video_interviews(
     """Get all video interviews for the current candidate."""
     interviews = (
         db.query(VideoInterview)
+        .options(
+            joinedload(VideoInterview.candidate),
+            joinedload(VideoInterview.interviewer),
+            joinedload(VideoInterview.job),
+        )
         .filter(VideoInterview.candidate_id == current_user.id)
         .order_by(VideoInterview.scheduled_at.desc())
         .all()
@@ -430,7 +491,11 @@ def get_video_interview(
     db: Session = Depends(get_db),
 ):
     """Get a single video interview with full details."""
-    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    vi = db.query(VideoInterview).options(
+        joinedload(VideoInterview.candidate),
+        joinedload(VideoInterview.interviewer),
+        joinedload(VideoInterview.job),
+    ).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 

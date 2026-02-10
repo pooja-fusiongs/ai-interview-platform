@@ -32,10 +32,10 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         print(f"✅ Authentication successful for: {user.username}")
         
         # Update user online status and activity
-        from datetime import datetime
+        from datetime import datetime, timezone
         user.is_online = True
-        user.last_login = datetime.utcnow()
-        user.last_activity = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
+        user.last_activity = datetime.now(timezone.utc)
         db.commit()
         print(f"🟢 Set user {user.username} as online")
         

@@ -339,14 +339,28 @@ def get_pending_reviews(
     sessions = db.query(QuestionGenerationSession).filter(
         QuestionGenerationSession.expert_review_status.in_(["pending", "in_review"])
     ).all()
-    
+
+    if not sessions:
+        return []
+
+    # Bulk pre-fetch all questions for these sessions
+    job_ids = list(set(s.job_id for s in sessions))
+    candidate_ids = list(set(s.candidate_id for s in sessions))
+
+    all_questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id.in_(job_ids),
+        InterviewQuestion.candidate_id.in_(candidate_ids)
+    ).all()
+
+    questions_map = {}
+    for q in all_questions:
+        key = (q.job_id, q.candidate_id)
+        questions_map.setdefault(key, []).append(q)
+
     result = []
     for session in sessions:
-        questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id == session.job_id,
-            InterviewQuestion.candidate_id == session.candidate_id
-        ).all()
-        
+        questions = questions_map.get((session.job_id, session.candidate_id), [])
+
         result.append(QuestionGenerationSessionResponse(
             id=session.id,
             job_id=session.job_id,
@@ -378,7 +392,7 @@ def get_pending_reviews(
                 ) for q in questions
             ]
         ))
-    
+
     return result
 
 @router.get("/question-sets", response_model=List[dict])
@@ -388,95 +402,146 @@ def get_question_sets(
 ):
     """
     Get all question sets for review (simplified endpoint for frontend)
-    Only returns sessions that have actual questions
+    Only returns sessions that have actual questions - OPTIMIZED VERSION
     """
-    sessions = db.query(QuestionGenerationSession).all()
+    try:
+        # Limit to recent sessions to avoid timeout
+        sessions = db.query(QuestionGenerationSession).order_by(
+            QuestionGenerationSession.generated_at.desc()
+        ).limit(50).all()
 
-    result = []
-    for session in sessions:
-        # Get job and candidate information
-        job = db.query(Job).filter(Job.id == session.job_id).first()
-        candidate = db.query(JobApplication).filter(JobApplication.id == session.candidate_id).first()
+        if not sessions:
+            return []
 
-        questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id == session.job_id,
-            InterviewQuestion.candidate_id == session.candidate_id
+        # Pre-fetch all related data in bulk
+        session_ids = [s.id for s in sessions]
+        job_ids = list(set([s.job_id for s in sessions]))
+        candidate_ids = list(set([s.candidate_id for s in sessions]))
+
+        # Bulk fetch jobs
+        jobs = db.query(Job).filter(Job.id.in_(job_ids)).all()
+        job_map = {j.id: j for j in jobs}
+
+        # Bulk fetch candidates
+        candidates = db.query(JobApplication).filter(JobApplication.id.in_(candidate_ids)).all()
+        candidate_map = {c.id: c for c in candidates}
+
+        # Bulk fetch all questions
+        all_questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id.in_(job_ids)
         ).all()
 
-        # Skip sessions that have no actual questions
-        if len(questions) == 0:
-            print(f"[question-sets] Skipping session {session.id} - no questions found")
-            continue
+        # Group questions by (job_id, candidate_id)
+        questions_map = {}
+        for q in all_questions:
+            key = (q.job_id, q.candidate_id)
+            if key not in questions_map:
+                questions_map[key] = []
+            questions_map[key].append(q)
 
-        # Convert to simplified format for frontend
-        question_data = []
-        for q in questions:
-            question_data.append({
-                "id": str(q.id),
-                "question": q.question_text,
-                "sample_answer": q.sample_answer,
-                "difficulty": q.difficulty.value,
-                "category": q.question_type.value,
-                "skills_tested": [q.skill_focus] if q.skill_focus else []
+        result = []
+        for session in sessions:
+            key = (session.job_id, session.candidate_id)
+            questions = questions_map.get(key, [])
+
+            # Skip sessions that have no actual questions
+            if len(questions) == 0:
+                continue
+
+            job = job_map.get(session.job_id)
+            candidate = candidate_map.get(session.candidate_id)
+
+            # Convert to simplified format for frontend
+            question_data = []
+            for q in questions:
+                question_data.append({
+                    "id": str(q.id),
+                    "question": q.question_text,
+                    "sample_answer": q.sample_answer,
+                    "difficulty": q.difficulty.value if hasattr(q.difficulty, 'value') else str(q.difficulty),
+                    "category": q.question_type.value if hasattr(q.question_type, 'value') else str(q.question_type),
+                    "skills_tested": [q.skill_focus] if q.skill_focus else []
+                })
+
+            # Determine main topics from questions
+            main_topics = list(set([q.skill_focus for q in questions if q.skill_focus]))
+
+            result.append({
+                "id": str(session.id),
+                "job_id": session.job_id,
+                "application_id": session.candidate_id,
+                "job_title": job.title if job else "Unknown Position",
+                "candidate_name": candidate.applicant_name if candidate else "Unknown Candidate",
+                "candidate_email": candidate.applicant_email if candidate else "No email provided",
+                "questions": question_data,
+                "status": session.expert_review_status,
+                "generated_at": session.generated_at.isoformat() if session.generated_at else None,
+                "mode": session.generation_mode.value if hasattr(session.generation_mode, 'value') else str(session.generation_mode),
+                "main_topics": main_topics,
+                "total_questions": len(questions),
+                "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"
             })
 
-        # Determine main topics from questions
-        main_topics = list(set([q.skill_focus for q in questions if q.skill_focus]))
-
-        result.append({
-            "id": str(session.id),
-            "job_id": session.job_id,
-            "application_id": session.candidate_id,
-            "job_title": job.title if job else "Unknown Position",
-            "candidate_name": candidate.applicant_name if candidate else "Unknown Candidate",
-            "candidate_email": candidate.applicant_email if candidate else "No email provided",
-            "questions": question_data,
-            "status": session.expert_review_status,
-            "generated_at": session.generated_at.isoformat() if session.generated_at else None,
-            "mode": session.generation_mode.value,
-            "main_topics": main_topics,
-            "total_questions": len(questions),
-            "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"
-        })
+        return result
+    except Exception as e:
+        print(f"❌ Error fetching question sets: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to fetch question sets: {str(e)}")
 
     return result
 @router.get("/question-sets-test")
 def get_question_sets_test(db: Session = Depends(get_db)):
     """
     Test endpoint to get all question sets for review (no auth required)
-    Only returns sessions that have actual questions
+    Only returns sessions that have actual questions - OPTIMIZED
     """
-    sessions = db.query(QuestionGenerationSession).all()
+    sessions = db.query(QuestionGenerationSession).order_by(
+        QuestionGenerationSession.generated_at.desc()
+    ).limit(50).all()
+
+    if not sessions:
+        return []
+
+    # Bulk pre-fetch all related data
+    job_ids = list(set(s.job_id for s in sessions))
+    candidate_ids = list(set(s.candidate_id for s in sessions))
+
+    jobs = db.query(Job).filter(Job.id.in_(job_ids)).all()
+    job_map = {j.id: j for j in jobs}
+
+    candidates = db.query(JobApplication).filter(JobApplication.id.in_(candidate_ids)).all()
+    candidate_map = {c.id: c for c in candidates}
+
+    all_questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id.in_(job_ids),
+        InterviewQuestion.candidate_id.in_(candidate_ids)
+    ).all()
+
+    questions_map = {}
+    for q in all_questions:
+        key = (q.job_id, q.candidate_id)
+        questions_map.setdefault(key, []).append(q)
 
     result = []
     for session in sessions:
-        # Get job and candidate information
-        job = db.query(Job).filter(Job.id == session.job_id).first()
-        candidate = db.query(JobApplication).filter(JobApplication.id == session.candidate_id).first()
-
-        questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id == session.job_id,
-            InterviewQuestion.candidate_id == session.candidate_id
-        ).all()
-
-        # Skip sessions that have no actual questions
-        if len(questions) == 0:
+        questions = questions_map.get((session.job_id, session.candidate_id), [])
+        if not questions:
             continue
 
-        # Convert to simplified format for frontend
-        question_data = []
-        for q in questions:
-            question_data.append({
-                "id": str(q.id),
-                "question": q.question_text,
-                "sample_answer": q.sample_answer,
-                "difficulty": q.difficulty.value,
-                "category": q.question_type.value,
-                "skills_tested": [q.skill_focus] if q.skill_focus else []
-            })
+        job = job_map.get(session.job_id)
+        candidate = candidate_map.get(session.candidate_id)
 
-        # Determine main topics from questions
-        main_topics = list(set([q.skill_focus for q in questions if q.skill_focus]))
+        question_data = [{
+            "id": str(q.id),
+            "question": q.question_text,
+            "sample_answer": q.sample_answer,
+            "difficulty": q.difficulty.value if hasattr(q.difficulty, 'value') else str(q.difficulty),
+            "category": q.question_type.value if hasattr(q.question_type, 'value') else str(q.question_type),
+            "skills_tested": [q.skill_focus] if q.skill_focus else []
+        } for q in questions]
+
+        main_topics = list(set(q.skill_focus for q in questions if q.skill_focus))
 
         result.append({
             "id": str(session.id),
@@ -488,7 +553,7 @@ def get_question_sets_test(db: Session = Depends(get_db)):
             "questions": question_data,
             "status": session.expert_review_status,
             "generated_at": session.generated_at.isoformat() if session.generated_at else None,
-            "mode": session.generation_mode.value,
+            "mode": session.generation_mode.value if hasattr(session.generation_mode, 'value') else str(session.generation_mode),
             "main_topics": main_topics,
             "total_questions": len(questions),
             "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"

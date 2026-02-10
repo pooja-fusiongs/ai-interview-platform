@@ -37,6 +37,7 @@ import {
   FormControl,
   Tooltip,
   TablePagination,
+  Skeleton,
   useMediaQuery,
   useTheme
 } from '@mui/material'
@@ -159,27 +160,8 @@ const Candidates = () => {
           })
         )
       }
-    } catch (error) {
-      console.error('❌ Error updating online status:', error)
-    }
-  }
-
-  // Update current user's activity
-  const updateUserActivity = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (token) {
-        // Get current user info from token
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        const userId = payload.user_id
-
-        if (userId) {
-          await apiClient.post(`/api/candidates/${userId}/activity`)
-          console.log('🔄 Updated user activity')
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error updating user activity:', error)
+    } catch {
+      // Silently ignore - online status is non-critical
     }
   }
 
@@ -188,41 +170,10 @@ const Candidates = () => {
     fetchJobs()
   }, [])
 
-  // Set up real-time status updates
+  // Set up real-time status updates (every 60 seconds)
   useEffect(() => {
-    const interval = setInterval(() => {
-      updateOnlineStatus()
-    }, 30000) // Update every 30 seconds
-
+    const interval = setInterval(updateOnlineStatus, 60000)
     return () => clearInterval(interval)
-  }, [])
-
-  // Set up user activity tracking
-  useEffect(() => {
-    // Update activity immediately when component mounts
-    updateUserActivity()
-
-    // Set up periodic activity updates
-    const activityInterval = setInterval(() => {
-      updateUserActivity()
-    }, 60000) // Update activity every minute
-
-    // Track user interactions
-    const handleUserActivity = () => {
-      updateUserActivity()
-    }
-
-    // Add event listeners for user activity
-    window.addEventListener('click', handleUserActivity)
-    window.addEventListener('keypress', handleUserActivity)
-    window.addEventListener('scroll', handleUserActivity)
-
-    return () => {
-      clearInterval(activityInterval)
-      window.removeEventListener('click', handleUserActivity)
-      window.removeEventListener('keypress', handleUserActivity)
-      window.removeEventListener('scroll', handleUserActivity)
-    }
   }, [])
 
   // Refresh candidates function for external use
@@ -250,16 +201,6 @@ const Candidates = () => {
   const handleCloseDetails = () => {
     setIsDetailOpen(false)
     setDetailCandidate(null)
-  }
-
-  // const handleCloseProfile = () => {
-  //   setIsProfileOpen(false)
-  //   setMenuCandidate(null)
-  // }
-
-  const handleActionClick = (action: 'questions' | 'transcript') => {
-    setActiveAction(action)
-    setIsJobSelectOpen(true)
   }
 
   const handleJobSelectConfirm = async () => {
@@ -313,7 +254,7 @@ const Candidates = () => {
     try {
       setActionLoading(true)
       toast.loading('Processing and generating score...')
-      
+
       // If transcript text is provided, upload it first
       if (transcriptText && transcriptText.trim()) {
         await apiClient.post(`/api/candidates/${menuCandidate.id}/upload-transcript`, {
@@ -321,37 +262,37 @@ const Candidates = () => {
           transcript_text: transcriptText
         })
       }
-      
+
       // Generate score (works with or without transcript)
       const scoreResponse = await apiClient.post(`/api/candidates/${menuCandidate.id}/generate-score`, {
         job_id: selectedJobId
       })
-      
+
       toast.dismiss()
-      
+
       const hasTranscript = scoreResponse.data.has_transcript || false
-      const message = hasTranscript 
+      const message = hasTranscript
         ? `Score generated from transcript: ${scoreResponse.data.score?.toFixed(1) || 0}%`
         : `Default score generated: ${scoreResponse.data.score?.toFixed(1) || 0}% (no transcript uploaded)`
-      
+
       toast.success(message)
 
       // Update candidate state with transcript and new score
       setCandidates(prevCandidates =>
         prevCandidates.map(candidate =>
           candidate.id === menuCandidate.id
-            ? { 
-                ...candidate, 
-                hasTranscript: hasTranscript,
-                score: scoreResponse.data.score || candidate.score
-              }
+            ? {
+              ...candidate,
+              hasTranscript: hasTranscript,
+              score: scoreResponse.data.score || candidate.score
+            }
             : candidate
         )
       )
 
       // Update menuCandidate as well
-      setMenuCandidate(prev => prev ? { 
-        ...prev, 
+      setMenuCandidate(prev => prev ? {
+        ...prev,
         hasTranscript: hasTranscript,
         score: scoreResponse.data.score || prev.score
       } : null)
@@ -622,27 +563,45 @@ const Candidates = () => {
           gap: { xs: '10px', sm: '12px', md: '16px' },
           marginBottom: { xs: '16px', md: '20px' }
         }}>
-          {[
-            { number: candidates.length.toString(), label: 'Total Candidates' },
-            { number: candidates.filter(c => c.status === 'pending').length.toString(), label: 'Pending Review' },
-            { number: candidates.filter(c => c.score && c.score >= 80).length.toString(), label: 'High Scored' },
-            { number: candidates.filter(c => c.status === 'active').length.toString(), label: 'Active' }
-          ].map((stat, index) => (
-            <Card key={index} sx={{
-              padding: { xs: '16px', sm: '20px', md: '24px' },
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0',
-              textAlign: 'center',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-            }}>
-              <Typography sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, fontWeight: 700, color: '#f59e0b', marginBottom: { xs: '4px', md: '8px' } }}>
-                {stat.number}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, color: '#64748b', fontWeight: 500 }}>
-                {stat.label}
-              </Typography>
-            </Card>
-          ))}
+          {loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <Card key={index} sx={{
+                padding: { xs: '16px', sm: '20px', md: '24px' },
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0',
+                textAlign: 'center',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              }}>
+                <Skeleton variant="text" width="50%" sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, mx: 'auto', mb: { xs: '4px', md: '8px' } }} />
+                <Skeleton variant="text" width="70%" sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, mx: 'auto' }} />
+              </Card>
+            ))
+          ) : (
+            [{
+              number: candidates.length.toString(), label: 'Total Candidates'
+            }, {
+              number: candidates.filter(c => c.status === 'pending').length.toString(), label: 'Pending Review'
+            }, {
+              number: candidates.filter(c => c.score && c.score >= 80).length.toString(), label: 'High Scored'
+            }, {
+              number: candidates.filter(c => c.status === 'active').length.toString(), label: 'Active'
+            }].map((stat, index) => (
+              <Card key={index} sx={{
+                padding: { xs: '16px', sm: '20px', md: '24px' },
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0',
+                textAlign: 'center',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              }}>
+                <Typography sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, fontWeight: 700, color: '#f59e0b', marginBottom: { xs: '4px', md: '8px' } }}>
+                  {stat.number}
+                </Typography>
+                <Typography sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, color: '#64748b', fontWeight: 500 }}>
+                  {stat.label}
+                </Typography>
+              </Card>
+            ))
+          )}
         </Box>
 
         {/* Export menu: view options */}
@@ -673,8 +632,54 @@ const Candidates = () => {
         {viewMode === 'card' ? (
           <>
             {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
-                <Typography sx={{ color: '#64748b', fontSize: '16px' }}>Loading candidates...</Typography>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    sm: 'repeat(2, minmax(0, 1fr))',
+                    md: 'repeat(2, minmax(0, 1fr))',
+                    lg: 'repeat(3, minmax(0, 1fr))',
+                    xl: 'repeat(4, minmax(0, 1fr))'
+                  },
+                  gap: { xs: '12px', sm: '14px', md: '16px' }
+                }}
+              >
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <Card key={index} sx={{
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                    padding: { xs: '14px', sm: '16px', md: '20px' },
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                  }}>
+                    {/* Header skeleton */}
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', mb: '16px' }}>
+                      <Skeleton variant="circular" width={50} height={50} />
+                      <Box sx={{ flex: 1 }}>
+                        <Skeleton variant="text" width="70%" sx={{ fontSize: '16px', mb: '4px' }} />
+                        <Skeleton variant="text" width="40%" sx={{ fontSize: '12px' }} />
+                      </Box>
+                    </Box>
+                    {/* Department skeleton */}
+                    <Box sx={{ mb: '16px', pb: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                      <Skeleton variant="text" width="30%" sx={{ fontSize: '11px', mb: '4px' }} />
+                      <Skeleton variant="text" width="50%" sx={{ fontSize: '13px' }} />
+                    </Box>
+                    {/* Skills skeleton */}
+                    <Box sx={{ display: 'flex', gap: '6px', mb: '16px', flexWrap: 'wrap' }}>
+                      <Skeleton variant="rounded" width={60} height={24} sx={{ borderRadius: '12px' }} />
+                      <Skeleton variant="rounded" width={75} height={24} sx={{ borderRadius: '12px' }} />
+                      <Skeleton variant="rounded" width={50} height={24} sx={{ borderRadius: '12px' }} />
+                    </Box>
+                    {/* Contact skeleton */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', mb: '16px' }}>
+                      <Skeleton variant="text" width="80%" sx={{ fontSize: '12px' }} />
+                      <Skeleton variant="text" width="55%" sx={{ fontSize: '12px' }} />
+                    </Box>
+                    {/* Button skeleton */}
+                    <Skeleton variant="rounded" width={130} height={32} sx={{ borderRadius: '10px' }} />
+                  </Card>
+                ))}
               </Box>
             ) : (
               <>
@@ -727,7 +732,9 @@ const Candidates = () => {
                         {/* Header */}
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
                           <Box sx={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar sx={{ width: 50, height: 50 }} src={`/api/placeholder/50/50`} alt={candidate.name} />
+                            <Avatar sx={{ width: 50, height: 50, background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontSize: '18px', fontWeight: 700 }}>
+                              {candidate.name.charAt(0).toUpperCase()}
+                            </Avatar>
                             <Box sx={{
                               position: 'absolute',
                               bottom: 2,
@@ -803,99 +810,38 @@ const Candidates = () => {
                           </Box>
                         </Box>
 
-                        
+
 
                         {/* Action Buttons */}
                         <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {/* Generate AI Questions or Review Questions Button */}
-                          {candidateQuestionSessions[candidate.id] ? (
+                          {/* Review Questions Button */}
+                          {candidateQuestionSessions[candidate.id] && (
                             <Button
                               size="small"
                               onClick={() => navigate(`/interview-outline/${candidateQuestionSessions[candidate.id]}`)}
                               sx={{
-                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                color: 'white',
-                                borderRadius: '8px',
-                                textTransform: 'none',
+                                background: 'rgba(245, 158, 11, 0.1)',
+                                color: '#f59e0b',
+                                border: '2px solid #f59e0b',
+                                borderRadius: '10px',
+                                fontSize: { xs: '12px', sm: '14px' },
                                 fontWeight: 600,
-                                fontSize: '11px',
-                                padding: '6px 12px',
+                                textTransform: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: { xs: '4px', sm: '8px' },
+                                minWidth: { xs: 'auto', sm: '120px' },
                                 '&:hover': {
-                                  background: 'linear-gradient(135deg, #d97706, #b45309)',
-                                  transform: 'translateY(-1px)',
-                                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                                  background: 'rgba(245, 158, 11, 0.1)',
+                                  borderColor: '#f59e0b',
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                                 }
                               }}
                             >
                               <i className="fas fa-list-check" style={{ marginRight: 6, fontSize: '10px' }} />
                               Review Questions
                             </Button>
-                          ) : (
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                setMenuCandidate(candidate);
-                                handleActionClick('questions');
-                              }}
-                              sx={{
-                                background: 'rgba(245, 158, 11, 0.1)',
-                                color: '#d97706',
-                                border: '1px solid #fbbf2480',
-                                borderRadius: '8px',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                fontSize: '11px',
-                                padding: '6px 12px',
-                                '&:hover': { background: 'rgba(245, 158, 11, 0.2)' }
-                              }}
-                            >
-                              <i className="fas fa-brain" style={{ marginRight: 6, fontSize: '10px' }} />
-                              Generate AI Questions
-                            </Button>
-                          )}
-
-                          {/* Upload Transcript Button - Only show if no transcript */}
-                          {!candidate.hasTranscript && (
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                setMenuCandidate(candidate);
-                                handleActionClick('transcript');
-                              }}
-                              sx={{
-                                background: 'rgba(37, 99, 235, 0.1)',
-                                color: '#2563eb',
-                                border: '1px solid #2563eb40',
-                                borderRadius: '8px',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                fontSize: '11px',
-                                padding: '6px 12px',
-                                '&:hover': { background: 'rgba(37, 99, 235, 0.2)' }
-                              }}
-                            >
-                              <i className="fas fa-file-alt" style={{ marginRight: 6, fontSize: '10px' }} />
-                              Upload Transcript
-                            </Button>
-                          )}
-
-                          {/* Show score badge when transcript is uploaded */}
-                          {candidate.hasTranscript && candidate.score > 0 && (
-                            <Box sx={{
-                              background: candidate.score >= 80 ? 'rgba(16, 185, 129, 0.1)' : candidate.score >= 60 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                              color: candidate.score >= 80 ? '#10b981' : candidate.score >= 60 ? '#d97706' : '#ef4444',
-                              border: `1px solid ${candidate.score >= 80 ? '#10b98140' : candidate.score >= 60 ? '#fbbf2480' : '#ef444440'}`,
-                              borderRadius: '8px',
-                              padding: '6px 12px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px'
-                            }}>
-                              <i className="fas fa-star" style={{ fontSize: '10px' }} />
-                              Score: {candidate.score}%
-                            </Box>
                           )}
                         </Box>
                       </Card>
@@ -942,9 +888,90 @@ const Candidates = () => {
         ) : (
           <>
             {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
-                <Typography sx={{ color: '#64748b', fontSize: '16px' }}>Loading candidates...</Typography>
-              </Box>
+              isMobile ? (
+                /* Mobile skeleton cards */
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Card key={index} sx={{ borderRadius: 2, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
+                      <CardContent sx={{ p: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Skeleton variant="circular" width={40} height={40} />
+                            <Box>
+                              <Skeleton variant="text" width={120} sx={{ fontSize: '14px' }} />
+                              <Skeleton variant="text" width={80} sx={{ fontSize: '12px' }} />
+                            </Box>
+                          </Box>
+                          <Skeleton variant="rounded" width={60} height={22} sx={{ borderRadius: '12px' }} />
+                        </Box>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
+                          <Box>
+                            <Skeleton variant="text" width="50%" sx={{ fontSize: '11px' }} />
+                            <Skeleton variant="text" width="70%" sx={{ fontSize: '13px' }} />
+                          </Box>
+                          <Box>
+                            <Skeleton variant="text" width="40%" sx={{ fontSize: '11px' }} />
+                            <Skeleton variant="text" width="35%" sx={{ fontSize: '13px' }} />
+                          </Box>
+                        </Box>
+                        <Box sx={{ mb: 2 }}>
+                          <Skeleton variant="text" width="30%" sx={{ fontSize: '11px' }} />
+                          <Skeleton variant="text" width="80%" sx={{ fontSize: '13px' }} />
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                          <Skeleton variant="rounded" width="70%" height={34} sx={{ borderRadius: '8px' }} />
+                          <Skeleton variant="circular" width={34} height={34} />
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              ) : (
+                /* Desktop table skeleton */
+                <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+                  <TableContainer>
+                    <Table size="small" sx={{ minWidth: 800 }}>
+                      <TableHead>
+                        <TableRow sx={{ background: '#f8fafc' }}>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Candidate</TableCell>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Role</TableCell>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Department</TableCell>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Status</TableCell>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Online Status</TableCell>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }} align="right">Score</TableCell>
+                          <TableCell sx={{ fontWeight: 800, color: '#475569' }} align="right">Action</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {Array.from({ length: 8 }).map((_, index) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Skeleton variant="text" width={120} sx={{ fontSize: '14px' }} />
+                              <Skeleton variant="text" width={160} sx={{ fontSize: '12px' }} />
+                            </TableCell>
+                            <TableCell><Skeleton variant="text" width={90} /></TableCell>
+                            <TableCell><Skeleton variant="text" width={80} /></TableCell>
+                            <TableCell><Skeleton variant="rounded" width={60} height={22} sx={{ borderRadius: '12px' }} /></TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Skeleton variant="circular" width={8} height={8} />
+                                <Skeleton variant="text" width={50} sx={{ fontSize: '12px' }} />
+                              </Box>
+                            </TableCell>
+                            <TableCell align="right"><Skeleton variant="text" width={35} sx={{ ml: 'auto' }} /></TableCell>
+                            <TableCell align="right">
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                                <Skeleton variant="circular" width={28} height={28} />
+                                <Skeleton variant="circular" width={28} height={28} />
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              )
             ) : paginatedCandidates.length === 0 ? (
               <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
                 <i className="fas fa-users" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '16px', display: 'block' }}></i>
@@ -1398,27 +1425,27 @@ const Candidates = () => {
               </Typography>
             </Box>
           </DialogTitle>
-          
+
           <DialogContent sx={{ padding: { xs: '20px', md: '32px' } }}>
 
             {/* Job Selection */}
             <Box>
-              <Typography sx={{ 
-                fontSize: '16px', 
-                fontWeight: 600, 
-                color: '#1e293b', 
+              <Typography sx={{
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#1e293b',
                 marginBottom: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                mt:"10px"
+                mt: "10px"
               }}>
                 <i className="fas fa-search" style={{ fontSize: '16px', color: '#f59e0b' }}></i>
                 Available Positions
               </Typography>
-              
+
               <FormControl fullWidth>
-                <InputLabel sx={{ 
+                <InputLabel sx={{
                   color: '#64748b',
                   '&.Mui-focused': { color: '#f59e0b' }
                 }}>
@@ -1469,9 +1496,9 @@ const Candidates = () => {
               </FormControl>
 
               {jobs.length > 0 && (
-                <Typography sx={{ 
-                  fontSize: '12px', 
-                  color: '#94a3b8', 
+                <Typography sx={{
+                  fontSize: '12px',
+                  color: '#94a3b8',
                   marginTop: '8px',
                   display: 'flex',
                   alignItems: 'center',
@@ -1483,7 +1510,7 @@ const Candidates = () => {
               )}
             </Box>
           </DialogContent>
-          
+
           <DialogActions sx={{
             padding: { xs: '16px 20px 20px 20px', md: '24px 32px 32px 32px' },
             gap: { xs: '8px', md: '12px' },
@@ -1585,25 +1612,25 @@ const Candidates = () => {
               </Typography>
             </Box>
           </DialogTitle>
-          
+
           <DialogContent sx={{ padding: { xs: '20px', md: '32px' } }}>
 
             {/* Upload Options */}
             <Box sx={{ marginBottom: { xs: '20px', md: '24px' } }}>
-              <Typography sx={{ 
-                fontSize: '16px', 
-                fontWeight: 600, 
-                color: '#1e293b', 
+              <Typography sx={{
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#1e293b',
                 marginBottom: '16px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                mt:"10px"
+                mt: "10px"
               }}>
                 <i className="fas fa-edit" style={{ fontSize: '16px', color: '#667eea' }}></i>
                 Transcript Content
               </Typography>
-              
+
               <TextField
                 fullWidth
                 multiline
@@ -1643,10 +1670,10 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                   }
                 }}
               />
-              
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'center',
                 margin: '20px 0',
                 position: 'relative'
@@ -1697,19 +1724,19 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 }}>
                   <CloudUploadIcon sx={{ color: 'white', fontSize: '24px' }} />
                 </Box>
-                
-                <Typography sx={{ 
-                  fontSize: '16px', 
-                  fontWeight: 600, 
-                  color: '#1e293b', 
-                  marginBottom: '8px' 
+
+                <Typography sx={{
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: '#1e293b',
+                  marginBottom: '8px'
                 }}>
                   Upload Transcript File
                 </Typography>
-                
-                <Typography sx={{ 
-                  fontSize: '14px', 
-                  color: '#64748b', 
+
+                <Typography sx={{
+                  fontSize: '14px',
+                  color: '#64748b',
                   marginBottom: '16px',
                   lineHeight: 1.5
                 }}>
@@ -1719,7 +1746,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                     Supports: TXT, MD, JSON, CSV (Max 5MB)
                   </span>
                 </Typography>
-                
+
                 <Button
                   component="label"
                   variant="outlined"
@@ -1788,8 +1815,8 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                   <i className="fas fa-file-alt" style={{ marginRight: '8px', color: '#667eea' }}></i>
                   Transcript loaded
                 </Typography>
-                <Typography sx={{ 
-                  fontSize: '12px', 
+                <Typography sx={{
+                  fontSize: '12px',
                   color: '#94a3b8',
                   background: 'white',
                   padding: '4px 8px',
@@ -1801,7 +1828,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               </Box>
             )}
           </DialogContent>
-          
+
           <DialogActions sx={{
             padding: { xs: '16px 20px 20px 20px', md: '24px 32px 32px 32px' },
             gap: { xs: '8px', md: '12px' },
@@ -1984,9 +2011,9 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             <i className="fas fa-user" style={{ marginRight: '12px', color: '#64748b' }}></i>
             View Profile
           </MenuItem>
-         
 
-          
+
+
           <MenuItem onClick={() => { navigate('/video-scheduler'); }} sx={{ padding: '12px 20px', fontSize: '14px' }}>
             <i className="fas fa-video" style={{ marginRight: '12px', color: '#64748b' }}></i>
             Schedule Interview
@@ -2138,7 +2165,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 >
                   Close
                 </Button>
-                {detailCandidate && candidateQuestionSessions[detailCandidate.id] ? (
+                {detailCandidate && candidateQuestionSessions[detailCandidate.id] && (
                   <Button
                     onClick={() => {
                       navigate(`/interview-outline/${candidateQuestionSessions[detailCandidate.id]}`)
@@ -2154,25 +2181,6 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                   >
                     <i className="fas fa-list-check" style={{ marginRight: 8 }} />
                     Review Questions
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => {
-                      if (detailCandidate) {
-                        setMenuCandidate(detailCandidate)
-                        handleActionClick('questions')
-                      }
-                      handleCloseDetails()
-                    }}
-                    variant="contained"
-                    sx={{
-                      background: '#f59e0b',
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      '&:hover': { background: '#d97706' }
-                    }}
-                  >
-                    Generate Questions
                   </Button>
                 )}
               </DialogActions>

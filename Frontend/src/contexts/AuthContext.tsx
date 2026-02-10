@@ -169,12 +169,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const logout = (): void => {
+    // Tell backend user is offline before clearing token
+    apiClient.post('/api/auth/logout').catch(() => {})
+
+    // Stop activity tracking on logout
+    activityService.stopTracking()
+
     localStorage.removeItem('token')
     delete apiClient.defaults.headers.common['Authorization']
     setUser(null)
-    
-    // Stop activity tracking on logout
-    activityService.stopTracking()
   }
 
   const demoLogin = async (): Promise<{ success: boolean }> => {

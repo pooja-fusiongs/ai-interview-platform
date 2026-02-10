@@ -6,7 +6,7 @@
 import { apiClient } from './api';
 
 class ActivityService {
-  private activityInterval: NodeJS.Timeout | null = null;
+  private activityInterval: ReturnType<typeof setInterval> | null = null;
   private isTracking = false;
 
   /**
@@ -66,12 +66,12 @@ class ActivityService {
 
       await apiClient.post('/api/auth/activity');
       console.log('✅ Activity updated');
-    } catch (error) {
-      console.error('❌ Failed to update activity:', error);
-      
+    } catch (err: unknown) {
+      console.error('Failed to update activity:', err);
+
       // If unauthorized, stop tracking
-      if (error.response?.status === 401) {
-        console.log('🔴 Unauthorized, stopping activity tracking');
+      const axiosErr = err as { response?: { status?: number } };
+      if (axiosErr.response?.status === 401) {
         this.stopTracking();
       }
     }
@@ -83,10 +83,12 @@ class ActivityService {
   private setupEventListeners() {
     // Track various user interactions
     const events = ['click', 'keypress', 'scroll', 'mousemove'];
-    
     events.forEach(event => {
       document.addEventListener(event, this.handleUserInteraction, { passive: true });
     });
+
+    // Set user offline when browser/tab is closed
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
   }
 
   /**
@@ -94,10 +96,31 @@ class ActivityService {
    */
   private removeEventListeners() {
     const events = ['click', 'keypress', 'scroll', 'mousemove'];
-    
+
     events.forEach(event => {
       document.removeEventListener(event, this.handleUserInteraction);
     });
+
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
+  }
+
+  /**
+   * Handle browser/tab close - send logout beacon
+   */
+  private handleBeforeUnload = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    // Use fetch with keepalive for reliable delivery during page unload
+    const baseUrl = apiClient.defaults.baseURL || '';
+    fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      keepalive: true,
+    }).catch(() => {});
   }
 
   /**

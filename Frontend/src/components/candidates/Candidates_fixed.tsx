@@ -33,7 +33,8 @@ import {
   Paper,
   Select,
   InputLabel,
-  FormControl
+  FormControl,
+  Skeleton
 } from '@mui/material'
 import Navigation from '../layout/sidebar'
 import { CloudUpload as CloudUploadIcon } from '@mui/icons-material'
@@ -136,27 +137,8 @@ const Candidates = () => {
           })
         )
       }
-    } catch (error) {
-      console.error('❌ Error updating online status:', error)
-    }
-  }
-
-  // Update current user's activity
-  const updateUserActivity = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (token) {
-        // Get current user info from token
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        const userId = payload.user_id
-
-        if (userId) {
-          await apiClient.post(`/api/candidates/${userId}/activity`)
-          console.log('🔄 Updated user activity')
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error updating user activity:', error)
+    } catch {
+      // Silently ignore - online status is non-critical
     }
   }
 
@@ -165,41 +147,10 @@ const Candidates = () => {
     fetchJobs()
   }, [])
 
-  // Set up real-time status updates
+  // Set up real-time status updates (every 60 seconds)
   useEffect(() => {
-    const interval = setInterval(() => {
-      updateOnlineStatus()
-    }, 30000) // Update every 30 seconds
-
+    const interval = setInterval(updateOnlineStatus, 60000)
     return () => clearInterval(interval)
-  }, [])
-
-  // Set up user activity tracking
-  useEffect(() => {
-    // Update activity immediately when component mounts
-    updateUserActivity()
-
-    // Set up periodic activity updates
-    const activityInterval = setInterval(() => {
-      updateUserActivity()
-    }, 60000) // Update activity every minute
-
-    // Track user interactions
-    const handleUserActivity = () => {
-      updateUserActivity()
-    }
-
-    // Add event listeners for user activity
-    window.addEventListener('click', handleUserActivity)
-    window.addEventListener('keypress', handleUserActivity)
-    window.addEventListener('scroll', handleUserActivity)
-
-    return () => {
-      clearInterval(activityInterval)
-      window.removeEventListener('click', handleUserActivity)
-      window.removeEventListener('keypress', handleUserActivity)
-      window.removeEventListener('scroll', handleUserActivity)
-    }
   }, [])
 
   // Refresh candidates function for external use
@@ -655,7 +606,9 @@ const Candidates = () => {
                         {/* Header */}
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
                           <Box sx={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar sx={{ width: 50, height: 50 }} src={`/api/placeholder/50/50`} alt={candidate.name} />
+                            <Avatar sx={{ width: 50, height: 50, background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontSize: '18px', fontWeight: 700 }}>
+                              {candidate.name.charAt(0).toUpperCase()}
+                            </Avatar>
                             <Box sx={{
                               position: 'absolute',
                               bottom: 2,

@@ -227,11 +227,11 @@ def _manual_parse_transcript(
             result.append({
                 "question_id": q_id,
                 "extracted_answer": best_answer,
-                "score": 5.5,
-                "relevance_score": 5.5,
-                "completeness_score": 5.0,
-                "accuracy_score": 5.5,
-                "clarity_score": 5.5,
+                "score": 55,
+                "relevance_score": 55,
+                "completeness_score": 50,
+                "accuracy_score": 55,
+                "clarity_score": 55,
                 "feedback": "Response evaluated from interview discussion"
             })
 
@@ -270,43 +270,43 @@ def _fallback_scoring(
                 # Create a shorter version of sample answer as dummy response
                 dummy_answer = f" {sample[:200]}..." if len(sample) > 200 else f"{sample}"
                 pq["extracted_answer"] = dummy_answer
-                pq["score"] = 5.5
-                pq["relevance_score"] = 5.5
-                pq["completeness_score"] = 5.0
-                pq["accuracy_score"] = 5.5
-                pq["clarity_score"] = 6.0
+                pq["score"] = 55
+                pq["relevance_score"] = 55
+                pq["completeness_score"] = 50
+                pq["accuracy_score"] = 55
+                pq["clarity_score"] = 60
                 pq["feedback"] = "Response evaluated from interview discussion"
             else:
                 # No sample answer available, use generic response
                 pq["extracted_answer"] = "The candidate addressed this question during the interview, providing their perspective and relevant experience on the topic."
-                pq["score"] = 5.0
-                pq["relevance_score"] = 5.0
-                pq["completeness_score"] = 5.0
-                pq["accuracy_score"] = 5.0
-                pq["clarity_score"] = 5.0
+                pq["score"] = 50
+                pq["relevance_score"] = 50
+                pq["completeness_score"] = 50
+                pq["accuracy_score"] = 50
+                pq["clarity_score"] = 50
                 pq["feedback"] = "Response evaluated from interview transcript"
         else:
             # Score based on answer length (simple heuristic)
             word_count = len(answer.split())
-            
+
             if word_count < 10:
-                base_score = 4.0
+                base_score = 40
                 feedback = "Answer is too brief"
             elif word_count < 30:
-                base_score = 6.0
+                base_score = 60
                 feedback = "Answer is adequate but could be more detailed"
             elif word_count < 60:
-                base_score = 7.5
+                base_score = 75
                 feedback = "Good answer with reasonable detail"
             else:
-                base_score = 8.0
+                base_score = 80
                 feedback = "Comprehensive answer with good detail"
-            
+
             pq["score"] = base_score
             pq["relevance_score"] = base_score
-            pq["completeness_score"] = base_score - 0.5
+            pq["completeness_score"] = base_score - 5
             pq["accuracy_score"] = base_score
-            pq["clarity_score"] = base_score + 0.5
+            pq["clarity_score"] = base_score + 5
             pq["feedback"] = feedback + " (rule-based scoring)"
         
         total_score += pq["score"]
@@ -315,11 +315,11 @@ def _fallback_scoring(
     overall_score = total_score / len(per_question) if per_question else 5.0
     
     # Determine recommendation
-    if overall_score >= 7.5:
+    if overall_score >= 75:
         recommendation = "next_round"
         strengths = "Candidate provided detailed answers to most questions"
         weaknesses = "Some answers could be more comprehensive"
-    elif overall_score >= 5.0:
+    elif overall_score >= 50:
         recommendation = "next_round"
         strengths = "Candidate answered most questions adequately"
         weaknesses = "Several answers lacked depth and detail"
@@ -414,12 +414,12 @@ CRITICAL INSTRUCTIONS - READ CAREFULLY:
    Then extracted_answer should be: "Python is a high-level programming language known for its simplicity."
    NOT: "[00:00:00] Interviewer: Hello... [00:01:00] Interviewer: What is Python..."
 
-SCORING (0-10 scale):
-- relevance_score: How relevant is the answer to the question?
-- completeness_score: How complete is the answer?
-- accuracy_score: How accurate compared to expected answer?
-- clarity_score: How clear and coherent?
-- score: Overall weighted average
+SCORING (0-100 scale):
+- relevance_score: How relevant is the answer to the question? (0-100)
+- completeness_score: How complete is the answer? (0-100)
+- accuracy_score: How accurate compared to expected answer? (0-100)
+- clarity_score: How clear and coherent? (0-100)
+- score: Overall weighted average (0-100)
 - feedback: Brief specific feedback for this answer
 
 OUTPUT FORMAT - Respond ONLY with this JSON:
@@ -428,31 +428,31 @@ OUTPUT FORMAT - Respond ONLY with this JSON:
     {{
       "question_id": <id>,
       "extracted_answer": "The specific 1-4 sentence answer the candidate gave for THIS question only",
-      "score": 7.5,
-      "relevance_score": 8.0,
-      "completeness_score": 7.0,
-      "accuracy_score": 7.5,
-      "clarity_score": 8.0,
+      "score": 75,
+      "relevance_score": 80,
+      "completeness_score": 70,
+      "accuracy_score": 75,
+      "clarity_score": 80,
       "feedback": "Brief specific feedback"
     }}
   ],
-  "overall_score": 7.2,
+  "overall_score": 72,
   "recommendation": "select|next_round|reject",
   "strengths": "2-3 sentence summary of strengths",
   "weaknesses": "2-3 sentence summary of weaknesses"
 }}
 
 SCORING GUIDELINES:
-- 8-10: Excellent, comprehensive answer
-- 6-8: Good answer with minor gaps
-- 4-6: Adequate but missing key points
-- 2-4: Poor answer with significant gaps
-- 0-2: No relevant answer or question not asked
+- 80-100: Excellent, comprehensive answer
+- 60-80: Good answer with minor gaps
+- 40-60: Adequate but missing key points
+- 20-40: Poor answer with significant gaps
+- 0-20: No relevant answer or question not asked
 
 RECOMMENDATION:
-- select: overall >= 7.5
-- next_round: overall >= 5.0
-- reject: overall < 5.0
+- select: overall >= 75
+- next_round: overall >= 50
+- reject: overall < 50
 
 REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do NOT repeat the same text."""
 
@@ -514,7 +514,7 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
         rec = result.get("recommendation", "reject").lower()
         if rec not in {"select", "next_round", "reject"}:
             score = float(result.get("overall_score", 0))
-            rec = "select" if score >= 7.5 else "next_round" if score >= 5.0 else "reject"
+            rec = "select" if score >= 75 else "next_round" if score >= 50 else "reject"
             result["recommendation"] = rec
 
         print(f"\n✅✅✅ [score_transcript] SCORING COMPLETED SUCCESSFULLY! ✅✅✅")

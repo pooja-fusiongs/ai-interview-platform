@@ -4,7 +4,7 @@ import {
   Box, Typography, Button, Card, Avatar,
   Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, LinearProgress, IconButton, CircularProgress,
-  InputAdornment
+  InputAdornment, Skeleton
 } from '@mui/material'
 import { toast } from 'react-hot-toast'
 import Navigation from '../layout/sidebar'
@@ -140,7 +140,7 @@ const RecruiterCandidates = () => {
     setScoringFor(selectedCandidate.id)
     try {
       const result = await recruiterService.submitTranscript(jobId, selectedCandidate.id, transcriptText)
-      toast.success(`Scored ${result.overall_score?.toFixed(1)}/10 — ${result.recommendation?.toUpperCase()}`)
+      toast.success(`Scored ${(result.overall_score / 10)?.toFixed(1)}/10 — ${result.recommendation?.toUpperCase()}`)
       setTranscriptDialogOpen(false)
       setTranscriptText('')
       setSelectedCandidate(null)
@@ -156,10 +156,10 @@ const RecruiterCandidates = () => {
   const getScoreDisplay = (candidate: RecruiterCandidate) => {
     if (candidate.has_scores) {
       const score = candidate.overall_score || 0
-      const color = score >= 7.5 ? '#16a34a' : score >= 5 ? '#f59e0b' : '#ef4444'
+      const color = score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#ef4444'
       return (
         <Typography sx={{ fontSize: '13px', color, fontWeight: 600 }}>
-          Score: {score.toFixed(1)}/10
+          Score: {(score / 10).toFixed(1)}/10
         </Typography>
       )
     }
@@ -275,8 +275,39 @@ const RecruiterCandidates = () => {
           </Card>
         )}
 
-        {/* Loading */}
-        {loading && <Box sx={{ textAlign: 'center', py: 8 }}><CircularProgress sx={{ color: '#f59e0b' }} /></Box>}
+        {/* Loading Skeleton */}
+        {loading && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index} sx={{
+                p: 0, borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white',
+              }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, p: { xs: 2, sm: 2.5 }, gap: { xs: 1.5, sm: 2.5 } }}>
+                  {/* Avatar + Info skeleton */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2.5 }, flex: 1, minWidth: 0 }}>
+                    <Skeleton variant="circular" sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 }, flexShrink: 0 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+                        <Skeleton variant="text" width={140} sx={{ fontSize: { xs: '14px', sm: '15px' } }} />
+                        <Skeleton variant="text" width={70} sx={{ fontSize: '13px' }} />
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 3 } }}>
+                        <Skeleton variant="text" width={160} sx={{ fontSize: { xs: '12px', sm: '13px' } }} />
+                        <Skeleton variant="text" width={70} sx={{ fontSize: '13px', display: { xs: 'none', sm: 'block' } }} />
+                        <Skeleton variant="text" width={100} sx={{ fontSize: '13px', display: { xs: 'none', sm: 'block' } }} />
+                      </Box>
+                    </Box>
+                  </Box>
+                  {/* Action buttons skeleton */}
+                  <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+                    <Skeleton variant="rounded" width={140} height={36} sx={{ borderRadius: '8px' }} />
+                    <Skeleton variant="rounded" width={140} height={36} sx={{ borderRadius: '8px', display: { xs: 'none', sm: 'block' } }} />
+                  </Box>
+                </Box>
+              </Card>
+            ))}
+          </Box>
+        )}
 
         {/* Empty State */}
         {!loading && candidates.length === 0 && (

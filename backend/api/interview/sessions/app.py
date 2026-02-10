@@ -4,7 +4,7 @@ Handles interview execution: create session, submit answers, score, recommend.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime
 
@@ -26,7 +26,7 @@ from schemas import (
     InterviewQuestionResponse,
 )
 from api.auth.jwt_handler import get_current_active_user
-from services.answer_scorer import score_answer
+from services.answer_scorer import score_answer, score_all_answers_with_ai
 from services.recommendation_engine import generate_recommendation
 
 router = APIRouter(tags=["Interview Sessions"])
@@ -215,22 +215,34 @@ def get_my_sessions(
     db: Session = Depends(get_db),
 ):
     """Get all interview sessions for the current candidate."""
+    from sqlalchemy import func as sa_func
+
     sessions = (
         db.query(InterviewSession)
         .filter(InterviewSession.candidate_id == current_user.id)
         .order_by(InterviewSession.started_at.desc())
         .all()
     )
+
+    if not sessions:
+        return []
+
+    # Bulk pre-fetch question counts per job_id
+    job_ids = list(set(s.job_id for s in sessions))
+    q_counts = (
+        db.query(InterviewQuestion.job_id, sa_func.count(InterviewQuestion.id))
+        .filter(
+            InterviewQuestion.job_id.in_(job_ids),
+            InterviewQuestion.is_approved == True,
+        )
+        .group_by(InterviewQuestion.job_id)
+        .all()
+    )
+    q_count_map = {jid: cnt for jid, cnt in q_counts}
+
     result = []
     for s in sessions:
-        total_q = (
-            db.query(InterviewQuestion)
-            .filter(
-                InterviewQuestion.job_id == s.job_id,
-                InterviewQuestion.is_approved == True,
-            )
-            .count()
-        )
+        total_q = q_count_map.get(s.job_id, 0)
         answered = len(s.answers)
         result.append(
             InterviewSessionListResponse(
@@ -260,7 +272,11 @@ def get_session(
     db: Session = Depends(get_db),
 ):
     """Get a single interview session with answers."""
-    session = db.query(InterviewSession).filter(InterviewSession.id == session_id).first()
+    session = db.query(InterviewSession).options(
+        joinedload(InterviewSession.job),
+        joinedload(InterviewSession.candidate),
+        joinedload(InterviewSession.answers).joinedload(InterviewAnswer.question),
+    ).filter(InterviewSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     # Candidates can only see their own; recruiters/admins/experts can see all
@@ -337,38 +353,47 @@ def complete_session(
     if session.status != InterviewSessionStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Session is not in progress")
 
-    # Score each answer
+    # Score all answers using Groq AI (with rule-based fallback)
     answers = (
         db.query(InterviewAnswer)
         .filter(InterviewAnswer.session_id == session_id)
         .all()
     )
-    scored_list = []
+
+    # Build data for batch AI scoring
+    answers_data = []
+    valid_answers = []
     for answer in answers:
         question = answer.question
         if not question:
             continue
-        result = score_answer(
-            answer_text=answer.answer_text,
-            sample_answer=question.sample_answer,
-            question_text=question.question_text,
-        )
-        answer.score = result["score"]
-        answer.relevance_score = result["relevance_score"]
-        answer.completeness_score = result["completeness_score"]
-        answer.accuracy_score = result["accuracy_score"]
-        answer.clarity_score = result["clarity_score"]
-        answer.feedback = result["feedback"]
-        scored_list.append(result)
+        answers_data.append({
+            "answer_text": answer.answer_text or "",
+            "sample_answer": question.sample_answer or "",
+            "question_text": question.question_text or "",
+        })
+        valid_answers.append(answer)
 
-    # Generate recommendation
-    rec = generate_recommendation(scored_list)
+    # Call AI batch scorer (scores all answers + generates recommendation in one call)
+    ai_result = score_all_answers_with_ai(answers_data)
+
+    # Apply scores to each answer
+    scored_answers = ai_result.get("scored_answers", [])
+    for i, answer in enumerate(valid_answers):
+        if i < len(scored_answers):
+            result = scored_answers[i]
+            answer.score = result["score"]
+            answer.relevance_score = result["relevance_score"]
+            answer.completeness_score = result["completeness_score"]
+            answer.accuracy_score = result["accuracy_score"]
+            answer.clarity_score = result["clarity_score"]
+            answer.feedback = result["feedback"]
 
     session.status = InterviewSessionStatus.SCORED
-    session.overall_score = rec["overall_score"]
-    session.recommendation = Recommendation(rec["recommendation"])
-    session.strengths = rec["strengths"]
-    session.weaknesses = rec["weaknesses"]
+    session.overall_score = ai_result["overall_score"]
+    session.recommendation = Recommendation(ai_result["recommendation"])
+    session.strengths = ai_result["strengths"]
+    session.weaknesses = ai_result["weaknesses"]
     session.completed_at = datetime.utcnow()
 
     db.commit()
@@ -385,7 +410,11 @@ def get_session_results(
     db: Session = Depends(get_db),
 ):
     """Get scored results for a completed session."""
-    session = db.query(InterviewSession).filter(InterviewSession.id == session_id).first()
+    session = db.query(InterviewSession).options(
+        joinedload(InterviewSession.job),
+        joinedload(InterviewSession.candidate),
+        joinedload(InterviewSession.answers).joinedload(InterviewAnswer.question),
+    ).filter(InterviewSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if (
@@ -407,21 +436,36 @@ def list_interviews(
     List interview sessions.
     Candidates see their own; recruiters/admins/experts see all.
     """
-    query = db.query(InterviewSession)
+    from sqlalchemy import func as sa_func
+
+    query = db.query(InterviewSession).options(
+        joinedload(InterviewSession.job),
+        joinedload(InterviewSession.candidate),
+        joinedload(InterviewSession.answers),
+    )
     if current_user.role == UserRole.CANDIDATE:
         query = query.filter(InterviewSession.candidate_id == current_user.id)
     sessions = query.order_by(InterviewSession.started_at.desc()).all()
 
+    if not sessions:
+        return []
+
+    # Bulk pre-fetch question counts per job_id
+    job_ids = list(set(s.job_id for s in sessions))
+    q_counts = (
+        db.query(InterviewQuestion.job_id, sa_func.count(InterviewQuestion.id))
+        .filter(
+            InterviewQuestion.job_id.in_(job_ids),
+            InterviewQuestion.is_approved == True,
+        )
+        .group_by(InterviewQuestion.job_id)
+        .all()
+    )
+    q_count_map = {jid: cnt for jid, cnt in q_counts}
+
     result = []
     for s in sessions:
-        total_q = (
-            db.query(InterviewQuestion)
-            .filter(
-                InterviewQuestion.job_id == s.job_id,
-                InterviewQuestion.is_approved == True,
-            )
-            .count()
-        )
+        total_q = q_count_map.get(s.job_id, 0)
         answered = len(s.answers)
         result.append(
             InterviewSessionListResponse(

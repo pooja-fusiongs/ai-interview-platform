@@ -4,8 +4,11 @@
   "description": "AI-powered interview platform with React frontend",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --mode development",
+    "dev:local": "vite --mode development",
+    "dev:live": "vite --mode production",
     "build": "vite build",
+    "build:production": "vite build --mode production",
     "preview": "vite preview",
     "backend": "cd backend && python app.py"
   },

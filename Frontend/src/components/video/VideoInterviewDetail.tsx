@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Chip, CircularProgress, Alert,
-  TextField, Button, IconButton, Tooltip, Avatar, Divider,
+   Button, IconButton, Tooltip, Avatar, Divider,
   // LinearProgress
 } from '@mui/material';
 import {
@@ -44,22 +44,19 @@ const VideoInterviewDetail: React.FC = () => {
   const [error, setError] = useState('');
   const [, setNotes] = useState('');
   const [transcript, setTranscript] = useState<string | null>(null);
-  const [transcriptText, setTranscriptText] = useState('');
-  const [uploading, setUploading] = useState(false);
   const [scoreResult, setScoreResult] = useState<any>(null);
-  const [editingTranscript, setEditingTranscript] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchInterview = async () => {
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
+        if (cancelled) return;
         setInterview(data);
         setNotes(data.notes || '');
-        // Set transcript if it exists in the response
         if (data.transcript) {
           setTranscript(data.transcript);
         }
-        // Check if interview already has a score (after refresh)
         if (data.overall_score !== null && data.overall_score !== undefined) {
           setScoreResult({
             overall_score: data.overall_score,
@@ -71,12 +68,14 @@ const VideoInterviewDetail: React.FC = () => {
           });
         }
       } catch (err: any) {
+        if (cancelled) return;
         setError(err.message || 'Failed to load interview details.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     if (videoId) fetchInterview();
+    return () => { cancelled = true; };
   }, [videoId]);
 
   // const fetchTranscript = async () => {
@@ -92,44 +91,7 @@ const VideoInterviewDetail: React.FC = () => {
   //   }
   // };
 
-  const handleUploadTranscript = async () => {
-    if (!transcriptText.trim()) {
-      toast.error('Please enter or paste the transcript text');
-      return;
-    }
 
-    try {
-      setUploading(true);
-      const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcriptText);
-
-      if (result.score_generated && result.score_result) {
-        setScoreResult(result.score_result);
-        setTranscript(transcriptText);
-        setEditingTranscript(false);
-        setTranscriptText('');
-        toast.success('Transcript uploaded and score generated successfully!');
-        // Update interview status
-        setInterview((prev: any) => ({ ...prev, status: 'completed' }));
-      } else {
-        setTranscript(transcriptText);
-        setEditingTranscript(false);
-        setTranscriptText('');
-        // Show detailed error message
-        if (result.scoring_error) {
-          toast.error(`Scoring failed: ${result.scoring_error}`, { duration: 6000 });
-        } else if (result.questions_found === 0) {
-          toast.error('No questions found. Please generate and approve questions first.', { duration: 5000 });
-        } else {
-          toast.success(result.message || 'Transcript uploaded (scoring not available)');
-        }
-      }
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      toast.error(err.response?.data?.detail || 'Failed to upload transcript');
-    } finally {
-      setUploading(false);
-    }
-  };
 
 
   const copyToClipboard = (text: string) => {
@@ -434,9 +396,15 @@ const VideoInterviewDetail: React.FC = () => {
                     Interview Transcript
                   </Typography>
                   {transcript && (
-                    <Tooltip title="Copy Transcript">
+                    <Tooltip title="Copy Transcript & Go to Manage Candidates">
                       <IconButton
-                        onClick={() => copyToClipboard(transcript)}
+                        onClick={() => {
+                          navigator.clipboard.writeText(transcript);
+                          toast.success('Transcript copied! Redirecting to Manage Candidates...');
+                          setTimeout(() => {
+                            navigate(`/recruiter-candidates?jobId=${interview.job_id}&jobTitle=${encodeURIComponent(interview.job_title || '')}`);
+                          }, 1000);
+                        }}
                         sx={{
                           background: '#f8fafc',
                           border: '1px solid #e2e8f0',
@@ -453,8 +421,8 @@ const VideoInterviewDetail: React.FC = () => {
                   )}
                 </Box>
 
-                {/* Show existing transcript or upload form */}
-                {transcript && !editingTranscript ? (
+                {/* Show transcript (read-only) — upload happens from Manage Candidates */}
+                {transcript ? (
                   <Box>
                     <Box sx={{
                       background: '#f8fafc',
@@ -480,143 +448,38 @@ const VideoInterviewDetail: React.FC = () => {
                         {transcript}
                       </Typography>
                     </Box>
-                    {/* Re-upload button if no score generated yet */}
                     {!scoreResult && (
-                      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                        <Button
-                          variant="contained"
-                          fullWidth
-                          startIcon={uploading ? <CircularProgress size={18} sx={{ color: 'white' }} /> : <CloudUpload />}
-                          onClick={async () => {
-                            try {
-                              setUploading(true);
-                              const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcript!);
-                              if (result.score_generated && result.score_result) {
-                                setScoreResult(result.score_result);
-                                toast.success('Score generated successfully!');
-                                setInterview((prev: any) => ({ ...prev, status: 'completed' }));
-                              } else if (result.scoring_error) {
-                                toast.error(`Scoring failed: ${result.scoring_error}`, { duration: 6000 });
-                              } else {
-                                toast.error('Scoring failed. Check backend logs for details.');
-                              }
-                            } catch (err: any) {
-                              toast.error(err.response?.data?.detail || 'Failed to generate score');
-                            } finally {
-                              setUploading(false);
-                            }
-                          }}
-                          disabled={uploading}
-                          sx={{
-                            padding: '12px',
-                            borderRadius: '10px',
-                            fontWeight: 600,
-                            textTransform: 'none',
-                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                            '&:hover': {
-                              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)'
-                            }
-                          }}
-                        >
-                          {uploading ? 'Uploading...' : 'Upload & Generate Score'}
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          fullWidth
-                          startIcon={<CloudUpload />}
-                          onClick={() => {
-                            setEditingTranscript(true);
-                            setTranscriptText(transcript);
-                          }}
-                          disabled={uploading}
-                          sx={{
-                            padding: '12px',
-                            borderRadius: '10px',
-                            fontWeight: 600,
-                            textTransform: 'none',
-                            borderColor: '#8b5cf6',
-                            color: '#8b5cf6',
-                            '&:hover': {
-                              borderColor: '#7c3aed',
-                              background: 'rgba(139, 92, 246, 0.05)'
-                            }
-                          }}
-                        >
-                          Edit Transcript
-                        </Button>
-                      </Box>
-                    )}
-                  </Box>
-                ) : (
-                  <Box>
-                    <TextField
-                      multiline
-                      rows={6}
-                      fullWidth
-                      value={transcriptText}
-                      onChange={(e) => setTranscriptText(e.target.value)}
-                      placeholder="Paste the interview transcript here...&#10;&#10;Example format:&#10;[00:00:00] Interviewer: Hello, welcome to the interview...&#10;[00:00:15] Candidate: Thank you for having me..."
-                      sx={{
-                        mb: 2,
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: '12px',
-                          background: '#f8fafc',
-                          fontSize: '14px',
-                          '&:hover': { background: '#f1f5f9' },
-                          '&.Mui-focused': { background: 'white' }
-                        }
-                      }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      {editingTranscript && (
-                        <Button
-                          variant="outlined"
-                          onClick={() => {
-                            setEditingTranscript(false);
-                            setTranscriptText('');
-                          }}
-                          sx={{
-                            padding: '14px 24px',
-                            borderRadius: '10px',
-                            fontWeight: 600,
-                            textTransform: 'none',
-                            borderColor: '#e2e8f0',
-                            color: '#64748b',
-                            '&:hover': {
-                              borderColor: '#94a3b8',
-                              background: '#f8fafc'
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      )}
                       <Button
                         variant="contained"
                         fullWidth
-                        startIcon={uploading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CloudUpload />}
-                        onClick={handleUploadTranscript}
-                        disabled={uploading || !transcriptText.trim()}
+                        startIcon={<ContentCopy />}
+                        onClick={() => {
+                          navigator.clipboard.writeText(transcript);
+                          toast.success('Transcript copied! Redirecting to Manage Candidates...');
+                          setTimeout(() => {
+                            navigate(`/recruiter-candidates?jobId=${interview.job_id}&jobTitle=${encodeURIComponent(interview.job_title || '')}`);
+                          }, 1000);
+                        }}
                         sx={{
-                          background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                          padding: '14px',
+                          padding: '12px',
                           borderRadius: '10px',
                           fontWeight: 600,
-                          fontSize: '15px',
                           textTransform: 'none',
-                          boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)',
+                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                           '&:hover': {
-                            background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
-                          },
-                          '&:disabled': {
-                            background: '#94a3b8',
-                            color: 'white'
+                            background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
                           }
                         }}
                       >
-                        {uploading ? 'Uploading & Generating Score...' : 'Upload & Generate Score'}
+                        Copy Transcript & Go to Manage Candidates
                       </Button>
-                    </Box>
+                    )}
+                  </Box>
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 3 }}>
+                    <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                      No transcript available yet. Transcript will appear here after the interview.
+                    </Typography>
                   </Box>
                 )}
 

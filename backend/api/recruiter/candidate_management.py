@@ -188,14 +188,50 @@ def get_job_candidates(
         JobApplication.job_id == job_id
     ).order_by(JobApplication.applied_at.desc()).all()
 
+    if not applications:
+        return []
+
+    app_ids = [app.id for app in applications]
+
+    # --- BULK PRE-FETCH all related data (avoid N+1 queries) ---
+
+    # 1. All resumes for this job's candidates
+    all_resumes = db.query(CandidateResume).filter(
+        CandidateResume.candidate_id.in_(app_ids),
+        CandidateResume.job_id == job_id
+    ).all()
+    resume_map = {r.candidate_id: r for r in all_resumes}
+
+    # 2. All question generation sessions for this job
+    all_q_sessions = db.query(QuestionGenerationSession).filter(
+        QuestionGenerationSession.job_id == job_id,
+        QuestionGenerationSession.candidate_id.in_(app_ids)
+    ).all()
+    q_session_map = {qs.candidate_id: qs for qs in all_q_sessions}
+
+    # 3. Question counts per candidate (single query with GROUP BY)
+    from sqlalchemy import func
+    q_counts = db.query(
+        InterviewQuestion.candidate_id,
+        func.count(InterviewQuestion.id)
+    ).filter(
+        InterviewQuestion.job_id == job_id,
+        InterviewQuestion.candidate_id.in_(app_ids)
+    ).group_by(InterviewQuestion.candidate_id).all()
+    q_count_map = {cid: cnt for cid, cnt in q_counts}
+
+    # 4. All interview sessions for these candidates
+    all_interviews = db.query(InterviewSession).filter(
+        InterviewSession.application_id.in_(app_ids),
+        InterviewSession.interview_mode == "recruiter_driven"
+    ).all()
+    interview_map = {iv.application_id: iv for iv in all_interviews}
+
+    # --- Build response using pre-fetched data ---
     result = []
     for app in applications:
         # Resume status
-        resume = db.query(CandidateResume).filter(
-            CandidateResume.candidate_id == app.id,
-            CandidateResume.job_id == job_id
-        ).first()
-
+        resume = resume_map.get(app.id)
         has_resume = resume is not None
         resume_parsed = has_resume and resume.parsing_status == "completed"
         parsed_skills = []
@@ -206,16 +242,8 @@ def get_job_candidates(
                 pass
 
         # Question generation status
-        q_session = db.query(QuestionGenerationSession).filter(
-            QuestionGenerationSession.job_id == job_id,
-            QuestionGenerationSession.candidate_id == app.id
-        ).first()
-
-        # Check if actual questions exist in the database (not just the session)
-        actual_questions_count = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id == job_id,
-            InterviewQuestion.candidate_id == app.id
-        ).count()
+        q_session = q_session_map.get(app.id)
+        actual_questions_count = q_count_map.get(app.id, 0)
 
         has_questions = actual_questions_count > 0
         questions_status = "none"
@@ -229,15 +257,10 @@ def get_job_candidates(
             else:
                 questions_status = "pending"
         elif q_session and not has_questions:
-            # Session exists but no questions - generation may have failed
             questions_status = "failed"
 
         # Interview/transcript/scoring status
-        interview = db.query(InterviewSession).filter(
-            InterviewSession.application_id == app.id,
-            InterviewSession.interview_mode == "recruiter_driven"
-        ).first()
-
+        interview = interview_map.get(app.id)
         has_transcript = interview is not None and interview.transcript_text is not None
         has_scores = interview is not None and interview.status == InterviewSessionStatus.SCORED
         overall_score = interview.overall_score if has_scores else None
@@ -420,10 +443,16 @@ def submit_transcript_and_score(
     # Update nested transcript data in candidate object
     _update_candidate_nested_transcripts(db, application_id, job_id)
 
-    # Build response
+    # Build response - pre-fetch all questions in one query
+    answer_question_ids = [a.question_id for a in session.answers]
+    all_answer_questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.id.in_(answer_question_ids)
+    ).all() if answer_question_ids else []
+    answer_q_map = {q.id: q for q in all_answer_questions}
+
     answers_data = []
     for a in session.answers:
-        q = db.query(InterviewQuestion).filter(InterviewQuestion.id == a.question_id).first()
+        q = answer_q_map.get(a.question_id)
         answers_data.append({
             "id": a.id,
             "question_id": a.question_id,

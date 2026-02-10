@@ -70,30 +70,7 @@ def apply_for_job(
         db.refresh(new_application)
         
         print(f"✅ Application submitted successfully: ID={new_application.id}")
-        
-        # 🚀 TRIGGER AUTOMATIC QUESTION GENERATION
-        try:
-            print(f"🤖 Triggering automatic question generation for application {new_application.id}")
-            
-            # Import question generator
-            from services.ai_question_generator import get_question_generator
-            
-            # Generate questions automatically
-            generator = get_question_generator()
-            result = generator.generate_questions(
-                db=db,
-                job_id=application_data.job_id,
-                candidate_id=new_application.id,
-                total_questions=10
-            )
-            
-            print(f"✅ Questions generated successfully: {result['total_questions']} questions in {result['mode']} mode")
-            
-        except Exception as e:
-            print(f"⚠️ Question generation failed (non-critical): {e}")
-            # Don't fail the application if question generation fails
-            pass
-        
+
         return new_application
         
     except HTTPException:

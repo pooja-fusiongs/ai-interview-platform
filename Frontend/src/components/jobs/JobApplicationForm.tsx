@@ -142,7 +142,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
 
       // Dismiss loading toast and show success
       dismissToast(loadingToast)
-      showSuccess('Application submitted successfully! AI questions are being generated for your interview. We will contact you soon.')
+      showSuccess('Application submitted successfully! We will contact you soon.')
 
       // Call callback to refresh application status
       if (onApplicationSubmitted) {

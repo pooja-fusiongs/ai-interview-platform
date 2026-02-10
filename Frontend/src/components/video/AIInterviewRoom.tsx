@@ -571,8 +571,8 @@ const AIInterviewRoom: React.FC = () => {
                     <Box sx={{
                       width: 90, height: 90,
                       borderRadius: '50%',
-                      background: scoreResult.overall_score >= 7 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-                                 scoreResult.overall_score >= 5 ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
+                      background: scoreResult.overall_score >= 75 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+                                 scoreResult.overall_score >= 50 ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
                                  'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                       display: 'flex',
                       alignItems: 'center',
@@ -581,7 +581,7 @@ const AIInterviewRoom: React.FC = () => {
                       boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
                     }}>
                       <Typography sx={{ color: 'white', fontSize: '26px', fontWeight: 700 }}>
-                        {Math.round(scoreResult.overall_score * 10)}%
+                        {Math.round(scoreResult.overall_score)}%
                       </Typography>
                     </Box>
                     <Typography sx={{ color: 'white', fontSize: '22px', fontWeight: 700, mb: 2 }}>

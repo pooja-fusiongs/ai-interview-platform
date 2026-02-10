@@ -23,9 +23,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Groq API (Alternative to Gemini for transcript scoring - FREE, FAST, NO QUOTA LIMITS)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-# Scoring thresholds
-SCORE_SELECT_THRESHOLD = float(os.getenv("SCORE_SELECT_THRESHOLD", "7.5"))
-SCORE_NEXT_ROUND_THRESHOLD = float(os.getenv("SCORE_NEXT_ROUND_THRESHOLD", "5.0"))
+# Scoring thresholds (out of 100)
+SCORE_SELECT_THRESHOLD = float(os.getenv("SCORE_SELECT_THRESHOLD", "75"))
+SCORE_NEXT_ROUND_THRESHOLD = float(os.getenv("SCORE_NEXT_ROUND_THRESHOLD", "50"))
 
 # Scoring weights for answer dimensions
 WEIGHT_RELEVANCE = float(os.getenv("WEIGHT_RELEVANCE", "0.30"))
