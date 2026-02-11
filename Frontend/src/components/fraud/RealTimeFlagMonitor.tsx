@@ -58,13 +58,13 @@ interface MonitorSession {
 
 const severityConfig = {
   high: { color: '#ef4444', bg: '#fef2f2', label: 'High' },
-  medium: { color: '#f59e0b', bg: '#fffbeb', label: 'Medium' },
+  medium: { color: '#020291', bg: '#EEF0FF', label: 'Medium' },
   low: { color: '#3b82f6', bg: '#eff6ff', label: 'Low' },
 };
 
 const getScoreColor = (score: number) => {
   if (score >= 80) return { color: '#22c55e', bg: '#f0fdf4', label: 'Good' };
-  if (score >= 60) return { color: '#f59e0b', bg: '#fffbeb', label: 'Fair' };
+  if (score >= 60) return { color: '#020291', bg: '#EEF0FF', label: 'Fair' };
   return { color: '#ef4444', bg: '#fef2f2', label: 'Poor' };
 };
 
@@ -425,13 +425,13 @@ const RealTimeFlagMonitor: React.FC = () => {
                     width: 44,
                     height: 44,
                     borderRadius: '10px',
-                    backgroundColor: '#fffbeb',
+                    backgroundColor: '#EEF0FF',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Warning sx={{ color: '#f59e0b', fontSize: '20px' }} />
+                  <Warning sx={{ color: '#020291', fontSize: '20px' }} />
                 </Box>
                 <Box>
                   <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
@@ -643,8 +643,8 @@ const RealTimeFlagMonitor: React.FC = () => {
                   label={`${totalFlags} Flags`}
                   size="small"
                   sx={{
-                    backgroundColor: totalFlags > 0 ? '#fffbeb' : '#f0fdf4',
-                    color: totalFlags > 0 ? '#f59e0b' : '#22c55e',
+                    backgroundColor: totalFlags > 0 ? '#EEF0FF' : '#f0fdf4',
+                    color: totalFlags > 0 ? '#020291' : '#22c55e',
                     fontWeight: 600,
                     fontSize: '12px',
                   }}
@@ -656,7 +656,7 @@ const RealTimeFlagMonitor: React.FC = () => {
                   <TableHead>
                     <TableRow sx={{ backgroundColor: '#f8fafc' }}>
                       {[
-                        { label: 'Time', hide: false },
+                        { label: 'Time', hide: '' },
                         { label: 'Candidate', hide: '' },
                         { label: 'Flag Type', hide: '' },
                         { label: 'Severity', hide: '' },

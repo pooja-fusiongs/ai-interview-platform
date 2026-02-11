@@ -189,7 +189,7 @@ const ExpertReview: React.FC = () => {
 
     return (
       <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'}`} style={{
-        color: '#d97706',
+        color: '#020291',
         fontSize: '12px',
         marginLeft: '6px',
         transition: 'all 0.2s ease'
@@ -362,17 +362,17 @@ const ExpertReview: React.FC = () => {
               startIcon={<FilterIcon />}
               onClick={() => setFilterModalOpen(true)}
               sx={{
-                borderColor: hasActiveFilters ? '#f59e0b' : '#e2e8f0',
-                color: hasActiveFilters ? '#f59e0b' : '#64748b',
-                background: hasActiveFilters ? 'rgba(245,158,11,0.08)' : '#fff',
+                borderColor: hasActiveFilters ? '#020291' : '#e2e8f0',
+                color: hasActiveFilters ? '#020291' : '#64748b',
+                background: hasActiveFilters ? '#EEF0FF' : '#fff',
                 borderRadius: 2,
                 textTransform: 'none',
                 fontWeight: 600,
                 width: { xs: '100%', sm: 'auto' },
                 '&:hover': {
-                  borderColor: '#f59e0b',
-                  color: '#f59e0b',
-                  backgroundColor: 'rgba(245,158,11,0.08)'
+                  borderColor: '#020291',
+                  color: '#020291',
+                  backgroundColor: '#EEF0FF'
                 }
               }}
             >
@@ -380,7 +380,7 @@ const ExpertReview: React.FC = () => {
               {hasActiveFilters && (
                 <Box sx={{
                   ml: 1, width: 20, height: 20, borderRadius: '50%',
-                  background: '#f59e0b', color: '#fff', fontSize: '11px',
+                  background: '#020291', color: '#fff', fontSize: '11px',
                   fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
                   {activeFilterChips.length}
@@ -406,9 +406,9 @@ const ExpertReview: React.FC = () => {
                 }}
                 sx={{
                   fontWeight: 600, fontSize: '12px',
-                  backgroundColor: 'rgba(245,158,11,0.1)', color: '#d97706',
-                  border: '1px solid rgba(245,158,11,0.3)',
-                  '& .MuiChip-deleteIcon': { color: '#d97706', '&:hover': { color: '#b45309' } },
+                  backgroundColor: '#EEF0FF', color: '#020291',
+                  border: '1px solid #020291',
+                  '& .MuiChip-deleteIcon': { color: '#020291', '&:hover': { color: '#020291' } },
                 }}
               />
             ))}
@@ -428,7 +428,7 @@ const ExpertReview: React.FC = () => {
         {/* Loading State */}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
-            <CircularProgress size={32} sx={{ color: '#f59e0b' }} />
+            <CircularProgress size={32} sx={{ color: '#020291' }} />
             <Typography sx={{ ml: 2, color: '#666' }}>Loading question sets...</Typography>
           </Box>
         ) : paginatedData.length === 0 ? (
@@ -444,7 +444,7 @@ const ExpertReview: React.FC = () => {
                   {/* Header with Avatar and Status */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Avatar sx={{ width: 40, height: 40, backgroundColor: '#f59e0b', color: '#fff', fontSize: '1rem' }}>
+                      <Avatar sx={{ width: 40, height: 40, backgroundColor: '#020291', color: '#fff', fontSize: '1rem' }}>
                         {(questionSet.candidate_name || 'U').charAt(0).toUpperCase()}
                       </Avatar>
                       <Box>
@@ -499,11 +499,11 @@ const ExpertReview: React.FC = () => {
                       sx={{
                         flex: 1,
                         textTransform: 'none',
-                        borderColor: questionSet.status === 'pending' ? '#f59e0b' : '#16a34a',
-                        color: questionSet.status === 'pending' ? '#f59e0b' : '#16a34a',
+                        borderColor: questionSet.status === 'pending' ? '#020291' : '#16a34a',
+                        color: questionSet.status === 'pending' ? '#020291' : '#16a34a',
                         fontSize: '12px',
                         '&:hover': {
-                          borderColor: questionSet.status === 'pending' ? '#d97706' : '#15803d',
+                          borderColor: questionSet.status === 'pending' ? '#020291' : '#15803d',
                           backgroundColor: questionSet.status === 'pending' ? '#fef3c7' : '#dcfce7'
                         }
                       }}
@@ -525,15 +525,15 @@ const ExpertReview: React.FC = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        color: sortField === 'experience' ? '#d97706' : '#666',
+                        color: sortField === 'experience' ? '#020291' : '#666',
                         fontSize: '0.875rem',
                         cursor: 'pointer',
                         userSelect: 'none',
                         backgroundColor: sortField === 'experience' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
                         transition: 'all 0.2s ease',
                         '&:hover': {
-                          color: '#d97706',
-                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                          color: '#020291',
+                          backgroundColor: '#EEF0FF'
                         }
                       }}
                       onClick={() => handleSort('experience')}
@@ -546,15 +546,15 @@ const ExpertReview: React.FC = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        color: sortField === 'candidate_name' ? '#d97706' : '#666',
+                        color: sortField === 'candidate_name' ? '#020291' : '#666',
                         fontSize: '0.875rem',
                         cursor: 'pointer',
                         userSelect: 'none',
                         backgroundColor: sortField === 'candidate_name' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
                         transition: 'all 0.2s ease',
                         '&:hover': {
-                          color: '#d97706',
-                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                          color: '#020291',
+                          backgroundColor: '#EEF0FF'
                         }
                       }}
                       onClick={() => handleSort('candidate_name')}
@@ -567,7 +567,7 @@ const ExpertReview: React.FC = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        color: sortField === 'candidate_email' ? '#d97706' : '#666',
+                        color: sortField === 'candidate_email' ? '#020291' : '#666',
                         fontSize: '0.875rem',
                         cursor: 'pointer',
                         userSelect: 'none',
@@ -575,8 +575,8 @@ const ExpertReview: React.FC = () => {
                         backgroundColor: sortField === 'candidate_email' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
                         transition: 'all 0.2s ease',
                         '&:hover': {
-                          color: '#d97706',
-                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                          color: '#020291',
+                          backgroundColor: '#EEF0FF'
                         }
                       }}
                       onClick={() => handleSort('candidate_email')}
@@ -590,15 +590,15 @@ const ExpertReview: React.FC = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        color: sortField === 'skills' ? '#d97706' : '#666',
+                        color: sortField === 'skills' ? '#020291' : '#666',
                         fontSize: '0.875rem',
                         cursor: 'pointer',
                         userSelect: 'none',
                         backgroundColor: sortField === 'skills' ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
                         transition: 'all 0.2s ease',
                         '&:hover': {
-                          color: '#d97706',
-                          backgroundColor: 'rgba(217, 119, 6, 0.1)'
+                          color: '#020291',
+                          backgroundColor: '#EEF0FF'
                         }
                       }}
                       onClick={() => handleSort('skills')}
@@ -665,11 +665,11 @@ const ExpertReview: React.FC = () => {
                             onClick={() => handleViewQuestions(questionSet)}
                             title={questionSet.status === 'pending' ? 'Review Questions' : 'View Questions'}
                             sx={{
-                              color: questionSet.status === 'pending' ? '#f59e0b' : questionSet.status === 'approved' ? '#16a34a' : '#64748b',
+                              color: questionSet.status === 'pending' ? '#020291' : questionSet.status === 'approved' ? '#16a34a' : '#64748b',
                               border: '1px solid',
-                              borderColor: questionSet.status === 'pending' ? '#f59e0b40' : questionSet.status === 'approved' ? '#16a34a40' : '#64748b40',
+                              borderColor: questionSet.status === 'pending' ? '#02029140' : questionSet.status === 'approved' ? '#16a34a40' : '#64748b40',
                               '&:hover': {
-                                background: questionSet.status === 'pending' ? '#f59e0b10' : questionSet.status === 'approved' ? '#16a34a10' : '#64748b10'
+                                background: questionSet.status === 'pending' ? '#02029110' : questionSet.status === 'approved' ? '#16a34a10' : '#64748b10'
                               }
                             }}
                           >
@@ -742,7 +742,7 @@ const ExpertReview: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{
               width: 36, height: 36, borderRadius: '10px',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              background: '#020291',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <FilterIcon sx={{ color: '#fff', fontSize: 20 }} />
@@ -759,7 +759,7 @@ const ExpertReview: React.FC = () => {
         <DialogContent sx={{ padding: '24px !important', display: 'flex', flexDirection: 'column', gap: 3 }}>
           <Box>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="fas fa-briefcase" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              <i className="fas fa-briefcase" style={{ color: '#020291', fontSize: 12 }}></i>
               Job Position
             </Typography>
             <FormControl fullWidth size="small">
@@ -769,8 +769,8 @@ const ExpertReview: React.FC = () => {
                 sx={{
                   borderRadius: '10px',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                 }}
               >
                 <MenuItem value="all">All Jobs</MenuItem>
@@ -783,7 +783,7 @@ const ExpertReview: React.FC = () => {
 
           <Box>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="fas fa-user" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              <i className="fas fa-user" style={{ color: '#020291', fontSize: 12 }}></i>
               Candidate Name
             </Typography>
             <FormControl fullWidth size="small">
@@ -793,8 +793,8 @@ const ExpertReview: React.FC = () => {
                 sx={{
                   borderRadius: '10px',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                 }}
               >
                 <MenuItem value="all">All Candidates</MenuItem>
@@ -807,7 +807,7 @@ const ExpertReview: React.FC = () => {
 
           <Box>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="fas fa-flag" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              <i className="fas fa-flag" style={{ color: '#020291', fontSize: 12 }}></i>
               Status
             </Typography>
             <FormControl fullWidth size="small">
@@ -817,8 +817,8 @@ const ExpertReview: React.FC = () => {
                 sx={{
                   borderRadius: '10px',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                 }}
               >
                 <MenuItem value="all">All Status</MenuItem>
@@ -847,9 +847,9 @@ const ExpertReview: React.FC = () => {
             sx={{
               textTransform: 'none', fontWeight: 600, fontSize: '14px',
               borderRadius: '10px', padding: '8px 24px',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-              boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
-              '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' },
+              background: '#020291',
+              boxShadow: '0 4px 12px 0 4px 10px rgba(0, 0, 0, 0.10)',
+              '&:hover': { background: '#06109E' },
             }}
           >
             Apply Filters

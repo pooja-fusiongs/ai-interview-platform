@@ -572,7 +572,7 @@ const AIInterviewRoom: React.FC = () => {
                       width: 90, height: 90,
                       borderRadius: '50%',
                       background: scoreResult.overall_score >= 75 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-                                 scoreResult.overall_score >= 50 ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
+                                 scoreResult.overall_score >= 50 ? 'linear-gradient(135deg, primary.main0%, #020291 100%)' :
                                  'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                       display: 'flex',
                       alignItems: 'center',
@@ -595,7 +595,7 @@ const AIInterviewRoom: React.FC = () => {
                         fontSize: '13px',
                         padding: '6px 14px',
                         background: scoreResult.recommendation === 'select' ? '#10b981' :
-                                   scoreResult.recommendation === 'next_round' ? '#f59e0b' : '#ef4444',
+                                   scoreResult.recommendation === 'next_round' ? '#020291' : '#ef4444',
                         color: 'white'
                       }}
                     />

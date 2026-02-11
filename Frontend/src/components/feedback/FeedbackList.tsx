@@ -69,13 +69,13 @@ const CircularScore: React.FC<{ score: number; size?: number }> = ({ score, size
 
   const getColor = () => {
     if (normalizedScore >= 7) return '#22c55e';
-    if (normalizedScore >= 4) return '#f59e0b';
+    if (normalizedScore >= 4) return '#020291';
     return '#ef4444';
   };
 
   const getBgColor = () => {
     if (normalizedScore >= 7) return '#f0fdf4';
-    if (normalizedScore >= 4) return '#fffbeb';
+    if (normalizedScore >= 4) return '#EEF0FF';
     return '#fef2f2';
   };
 
@@ -232,14 +232,14 @@ const FeedbackList: React.FC = () => {
             width: 100,
             height: 100,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+            background: '#EEF0FF',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 24px',
           }}
         >
-          <RateReview sx={{ fontSize: 48, color: '#f59e0b' }} />
+          <RateReview sx={{ fontSize: 48, color: '#020291' }} />
         </Box>
         <Typography sx={{ fontSize: '20px', fontWeight: 600, color: '#1e293b', mb: 1 }}>
           No Feedback Records Found
@@ -268,11 +268,11 @@ const FeedbackList: React.FC = () => {
                 width: 52,
                 height: 52,
                 borderRadius: '14px',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                background: '#020291',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 8px 24px rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 8px 24px rgba(2, 2, 145, 0.3)',
               }}
             >
               <RateReview sx={{ color: '#fff', fontSize: '26px' }} />
@@ -492,13 +492,13 @@ const FeedbackList: React.FC = () => {
                       width: 44,
                       height: 44,
                       borderRadius: '10px',
-                      backgroundColor: avgScore >= 7 ? '#f0fdf4' : avgScore >= 4 ? '#fffbeb' : '#fef2f2',
+                      backgroundColor: avgScore >= 7 ? '#f0fdf4' : avgScore >= 4 ? '#EEF0FF' : '#fef2f2',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <StarRate sx={{ color: avgScore >= 7 ? '#22c55e' : avgScore >= 4 ? '#f59e0b' : '#ef4444', fontSize: '20px' }} />
+                    <StarRate sx={{ color: avgScore >= 7 ? '#22c55e' : avgScore >= 4 ? '#020291' : '#ef4444', fontSize: '20px' }} />
                   </Box>
                   <Box>
                     <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>

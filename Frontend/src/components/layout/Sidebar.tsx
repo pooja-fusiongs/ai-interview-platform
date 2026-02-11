@@ -13,7 +13,6 @@ import {
   Drawer,
   IconButton,
   useMediaQuery,
-  useTheme
 } from '@mui/material'
 import { getAccessibleRoutes, getRoleColor } from '../../utils/roleUtils'
 
@@ -23,7 +22,6 @@ interface NavigationProps {
 }
 
 const SIDEBAR_WIDTH = 260
-const SIDEBAR_COLLAPSED_WIDTH = 70
 
 const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) => {
   const navigate = useNavigate()
@@ -34,10 +32,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
   const menuOpen = Boolean(anchorEl)
 
   // Responsive breakpoints
-  const theme = useTheme()
   const isMobile = useMediaQuery('(max-width:768px)')
-  const isTablet = useMediaQuery('(min-width:769px) and (max-width:1024px)')
-
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen)
   }
@@ -109,12 +104,12 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
           gap: { xs: '10px', md: '12px' },
           fontSize: { xs: '15px', md: '18px' },
           fontWeight: 700,
-          color: '#1e293b'
+          color: 'text.primary'
         }}>
           <Box sx={{
             width: { xs: 36, md: 40 },
             height: { xs: 36, md: 40 },
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            backgroundColor: 'primary.main',
             borderRadius: { xs: '8px', md: '10px' },
             display: 'flex',
             alignItems: 'center',
@@ -126,7 +121,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ lineHeight: 1.2 }}>AI Interview</span>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: '#64748b' }}>Platform</span>
+            <span style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>Platform</span>
           </Box>
         </Box>
       </Box>
@@ -164,9 +159,9 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
               gap: { xs: '10px', md: '12px' },
               padding: { xs: '10px 16px', md: '11px 20px' },
               border: 'none',
-              borderLeft: isActive(route.path) ? '3px solid #f59e0b' : '3px solid transparent',
-              background: isActive(route.path) ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
-              color: isActive(route.path) ? '#f59e0b' : '#64748b',
+              borderLeft: isActive(route.path) ? `3px solid ${'#020291'}` : '3px solid transparent',
+              background: isActive(route.path) ? `${'#EEF0FF'}` : 'transparent',
+              color: isActive(route.path) ? '#020291' : '#6b7280',
               fontSize: { xs: '13px', md: '13px' },
               fontWeight: isActive(route.path) ? 600 : 500,
               cursor: 'pointer',
@@ -176,9 +171,9 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
               textTransform: 'none',
               borderRadius: 0,
               '&:hover': {
-                background: 'rgba(245, 158, 11, 0.08)',
-                color: '#f59e0b',
-                borderLeftColor: '#f59e0b'
+                background: '#EEF0FF',
+                color: '#020291',
+                borderLeftColor: '#020291'
               }
             }}
           >
@@ -200,7 +195,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
           <Avatar sx={{
             width: { xs: 36, md: 40 },
             height: { xs: 36, md: 40 },
-            background: user?.role ? getRoleColor(user.role) : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            backgroundColor: user?.role ? getRoleColor(user.role) : 'primary.main',
             fontSize: { xs: '14px', md: '16px' },
             flexShrink: 0
           }}>
@@ -323,8 +318,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
                   color: '#64748b',
                   padding: '8px',
                   '&:hover': {
-                    background: '#f1f5f9',
-                    color: '#f59e0b'
+                    background: '#f1f5f9'
                   }
                 }}
               >
@@ -394,12 +388,13 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
                 cursor: 'pointer',
                 fontSize: { xs: '12px', sm: '13px', md: '14px' },
                 color: '#1e293b',
-                border: menuOpen ? '1px solid #f59e0b' : '1px solid #e2e8f0',
-                background: menuOpen ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+                border: menuOpen ? '1px solid' : '1px solid #e2e8f0',
+                borderColor: menuOpen ? 'primary.main' : '#e2e8f0',
+                background: menuOpen ? 'rgba(2, 2, 145, 0.05)' : 'transparent',
                 transition: 'all 0.2s',
                 '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.05)',
-                  borderColor: '#f59e0b'
+                  background: 'rgba(2, 2, 145, 0.05)',
+                  borderColor: 'primary.main'
                 }
               }}
               onClick={handleMenuOpen}
@@ -407,7 +402,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
               <Avatar sx={{
                 width: { xs: 26, sm: 28, md: 32 },
                 height: { xs: 26, sm: 28, md: 32 },
-                background: user?.role ? getRoleColor(user.role) : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                backgroundColor: user?.role ? getRoleColor(user.role) : 'primary.main',
                 fontSize: { xs: '11px', sm: '12px', md: '14px' }
               }}>
                 <i className="fas fa-user"></i>
@@ -483,8 +478,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
                   py: 1.5,
                   px: 2,
                   fontSize: { xs: '13px', md: '14px' },
-                  gap: '12px',
-                  '&:hover': { background: 'rgba(245, 158, 11, 0.08)' }
+                  gap: '12px'
                 }}
               >
                 <i className="fas fa-user-circle" style={{ width: 20, color: '#64748b' }}></i>
@@ -497,8 +491,7 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
                   py: 1.5,
                   px: 2,
                   fontSize: { xs: '13px', md: '14px' },
-                  gap: '12px',
-                  '&:hover': { background: 'rgba(245, 158, 11, 0.08)' }
+                  gap: '12px'
                 }}
               >
                 <i className="fas fa-shield-alt" style={{ width: 20, color: '#64748b' }}></i>

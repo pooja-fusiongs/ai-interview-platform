@@ -153,15 +153,16 @@ const VideoInterviewList: React.FC = () => {
                 startIcon={<FilterList />}
                 onClick={handleFilterClick}
                 sx={{
-                  borderColor: filterOpen || activeFilterCount > 0 ? '#f59e0b' : '#e2e8f0',
-                  color: filterOpen || activeFilterCount > 0 ? '#f59e0b' : '#64748b',
+                  borderColor: filterOpen || activeFilterCount > 0 ? '#020291' : '#e2e8f0',
+                  color: filterOpen || activeFilterCount > 0 ? '#020291' : '#64748b',
                   backgroundColor: '#fff',
                   textTransform: 'none',
                   fontWeight: 500,
                   borderRadius: '8px',
                   '&:hover': {
-                    borderColor: '#f59e0b',
-                    backgroundColor: '#fffbeb',
+                    borderColor: '#020291',
+                    backgroundColor: '#EEF0FF',
+                    color:"#020291"
                   },
                 }}
               >
@@ -211,7 +212,7 @@ const VideoInterviewList: React.FC = () => {
                         borderRadius: '8px',
                         '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
                         '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#cbd5e1' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                       }}
                     >
                       <MenuItem value="all">All Jobs</MenuItem>
@@ -233,7 +234,7 @@ const VideoInterviewList: React.FC = () => {
                         borderRadius: '8px',
                         '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
                         '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#cbd5e1' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                       }}
                     >
                       <MenuItem value="all">All Status</MenuItem>
@@ -280,7 +281,7 @@ const VideoInterviewList: React.FC = () => {
                   borderRadius: '8px',
                   '& fieldset': { borderColor: '#e2e8f0' },
                   '&:hover fieldset': { borderColor: '#cbd5e1' },
-                  '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
+                  '&.Mui-focused fieldset': { borderColor: '#020291' },
                 },
               }}
               InputProps={{

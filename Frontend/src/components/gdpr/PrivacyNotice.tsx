@@ -53,7 +53,7 @@ const getCategoryIcon = (category: string) => {
   const lower = (category || '').toLowerCase();
   if (lower.includes('personal') || lower.includes('name') || lower.includes('email')) return <Person sx={{ fontSize: 20, color: '#3b82f6' }} />;
   if (lower.includes('professional') || lower.includes('resume') || lower.includes('skill')) return <Work sx={{ fontSize: 20, color: '#8b5cf6' }} />;
-  if (lower.includes('interview') || lower.includes('question') || lower.includes('score')) return <Description sx={{ fontSize: 20, color: '#f59e0b' }} />;
+  if (lower.includes('interview') || lower.includes('question') || lower.includes('score')) return <Description sx={{ fontSize: 20, color: '#020291' }} />;
   if (lower.includes('video') || lower.includes('audio') || lower.includes('recording')) return <Videocam sx={{ fontSize: 20, color: '#ec4899' }} />;
   if (lower.includes('biometric') || lower.includes('facial')) return <Fingerprint sx={{ fontSize: 20, color: '#ef4444' }} />;
   return <Storage sx={{ fontSize: 20, color: '#64748b' }} />;
@@ -65,7 +65,7 @@ const userRights = [
   { icon: <Edit sx={{ fontSize: 20 }} />, title: 'Correct your data', color: '#22c55e' },
   { icon: <DeleteOutline sx={{ fontSize: 20 }} />, title: 'Delete your data', color: '#ef4444' },
   { icon: <Download sx={{ fontSize: 20 }} />, title: 'Export your data', color: '#8b5cf6' },
-  { icon: <Block sx={{ fontSize: 20 }} />, title: 'Object to processing', color: '#f59e0b' },
+  { icon: <Block sx={{ fontSize: 20 }} />, title: 'Object to processing', color: '#020291' },
   { icon: <HistoryToggleOff sx={{ fontSize: 20 }} />, title: 'Withdraw consent', color: '#ec4899' },
 ];
 
@@ -73,7 +73,7 @@ const userRights = [
 const getRetentionIcon = (key: string) => {
   switch (key) {
     case 'personal_data': return <Person sx={{ fontSize: 20, color: '#3b82f6' }} />;
-    case 'interview_data': return <Description sx={{ fontSize: 20, color: '#f59e0b' }} />;
+    case 'interview_data': return <Description sx={{ fontSize: 20, color: '#020291' }} />;
     case 'video_recordings': return <Videocam sx={{ fontSize: 20, color: '#ec4899' }} />;
     case 'biometric_data': return <Fingerprint sx={{ fontSize: 20, color: '#ef4444' }} />;
     case 'audit_logs': return <Policy sx={{ fontSize: 20, color: '#64748b' }} />;
@@ -226,8 +226,8 @@ const PrivacyNotice: React.FC = () => {
             {Object.keys(retentionSummary).length > 0 && (
               <Box sx={{ mb: 4 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                  <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Schedule sx={{ fontSize: 20, color: '#f59e0b' }} />
+                  <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#EEF0FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Schedule sx={{ fontSize: 20, color: '#020291' }} />
                   </Box>
                   <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>Data Retention</Typography>
                 </Box>

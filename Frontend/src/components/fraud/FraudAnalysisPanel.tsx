@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Chip, CircularProgress, Alert, IconButton, Tooltip, LinearProgress
+  Box, Typography, Chip, CircularProgress, Alert, IconButton, LinearProgress
 } from '@mui/material';
 import {
   ArrowBack,
@@ -22,13 +22,13 @@ import fraudDetectionService from '../../services/fraudDetectionService';
 
 const getScoreColor = (score: number): string => {
   if (score >= 80) return '#10b981';
-  if (score >= 60) return '#f59e0b';
+  if (score >= 60) return '#020291';
   return '#ef4444';
 };
 
 const getScoreBg = (score: number): string => {
   if (score >= 80) return '#ecfdf5';
-  if (score >= 60) return '#fffbeb';
+  if (score >= 60) return '#EEF0FF';
   return '#fef2f2';
 };
 
@@ -43,7 +43,7 @@ const getSeverityConfig = (severity: string) => {
     case 'high':
       return { color: '#ef4444', bg: '#fef2f2', icon: <Error sx={{ fontSize: 16 }} /> };
     case 'medium':
-      return { color: '#f59e0b', bg: '#fffbeb', icon: <Warning sx={{ fontSize: 16 }} /> };
+      return { color: '#020291', bg: '#EEF0FF', icon: <Warning sx={{ fontSize: 16 }} /> };
     default:
       return { color: '#3b82f6', bg: '#eff6ff', icon: <Info sx={{ fontSize: 16 }} /> };
   }
@@ -233,7 +233,7 @@ const FraudAnalysisPanel: React.FC = () => {
           background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)'
         }}>
           <Box sx={{ textAlign: 'center' }}>
-            <CircularProgress sx={{ color: '#f59e0b', mb: 2 }} />
+            <CircularProgress sx={{ color: '#020291', mb: 2 }} />
             <Typography sx={{ color: '#64748b', fontWeight: 600 }}>
               {analyzing ? 'Running fraud analysis...' : 'Loading analysis data...'}
             </Typography>
@@ -288,11 +288,11 @@ const FraudAnalysisPanel: React.FC = () => {
                 width: 48,
                 height: 48,
                 borderRadius: '12px',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                background: ' #020291',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)'
+                boxShadow: '0 4px 14px rgba(2, 2, 145, 0.3)'
               }}>
                 <Security sx={{ color: 'white', fontSize: 24 }} />
               </Box>
@@ -327,7 +327,7 @@ const FraudAnalysisPanel: React.FC = () => {
                 textAlign: 'center'
               }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
-                  <Shield sx={{ color: '#f59e0b', fontSize: 24 }} />
+                  <Shield sx={{ color: '#020291', fontSize: 24 }} />
                   <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
                     Overall Trust Score
                   </Typography>
@@ -347,7 +347,7 @@ const FraudAnalysisPanel: React.FC = () => {
                     {overallScore >= 80 ? (
                       <CheckCircle sx={{ color: '#10b981', fontSize: 20 }} />
                     ) : overallScore >= 60 ? (
-                      <Warning sx={{ color: '#f59e0b', fontSize: 20 }} />
+                      <Warning sx={{ color: '#020291', fontSize: 20 }} />
                     ) : (
                       <Error sx={{ color: '#ef4444', fontSize: 20 }} />
                     )}
@@ -403,7 +403,7 @@ const FraudAnalysisPanel: React.FC = () => {
                     <Chip
                       label={flags.filter((f: any) => f.severity === 'medium').length}
                       size="small"
-                      sx={{ background: '#fffbeb', color: '#f59e0b', fontWeight: 700 }}
+                      sx={{ background: '#EEF0FF', color: '#020291', fontWeight: 700 }}
                     />
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

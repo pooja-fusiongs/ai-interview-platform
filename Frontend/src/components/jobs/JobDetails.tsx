@@ -224,7 +224,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       'Engineering': '#3b82f6',
       'Design': '#8b5cf6',
       'Product': '#059669',
-      'Marketing': '#f59e0b',
+      'Marketing': '#020291',
       'Sales': '#ef4444',
       'HR': '#06b6d4'
     }
@@ -422,15 +422,15 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 <Button
                   onClick={() => onApplyNow(selectedJob)}
                   sx={{
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    color: '#f59e0b',
+                    background: 'rgba(2, 2, 145, 0.1)',
+                    color: '#020291',
                     padding: { xs: '8px 16px', sm: '12px 32px' },
                     borderRadius: '8px',
                     fontSize: { xs: '13px', sm: '16px' },
                     fontWeight: 600,
                     textTransform: 'none',
                     '&:hover': {
-                      background: 'rgba(245, 158, 11, 0.2)'
+                      background: 'rgba(2, 2, 145, 0.2)'
                     }
                   }}
                 >
@@ -464,15 +464,15 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 <Button
                   onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
                   sx={{
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    color: '#d97706',
+                    background: 'rgba(2, 2, 145, 0.1)',
+                    color: '#020291',
                     padding: { xs: '8px 16px', sm: '12px 32px' },
                     borderRadius: '8px',
                     fontSize: { xs: '13px', sm: '16px' },
                     fontWeight: 600,
                     textTransform: 'none',
                     '&:hover': {
-                      background: 'rgba(245, 158, 11, 0.2)'
+                      background: 'rgba(2, 2, 145, 0.2)'
                     }
                   }}
                 >
@@ -485,7 +485,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               background: '#f8fafc',
               border: '1px solid #e2e8f0'
             }}>
-              <i className="fas fa-star" style={{ color: '#fbbf24' }}></i>
+              <i className="fas fa-star" style={{ color: 'primary.light' }}></i>
             </IconButton>
             <IconButton sx={{
               background: '#f8fafc',
@@ -533,9 +533,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 padding: { xs: '6px 10px', sm: '8px 12px' },
                 backgroundColor: '#fef3c7',
                 borderRadius: '8px',
-                border: '1px solid #f59e0b'
+                border: '1px solid #020291'
               }}>
-                <i className="fas fa-clock" style={{ color: '#f59e0b', fontSize: '12px' }}></i>
+                <i className="fas fa-clock" style={{ color: '#020291', fontSize: '12px' }}></i>
                 <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#92400e', fontWeight: 600 }}>
                   Deadlined: {new Date(selectedJob.application_deadline).toLocaleDateString('en-US', {
                     year: 'numeric',
@@ -560,7 +560,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               borderRadius: '12px',
               border: '1px solid #e2e8f0'
             }}>
-              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#f59e0b' }}>
+              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#020291' }}>
                 {loading ? '...' : applicationStats.applied}
               </Typography>
               <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
@@ -715,7 +715,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 width: 12,
                 height: 12,
                 borderRadius: '50%',
-                background: selectedJob.expertReviewStatus === 'completed' ? '#10b981' : '#f59e0b'
+                background: selectedJob.expertReviewStatus === 'completed' ? '#10b981' : '#020291'
               }} />
               <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
                 Expert Review {selectedJob.expertReviewStatus === 'completed' ? 'Completed' : 'Pending'}
@@ -745,7 +745,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   setEditedDescription(selectedJob.fullDescription || selectedJob.description || '')
                   setIsEditingDesc(true)
                 }}
-                sx={{ color: '#64748b', '&:hover': { color: '#f59e0b', background: 'rgba(245,158,11,0.1)' } }}
+                sx={{ color: '#64748b', '&:hover': { color: '#020291', background: 'rgba(245,158,11,0.1)' } }}
                 size="small"
               >
                 <i className="fas fa-pen" style={{ fontSize: 14 }}></i>
@@ -767,8 +767,8 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                     borderRadius: '10px',
                     fontSize: '14px',
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291' },
                   }
                 }}
               />
@@ -805,8 +805,8 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   sx={{
                     textTransform: 'none', fontWeight: 600, fontSize: '13px',
                     borderRadius: '8px', padding: '6px 20px',
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                    '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' }
+                    background: 'linear-gradient(135deg, #020291, #020291)',
+                    '&:hover': { background: 'linear-gradient(135deg, #020291, #b45309)' }
                   }}
                 >
                   {savingDesc ? 'Saving...' : 'Save'}
@@ -1153,7 +1153,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   color: '#cbd5e1',
                   padding: '4px',
                   flexShrink: 0,
-                  '&:hover': { color: '#fbbf24' }
+                  '&:hover': { color: 'primary.light' }
                 }}>
                   <i className="fas fa-bookmark" style={{ fontSize: '14px' }}></i>
                 </IconButton>
@@ -1255,7 +1255,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                     color: '#cbd5e1',
                     padding: '4px',
                     flexShrink: 0,
-                    '&:hover': { color: '#fbbf24' }
+                    '&:hover': { color: 'primary.light' }
                   }}>
                     <i className="fas fa-bookmark" style={{ fontSize: '14px' }}></i>
                   </IconButton>

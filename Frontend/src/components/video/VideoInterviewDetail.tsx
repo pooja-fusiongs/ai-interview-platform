@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Chip, CircularProgress, Alert,
-   Button, IconButton, Tooltip, Avatar, Divider,
+  Button, IconButton, Tooltip, Avatar, Divider,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -30,7 +30,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-
 
 const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactElement }> = {
   scheduled: { color: '#3b82f6', bg: '#eff6ff', icon: <CalendarMonth sx={{ fontSize: 18 }} /> },
-  in_progress: { color: '#f59e0b', bg: '#fffbeb', icon: <PlayArrow sx={{ fontSize: 18 }} /> },
+  in_progress: { color: '#020291', bg: '#EEF0FF', icon: <PlayArrow sx={{ fontSize: 18 }} /> },
   completed: { color: '#10b981', bg: '#ecfdf5', icon: <CheckCircle sx={{ fontSize: 18 }} /> },
   cancelled: { color: '#ef4444', bg: '#fef2f2', icon: <Cancel sx={{ fontSize: 18 }} /> },
 };
@@ -126,7 +126,7 @@ const VideoInterviewDetail: React.FC = () => {
           background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)'
         }}>
           <Box sx={{ textAlign: 'center' }}>
-            <CircularProgress sx={{ color: '#f59e0b', mb: 2 }} />
+            <CircularProgress sx={{ color: '#020291', mb: 2 }} />
             <Typography sx={{ color: '#64748b' }}>Loading interview details...</Typography>
           </Box>
         </Box>
@@ -203,7 +203,7 @@ const VideoInterviewDetail: React.FC = () => {
                 maxWidth: '100%'
               }}>
                 <Box sx={{
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  background: '#EEF0FF',
                   padding: { xs: '16px', sm: '20px', md: '24px' },
                   color: 'white',
                   overflow: 'hidden'
@@ -213,7 +213,7 @@ const VideoInterviewDetail: React.FC = () => {
                       width: { xs: 40, sm: 48 },
                       height: { xs: 40, sm: 48 },
                       borderRadius: '12px',
-                      background: 'rgba(255,255,255,0.2)',
+                      background: '#020291',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -358,15 +358,15 @@ const VideoInterviewDetail: React.FC = () => {
                       sx={{
                         mt: 3,
                         width: '100%',
-                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                         padding: '14px',
                         borderRadius: '10px',
                         fontWeight: 600,
                         fontSize: '15px',
                         textTransform: 'none',
-                        boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)',
+                        boxShadow: '0 4px 14px rgba(2, 2, 145, 0.3)',
                         '&:hover': {
-                          background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                          background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)',
                           boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4)'
                         }
                       }}
@@ -377,7 +377,7 @@ const VideoInterviewDetail: React.FC = () => {
                 </Box>
               </Box>
 
-             
+
 
               {/* Transcript Section */}
               <Box sx={{
@@ -408,9 +408,9 @@ const VideoInterviewDetail: React.FC = () => {
                           background: '#f8fafc',
                           border: '1px solid #e2e8f0',
                           '&:hover': {
-                            background: '#f59e0b',
+                            background: '#020291',
                             color: 'white',
-                            borderColor: '#f59e0b'
+                            borderColor: '#020291'
                           }
                         }}
                       >
@@ -464,9 +464,9 @@ const VideoInterviewDetail: React.FC = () => {
                           borderRadius: '10px',
                           fontWeight: 600,
                           textTransform: 'none',
-                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                           '&:hover': {
-                            background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                            background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)'
                           }
                         }}
                       >
@@ -518,7 +518,7 @@ const VideoInterviewDetail: React.FC = () => {
                       sx={{
                         textTransform: 'none', fontWeight: 600, fontSize: '12px',
                         borderColor: '#e2e8f0', color: '#64748b', borderRadius: '8px',
-                        '&:hover': { borderColor: '#f59e0b', color: '#f59e0b' }
+                        '&:hover': { borderColor: '#020291', color: '#020291' }
                       }}
                     >
                       Download
@@ -537,7 +537,7 @@ const VideoInterviewDetail: React.FC = () => {
                   }}>
                     <Box sx={{
                       width: 56, height: 56, borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       <Videocam sx={{ color: 'white', fontSize: 28 }} />
@@ -564,12 +564,12 @@ const VideoInterviewDetail: React.FC = () => {
                 <Box sx={{
                   background: 'white',
                   borderRadius: '16px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid #BBC3FF',
                   overflow: 'hidden',
                   maxWidth: '100%'
                 }}>
                   <Box sx={{
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    background: '#EEF0FF',
                     padding: { xs: '20px', sm: '32px' },
                     color: 'white',
                     textAlign: 'center'
@@ -578,19 +578,19 @@ const VideoInterviewDetail: React.FC = () => {
                       width: { xs: 60, sm: 80 },
                       height: { xs: 60, sm: 80 },
                       borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.2)',
+                      background: '#DDE1FF',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       margin: '0 auto 16px',
                       border: '3px solid rgba(255,255,255,0.3)'
                     }}>
-                      <CheckCircle sx={{ fontSize: { xs: 30, sm: 40 } }} />
+                      <CheckCircle sx={{ fontSize: { xs: 30, sm: 40 },color:"#0F17BF" }} />
                     </Box>
-                    <Typography sx={{ fontSize: { xs: '18px', sm: '22px' }, fontWeight: 700, mb: 1 }}>
+                    <Typography sx={{ fontSize: { xs: '18px', sm: '22px' }, fontWeight: 700, mb: 1 ,color:'#111827'}}>
                       Score Generated Successfully!
                     </Typography>
-                    <Typography sx={{ fontSize: { xs: '13px', sm: '14px' }, opacity: 0.9, mb: 3 }}>
+                    <Typography sx={{ fontSize: { xs: '13px', sm: '14px' }, opacity: 0.9, mb: 3 ,color:'#6B7280'}}>
                       Interview has been scored and results are available
                     </Typography>
                     <Button
@@ -599,16 +599,16 @@ const VideoInterviewDetail: React.FC = () => {
                       onClick={() => navigate(scoreResult.interview_session_id ? `/results?session=${scoreResult.interview_session_id}` : '/results')}
                       sx={{
                         background: 'white',
-                        color: '#059669',
-                        padding: { xs: '12px 24px', sm: '14px 32px' },
+                        color: '#ffffff',
+                        padding: { xs: '12px 24px', sm: '12px 30px' },
                         borderRadius: '12px',
                         fontWeight: 700,
                         fontSize: { xs: '14px', sm: '16px' },
                         textTransform: 'none',
                         boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
                         '&:hover': {
-                          background: '#f0fdf4',
-                          boxShadow: '0 6px 20px rgba(0,0,0,0.2)'
+                          background: '#06109E',
+                          boxShadow: '0px 8px 24px rgba(2, 2, 145, 0.12)'
                         }
                       }}
                     >
@@ -705,9 +705,9 @@ const VideoInterviewDetail: React.FC = () => {
                       fontWeight: 600,
                       textTransform: 'none',
                       '&:hover': {
-                        borderColor: '#f59e0b',
-                        background: 'rgba(245, 158, 11, 0.05)',
-                        color: '#f59e0b'
+                        borderColor: '#020291',
+                        background: '#EEF0FF',
+                        color: '#020291'
                       }
                     }}
                   >
@@ -730,9 +730,9 @@ const VideoInterviewDetail: React.FC = () => {
                           textTransform: 'none',
                           width: '100%',
                           '&:hover': {
-                            borderColor: '#3b82f6',
-                            background: 'rgba(59, 130, 246, 0.05)',
-                            color: '#3b82f6'
+                            borderColor: '#020291',
+                            background: '#EEF0FF',
+                            color: '#020291'
                           },
                           '&:disabled': {
                             borderColor: '#e2e8f0',
@@ -750,20 +750,20 @@ const VideoInterviewDetail: React.FC = () => {
 
               {/* Interview Info */}
               <Box sx={{
-                background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                background: '#EEF0FF',
                 borderRadius: '16px',
                 padding: { xs: '16px', sm: '24px' },
-                border: '1px solid #fbbf24',
+                border: '1px solid #020291',
                 maxWidth: '100%',
                 boxSizing: 'border-box'
               }}>
-                <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#92400e', mb: 2 }}>
+                <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#020291', mb: 2 }}>
                   ℹ️ Interview Tips
                 </Typography>
                 <Box component="ul" sx={{
                   margin: 0,
                   paddingLeft: '20px',
-                  color: '#78350f',
+                  color: '#020291',
                   fontSize: '13px',
                   lineHeight: 1.8
                 }}>

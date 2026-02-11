@@ -361,8 +361,8 @@ const Results = () => {
 
         {/* Score overview card (original) */}
         <Card sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ padding: { xs: '14px 16px', md: '20px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <Box sx={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#f59e0b,#d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px' }}>
+          <Box sx={{ padding: { xs: '14px 16px', md: '20px 24px' }, borderBottom: '1px solid #f1f5f9', background: '#EEF0FF', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <Box sx={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#020291,#020291)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px' }}>
               <i className="fas fa-chart-bar"></i>
             </Box>
             <Box sx={{ flex: 1 }}>
@@ -419,7 +419,7 @@ const Results = () => {
               {/* Candidate info + strengths / weaknesses */}
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', mb: '16px' }}>
-                  <Avatar sx={{ width: 44, height: 44, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: '16px' }}>
+                  <Avatar sx={{ width: 44, height: 44, background: 'linear-gradient(135deg,#020291,#020291)', fontSize: '16px' }}>
                     <i className="fas fa-user"></i>
                   </Avatar>
                   <Box>
@@ -502,7 +502,7 @@ const Results = () => {
                     }}
                   >
                     {/* Question number */}
-                    <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#d97706', minWidth: '24px' }}>
+                    <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#020291', minWidth: '24px' }}>
                       Q{idx + 1}
                     </Typography>
 
@@ -549,7 +549,7 @@ const Results = () => {
                       {/* ─── 1. Candidate's Answer (primary focus) ──────────── */}
                       <Box sx={{ mt: '14px', mb: '12px' }}>
                         <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', mb: '6px' }}>
-                          <i className="fas fa-user" style={{ fontSize: 10, marginRight: 5, color: '#3b82f6' }}></i>
+                          <i className="fas fa-user" style={{ fontSize: 10, marginRight: 5, color: '#020291' }}></i>
                           Candidate's Answer
                         </Typography>
                         <Box sx={{
@@ -574,30 +574,20 @@ const Results = () => {
                         mb: '12px',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        background: '#fffbeb',
-                        borderLeft: '3px solid #f59e0b',
+                        background: '#EEF0FF',
+                        borderLeft: '3px solid #020291',
                       }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
-                          <i className="fas fa-robot" style={{ fontSize: 11, color: '#d97706' }}></i>
-                          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          <i className="fas fa-robot" style={{ fontSize: 11, color: '#020291' }}></i>
+                          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#020291', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                             AI Feedback
                           </Typography>
                         </Box>
-                        <Typography sx={{ fontSize: '13px', color: '#78350f', lineHeight: 1.6 }}>
+                        <Typography sx={{ fontSize: '13px', color: '#1A22E0', lineHeight: 1.6 }}>
                           {feedbackText}
                         </Typography>
                         {/* ─── 4. Rule-based scoring warning (soft yellow) ──── */}
-                        {ruleBasedFlag && (
-                          <Box sx={{
-                            mt: '8px', padding: '6px 10px', borderRadius: '6px',
-                            background: '#fef9c3', display: 'flex', alignItems: 'center', gap: '6px',
-                          }}>
-                            <i className="fas fa-info-circle" style={{ fontSize: 11, color: '#a16207' }}></i>
-                            <Typography sx={{ fontSize: '11px', color: '#a16207', fontWeight: 500 }}>
-                              AI scoring unavailable. Using rule-based evaluation.
-                            </Typography>
-                          </Box>
-                        )}
+                        
                       </Box>
 
                       {/* ─── 1b. Expected Answer (collapsible) ─────────────── */}
@@ -610,17 +600,17 @@ const Results = () => {
                               cursor: 'pointer', userSelect: 'none', mb: isExpectedOpen ? '6px' : 0,
                             }}
                           >
-                            <i className="fas fa-lightbulb" style={{ fontSize: 10, color: '#8b5cf6' }}></i>
-                            <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <i className="fas fa-lightbulb" style={{ fontSize: 10, color: '#020291' }}></i>
+                            <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#020291', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                               Expected Answer
                             </Typography>
                             {isExpectedOpen ? (
-                              <ExpandLessIcon sx={{ fontSize: 16, color: '#8b5cf6' }} />
+                              <ExpandLessIcon sx={{ fontSize: 16, color: '#020291' }} />
                             ) : (
-                              <ExpandMoreIcon sx={{ fontSize: 16, color: '#8b5cf6' }} />
+                              <ExpandMoreIcon sx={{ fontSize: 16, color: '#020291' }} />
                             )}
                             {!isExpectedOpen && (
-                              <Typography sx={{ fontSize: '11px', color: '#a78bfa', ml: 'auto' }}>
+                              <Typography sx={{ fontSize: '11px', color: '#020291', ml: 'auto' }}>
                                 Click to reveal
                               </Typography>
                             )}
@@ -648,8 +638,8 @@ const Results = () => {
 
         {/* Integrity check */}
         <Card sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: 'none' }}>
-          <Box sx={{ padding: { xs: '12px 16px', md: '14px 20px' }, borderBottom: '1px solid #f1f5f9', background: '#fafafa', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fas fa-shield-alt" style={{ color: '#f59e0b', fontSize: 14 }}></i>
+          <Box sx={{ padding: { xs: '12px 16px', md: '14px 20px' }, borderBottom: '1px solid #f1f5f9', background: '#EEF0FF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <i className="fas fa-shield-alt" style={{ color: '#020291', fontSize: 14 }}></i>
             <Typography sx={{ fontSize: { xs: '14px', md: '15px' }, fontWeight: 600, color: '#1e293b' }}>
               Integrity Check
             </Typography>
@@ -662,12 +652,12 @@ const Results = () => {
             ].map((check) => (
               <Box key={check.label} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Box sx={{ width: 30, height: 30, borderRadius: '8px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <i className={check.icon} style={{ color: '#16a34a', fontSize: 12 }}></i>
+                  <Box sx={{ width: 30, height: 30, borderRadius: '8px', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <i className={check.icon} style={{ color: '#6B7280', fontSize: 12 }}></i>
                   </Box>
                   <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>{check.label}</Typography>
                 </Box>
-                <Chip label="Passed" size="small" sx={{ fontSize: '11px', fontWeight: 600, backgroundColor: '#dcfce7', color: '#166534', height: '24px' }} />
+                <Chip label="Passed" size="small" sx={{ fontSize: '11px', fontWeight: 600, backgroundColor: '#DCFCE7', color: '#166534', height: '24px' }} />
               </Box>
             ))}
           </CardContent>
@@ -695,7 +685,7 @@ const Results = () => {
         mb: 2
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <i className="fas fa-chart-bar" style={{ color: '#f59e0b', fontSize: 16 }}></i>
+          <i className="fas fa-chart-bar" style={{ color: '#020291', fontSize: 16 }}></i>
           <Typography sx={{ fontSize: { xs: '16px', md: '20px' }, fontWeight: 700, color: '#1e293b' }}>Interviews Result</Typography>
           <Typography sx={{ fontSize: '13px', color: '#64748b', ml: 1 }}>
             {filteredSessions.length} result{filteredSessions.length !== 1 ? 's' : ''}
@@ -721,8 +711,8 @@ const Results = () => {
                 backgroundColor: '#fff',
                 borderRadius: '8px',
                 '& fieldset': { borderColor: '#e2e8f0' },
-                '&:hover fieldset': { borderColor: '#f59e0b' },
-                '&.Mui-focused fieldset': { borderColor: '#f59e0b' },
+                '&:hover fieldset': { borderColor: '#020291' },
+                '&.Mui-focused fieldset': { borderColor: '#020291' },
               }
             }}
           />
@@ -736,17 +726,17 @@ const Results = () => {
               fontSize: '14px',
               borderRadius: '8px',
               padding: '7px 16px',
-              borderColor: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#f59e0b' : '#e2e8f0',
-              color: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#f59e0b' : '#64748b',
+              borderColor: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#020291' : '#e2e8f0',
+              color: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#020291' : '#64748b',
               background: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? 'rgba(245,158,11,0.08)' : '#fff',
-              '&:hover': { borderColor: '#f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.08)' },
+              '&:hover': { borderColor: '#020291', color: '#020291', background: 'rgba(245,158,11,0.08)' },
             }}
           >
             Filter
             {(filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') && (
               <Box sx={{
                 ml: 1, width: 20, height: 20, borderRadius: '50%',
-                background: '#f59e0b', color: '#fff', fontSize: '11px',
+                background: '#020291', color: '#fff', fontSize: '11px',
                 fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
                 {[filterJob, filterCandidate, filterStatus].filter(f => f !== 'all').length}
@@ -772,9 +762,9 @@ const Results = () => {
               }}
               sx={{
                 fontWeight: 600, fontSize: '12px',
-                backgroundColor: 'rgba(245,158,11,0.1)', color: '#d97706',
+                backgroundColor: 'rgba(245,158,11,0.1)', color: '#020291',
                 border: '1px solid rgba(245,158,11,0.3)',
-                '& .MuiChip-deleteIcon': { color: '#d97706', '&:hover': { color: '#b45309' } },
+                '& .MuiChip-deleteIcon': { color: '#020291', '&:hover': { color: '#020291' } },
               }}
             />
           ))}
@@ -874,13 +864,13 @@ const Results = () => {
                       borderBottom: '1px solid #f1f5f9',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
-                      '&:hover': { background: '#fefce8', margin: { xs: '0 -16px', md: '0 -24px' }, padding: { xs: '12px 16px', md: '16px 24px' }, borderRadius: '10px' },
+                      '&:hover': { background: '#EEF0FF', margin: { xs: '0 -16px', md: '0 -24px' }, padding: { xs: '12px 16px', md: '16px 24px' }, borderRadius: '10px' },
                       '&:last-child': { borderBottom: 'none' },
                     }}
                   >
                     {/* Left */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', md: '14px' }, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <Avatar sx={{ width: { xs: 36, md: 42 }, height: { xs: 36, md: 42 }, background: 'linear-gradient(135deg,#f59e0b,#d97706)', fontSize: { xs: '13px', md: '15px' } }}>
+                      <Avatar sx={{ width: { xs: 36, md: 42 }, height: { xs: 36, md: 42 }, background: 'linear-gradient(135deg,#020291,#020291)', fontSize: { xs: '13px', md: '15px' } }}>
                         <i className="fas fa-user"></i>
                       </Avatar>
                       <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -997,7 +987,7 @@ const Results = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{
               width: 36, height: 36, borderRadius: '10px',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              background: 'linear-gradient(135deg, #020291, #020291)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <FilterListIcon sx={{ color: '#fff', fontSize: 20 }} />
@@ -1015,7 +1005,7 @@ const Results = () => {
           {/* Job Filter */}
           <Box>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="fas fa-briefcase" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              <i className="fas fa-briefcase" style={{ color: '#020291', fontSize: 12 }}></i>
               Job Position
             </Typography>
             <FormControl fullWidth size="small">
@@ -1025,8 +1015,8 @@ const Results = () => {
                 sx={{
                   borderRadius: '10px',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                 }}
               >
                 <MenuItem value="all">All Jobs</MenuItem>
@@ -1040,7 +1030,7 @@ const Results = () => {
           {/* Candidate Filter */}
           <Box>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="fas fa-user" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              <i className="fas fa-user" style={{ color: '#020291', fontSize: 12 }}></i>
               Candidate Name
             </Typography>
             <FormControl fullWidth size="small">
@@ -1050,8 +1040,8 @@ const Results = () => {
                 sx={{
                   borderRadius: '10px',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                 }}
               >
                 <MenuItem value="all">All Candidates</MenuItem>
@@ -1065,7 +1055,7 @@ const Results = () => {
           {/* Status Filter */}
           <Box>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="fas fa-flag" style={{ color: '#f59e0b', fontSize: 12 }}></i>
+              <i className="fas fa-flag" style={{ color: '#020291', fontSize: 12 }}></i>
               Status
             </Typography>
             <FormControl fullWidth size="small">
@@ -1075,8 +1065,8 @@ const Results = () => {
                 sx={{
                   borderRadius: '10px',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                 }}
               >
                 <MenuItem value="all">All Status</MenuItem>
@@ -1110,9 +1100,9 @@ const Results = () => {
             sx={{
               textTransform: 'none', fontWeight: 600, fontSize: '14px',
               borderRadius: '10px', padding: '8px 24px',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              background: 'linear-gradient(135deg, #020291, #020291)',
               boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
-              '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' },
+              '&:hover': { background: 'linear-gradient(135deg, #020291, #b45309)' },
             }}
           >
             Apply Filters

@@ -106,7 +106,7 @@ const Login = () => {
             <Box sx={{
               width: { xs: 100, md: 120 },
               height: { xs: 100, md: 120 },
-              background: 'linear-gradient(135deg, #e8f4fd 0%, #d1e7dd 100%)',
+              background: '#EEF0FF',
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
@@ -117,7 +117,7 @@ const Login = () => {
                 <Box sx={{
                   width: 35,
                   height: 35,
-                  background: '#ff9a56',
+                  background: '#020291',
                   borderRadius: '50%',
                   margin: '0 auto 5px'
                 }} />
@@ -156,7 +156,7 @@ const Login = () => {
             <Box sx={{
               width: '80px',
               height: '4px',
-              background: '#ffc107',
+              background: '#020291',
               borderRadius: '2px'
             }} />
           </Box>
@@ -180,7 +180,7 @@ const Login = () => {
               <Box sx={{
                 width: { xs: 44, md: 50 },
                 height: { xs: 44, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -210,11 +210,11 @@ const Login = () => {
                       borderWidth: '2px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -236,7 +236,7 @@ const Login = () => {
               <Box sx={{
                 width: { xs: 44, md: 50 },
                 height: { xs: 44, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -289,11 +289,11 @@ const Login = () => {
                       borderWidth: '2px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -313,7 +313,7 @@ const Login = () => {
               sx={{
                 width: '100%',
                 padding: '10px',
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '25px',
@@ -324,7 +324,7 @@ const Login = () => {
                 marginBottom: '10px',
                 '&:hover': {
                   transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(255, 154, 86, 0.4)'
+                  boxShadow: '0 8px 25px rgba(2, 2, 145, 0.3)'
                 },
                 '&:disabled': {
                   opacity: 0.7,
@@ -351,8 +351,8 @@ const Login = () => {
                 cursor: 'pointer',
                 textTransform: 'none',
                 '&:hover': {
-                  borderColor: '#ff9a56',
-                  color: '#ff9a56'
+                  borderColor: '#020291',
+                  color: '#020291'
                 }
               }}
             >
@@ -377,7 +377,7 @@ const Login = () => {
                 textDecoration: 'underline',
                 textTransform: 'none',
                 '&:hover': {
-                  color: '#f59e0b'
+                  color: '#020291'
                 }
               }}
             >
@@ -390,7 +390,7 @@ const Login = () => {
       {/* Right Side - Image (Hidden on mobile/tablet) */}
       <Box sx={{
         flex: 1,
-        background: 'linear-gradient(135deg, #fef5e7 0%, #fed7aa 100%)',
+        background: '#EEF0FF',
         display: { xs: 'none', md: 'flex' },
         alignItems: 'center',
         justifyContent: 'center',
@@ -407,12 +407,11 @@ const Login = () => {
         }}>
           <Box
             component="img"
-            src="/right_login.png"
+            src="/right_login(NEW).png"
             alt="AI Interview Platform Illustration"
             sx={{
               width: '100%',
               height: '100%',
-              objectFit: 'unset'
             }}
           />
         </Box>

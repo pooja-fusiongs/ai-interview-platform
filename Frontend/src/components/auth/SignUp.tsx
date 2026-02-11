@@ -137,7 +137,7 @@ const SignUp = () => {
             <Box sx={{
               width: { xs: 80, md: 120 },
               height: { xs: 80, md: 120 },
-              background: 'linear-gradient(135deg, #e8f4fd 0%, #d1e7dd 100%)',
+              background: '#EEF0FF',
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
@@ -148,7 +148,7 @@ const SignUp = () => {
                 <Box sx={{
                   width: 35,
                   height: 35,
-                  background: '#ff9a56',
+                  background: '#020291',
                   borderRadius: '50%',
                   margin: '0 auto 5px'
                 }} />
@@ -187,7 +187,7 @@ const SignUp = () => {
             <Box sx={{
               width: '80px',
               height: '4px',
-              background: '#ffc107',
+              background: '#020291',
               borderRadius: '2px'
             }} />
           </Box>
@@ -211,7 +211,7 @@ const SignUp = () => {
               <Box sx={{
                 width: { xs: 40, md: 50 },
                 height: { xs: 40, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -241,11 +241,11 @@ const SignUp = () => {
                       borderWidth: '2px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -267,7 +267,7 @@ const SignUp = () => {
               <Box sx={{
                 width: { xs: 40, md: 50 },
                 height: { xs: 40, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -298,11 +298,11 @@ const SignUp = () => {
                       borderWidth: '2px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -324,7 +324,7 @@ const SignUp = () => {
               <Box sx={{
                 width: { xs: 40, md: 50 },
                 height: { xs: 40, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -351,11 +351,11 @@ const SignUp = () => {
                       borderWidth: '2px'
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     },
                     '& .MuiSelect-select': {
                       padding: '15px 20px',
@@ -382,7 +382,7 @@ const SignUp = () => {
               <Box sx={{
                 width: { xs: 40, md: 50 },
                 height: { xs: 40, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -436,11 +436,11 @@ const SignUp = () => {
                       borderWidth: '2px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -462,7 +462,7 @@ const SignUp = () => {
               <Box sx={{
                 width: { xs: 40, md: 50 },
                 height: { xs: 40, md: 50 },
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -516,11 +516,11 @@ const SignUp = () => {
                       borderWidth: '2px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#ff9a56'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#ff9a56',
-                      boxShadow: '0 0 0 3px rgba(255, 154, 86, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -538,7 +538,7 @@ const SignUp = () => {
               sx={{
                 width: '100%',
                 padding: '10px',
-                background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%)',
+                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '25px',
@@ -549,7 +549,7 @@ const SignUp = () => {
                 marginBottom: '10px',
                 '&:hover': {
                   transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(255, 154, 86, 0.4)'
+                  boxShadow: '0 8px 25px rgba(2, 2, 145, 0.3)'
                 },
                 '&:disabled': {
                   opacity: 0.7,
@@ -580,7 +580,7 @@ const SignUp = () => {
                 textDecoration: 'underline',
                 textTransform: 'none',
                 '&:hover': {
-                  color: '#f59e0b'
+                  color: '#020291'
                 }
               }}
             >
@@ -593,7 +593,7 @@ const SignUp = () => {
       {/* Right Side - Image (Hidden on mobile/tablet) */}
       <Box sx={{
         flex: 1,
-        background: 'linear-gradient(135deg, #fef5e7 0%, #fed7aa 100%)',
+        background: '#EEF0FF',
         display: { xs: 'none', md: 'flex' },
         alignItems: 'center',
         justifyContent: 'center',
@@ -610,7 +610,7 @@ const SignUp = () => {
         }}>
           <Box
             component="img"
-            src="/right_login.png"
+            src="/right_login(NEW).png"
             alt="AI Interview Platform Illustration"
             sx={{
               width: '100%',

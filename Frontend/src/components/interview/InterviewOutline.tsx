@@ -438,12 +438,12 @@ const InterviewOutline: React.FC = () => {
                                         gap: 1,
                                         width: 'fit-content',
                                         p: "2px 10px",
-                                        border: '1px solid #F59E0B',
-                                        color: '#F59E0B',
+                                        border: '1px solid #020291',
+                                        color: '#020291',
                                         cursor: 'pointer',
                                         borderRadius: 1,
                                         '&:hover': {
-                                            backgroundColor: '#F59E0B1A',
+                                            backgroundColor: '#0202911A',
                                         },
                                     }}
                                 >
@@ -715,9 +715,9 @@ const InterviewOutline: React.FC = () => {
                                                     size="small"
                                                     onClick={() => handleApproveQuestion(question.id)}
                                                     sx={{
-                                                        backgroundColor: '#F59E0B1A',
-                                                        color: '#F59E0B',
-                                                        border:"1px solid #F59E0B",
+                                                        backgroundColor: '#0202911A',
+                                                        color: '#020291',
+                                                        border:"1px solid #020291",
                                                         fontWeight: 600,
                                                         textTransform: 'none',
                                                         px: 2,
@@ -725,7 +725,7 @@ const InterviewOutline: React.FC = () => {
                                                         fontSize: '0.875rem',
                                                         boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
                                                         '&:hover': {
-                                                            backgroundColor: '#F59E0B1A',
+                                                            backgroundColor: '#0202911A',
                                                             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
                                                         }
                                                     }}
@@ -982,7 +982,7 @@ const InterviewOutline: React.FC = () => {
                                             version.change_type === 'approve' ? '#10b981'
                                                 : version.change_type === 'reject' ? '#ef4444'
                                                     : version.change_type === 'created' ? '#3b82f6'
-                                                        : '#f59e0b',
+                                                        : '#020291',
                                         pl: 2,
                                         py: 1.5,
                                         backgroundColor: '#f9fafb',

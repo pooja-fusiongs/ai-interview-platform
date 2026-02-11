@@ -139,9 +139,9 @@ const AdminRetentionPolicies: React.FC = () => {
               startIcon={<Add />}
               onClick={() => setDialogOpen(true)}
                sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                border: '2px solid #f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#020291',
+                border: '2px solid #020291',
                 borderRadius: '10px',
                 fontSize: '14px',
                 fontWeight: 600,
@@ -151,8 +151,8 @@ const AdminRetentionPolicies: React.FC = () => {
                 gap: '8px',
                 minWidth: '120px',
                 '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
+                  background: 'rgba(2, 2, 145, 0.1)',
+                  borderColor: '#020291',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                 }

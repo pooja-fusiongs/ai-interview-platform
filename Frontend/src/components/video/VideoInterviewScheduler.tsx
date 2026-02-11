@@ -305,9 +305,9 @@ const VideoInterviewScheduler: React.FC = () => {
       },
       '&.Mui-focused': {
         backgroundColor: '#fff',
-        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.15)',
+        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)',
         '& .MuiOutlinedInput-notchedOutline': {
-          borderColor: '#f59e0b',
+          borderColor: '#020291',
           borderWidth: '1.5px',
         },
       },
@@ -316,7 +316,7 @@ const VideoInterviewScheduler: React.FC = () => {
       },
     },
     '& .MuiInputLabel-root.Mui-focused': {
-      color: '#f59e0b',
+      color: '#020291',
     },
   };
 
@@ -368,7 +368,7 @@ const VideoInterviewScheduler: React.FC = () => {
                 width: { xs: 38, md: 44 },
                 height: { xs: 38, md: 44 },
                 borderRadius: '12px',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                background: ' #020291',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -403,7 +403,7 @@ const VideoInterviewScheduler: React.FC = () => {
             maxWidth: 520,
             borderRadius: '12px',
             border: '1px solid #e5e7eb',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.06)',
+            boxShadow: '0px 8px 24px rgba(2, 2, 145, 0.12)',
             overflow: 'visible',
           }}
         >
@@ -420,6 +420,7 @@ const VideoInterviewScheduler: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
+                      boxShadow:"0px 8px 24px rgba(2, 2, 145, 0.12)"
                     }}
                   >
                     <i className="fas fa-briefcase" style={{ fontSize: '11px', color: '#6b7280' }} />
@@ -552,7 +553,7 @@ const VideoInterviewScheduler: React.FC = () => {
                             width: 32,
                             height: 32,
                             borderRadius: '8px',
-                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            background: 'linear-gradient(135deg, #020291, #020291)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -625,14 +626,14 @@ const VideoInterviewScheduler: React.FC = () => {
                         dialog: {
                           sx: {
                             '& .MuiPickersCalendarHeader-root': {
-                              backgroundColor: '#f59e0b',
+                              backgroundColor: '#020291',
                               color: '#fff',
                             },
                             '& .MuiPickersDay-root.Mui-selected': {
-                              backgroundColor: '#f59e0b',
+                              backgroundColor: '#020291',
                             },
                             '& .MuiButton-root': {
-                              color: '#f59e0b',
+                              color: '#020291',
                             },
                           },
                         },
@@ -666,14 +667,14 @@ const VideoInterviewScheduler: React.FC = () => {
                         dialog: {
                           sx: {
                             '& .MuiPickersToolbar-root': {
-                              backgroundColor: '#f59e0b',
+                              backgroundColor: '#020291',
                               color: '#fff',
                             },
                             '& .MuiClock-pin, & .MuiClockPointer-root, & .MuiClockPointer-thumb': {
-                              backgroundColor: '#f59e0b',
+                              backgroundColor: '#020291',
                             },
                             '& .MuiButton-root': {
-                              color: '#f59e0b',
+                              color: '#020291',
                             },
                           },
                         },
@@ -726,15 +727,15 @@ const VideoInterviewScheduler: React.FC = () => {
                           flex: 1,
                           padding: '14px 12px',
                           borderRadius: '10px',
-                          border: `1.5px solid ${duration === option.value ? '#f59e0b' : '#e5e7eb'}`,
-                          backgroundColor: duration === option.value ? 'rgba(245, 158, 11, 0.08)' : '#fff',
+                          border: `1.5px solid ${duration === option.value ? '#020291' : '#e5e7eb'}`,
+                          backgroundColor: duration === option.value ? '#EEF0FF' : '#fff',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                           textAlign: 'center',
                           position: 'relative',
                           '&:hover': {
-                            borderColor: duration === option.value ? '#f59e0b' : '#d1d5db',
-                            backgroundColor: duration === option.value ? 'rgba(245, 158, 11, 0.08)' : '#fafafa',
+                            borderColor: duration === option.value ? '#020291' : '#d1d5db',
+                            backgroundColor: duration === option.value ? '#EEF0FF' : '#fafafa',
                           },
                         }}
                       >
@@ -745,7 +746,7 @@ const VideoInterviewScheduler: React.FC = () => {
                               top: '-8px',
                               left: '50%',
                               transform: 'translateX(-50%)',
-                              backgroundColor: '#f59e0b',
+                              backgroundColor: '#020291',
                               color: '#fff',
                               fontSize: '9px',
                               fontWeight: 700,
@@ -762,7 +763,7 @@ const VideoInterviewScheduler: React.FC = () => {
                           sx={{
                             fontSize: '15px',
                             fontWeight: 600,
-                            color: duration === option.value ? '#f59e0b' : '#374151',
+                            color: duration === option.value ? '#020291' : '#374151',
                           }}
                         >
                           {option.label}
@@ -793,7 +794,7 @@ const VideoInterviewScheduler: React.FC = () => {
                   padding: '14px 24px',
                   borderRadius: '10px',
                   background: isFormValid
-                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                    ? 'linear-gradient(135deg, primary.main0%, #020291 100%)'
                     : '#e5e7eb',
                   boxShadow: isFormValid ? '0 4px 14px rgba(245, 158, 11, 0.35)' : 'none',
                   fontSize: '15px',
@@ -803,7 +804,7 @@ const VideoInterviewScheduler: React.FC = () => {
                   transition: 'all 0.2s ease',
                   '&:hover': {
                     background: isFormValid
-                      ? 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                      ? 'linear-gradient(135deg, #020291 0%, #b45309 100%)'
                       : '#e5e7eb',
                     boxShadow: isFormValid ? '0 6px 20px rgba(245, 158, 11, 0.4)' : 'none',
                     transform: isFormValid ? 'translateY(-1px)' : 'none',

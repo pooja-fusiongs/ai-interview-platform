@@ -48,8 +48,8 @@ export const showWarning = (message: string, options?: any) => {
     icon: '⚠️',
     duration: 4000,
     style: {
-      background: '#fffbeb',
-      color: '#d97706',
+      background: '#EEF0FF',
+      color: '#020291',
       border: '1px solid #fed7aa',
     },
     ...options,

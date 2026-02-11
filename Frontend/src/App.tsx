@@ -1,6 +1,17 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { ThemeProvider } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
+import { GlobalStyles } from '@mui/material'
+import { createTheme } from '@mui/material/styles'
+
+const theme = createTheme({
+  palette: {
+    primary: { main: '#020291', contrastText: '#ffffff' },
+  },
+  typography: { button: { textTransform: 'none' } },
+})
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { getDefaultRoute } from './utils/roleUtils'
 import Login from './components/auth/SignIn'
@@ -16,7 +27,6 @@ import Results from './components/interview/Results'
 import Candidates from './components/candidates/Candidates'
 import CandidateMatching from './components/candidates/CandidateMatching'
 import CandidateProfile from './components/candidates/CandidateProfile'
-import Profile from './components/layout/Profile'
 import RecruiterCandidates from './components/recruiter/RecruiterCandidates'
 import RoleProtectedRoute from './components/common/RoleProtectedRoute'
 
@@ -83,11 +93,135 @@ function DefaultRedirect() {
 
 function App(): JSX.Element {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="App" style={{ height: '100vh', overflow: 'hidden' }}>
-          {/* Toast Notifications */}
-          <Toaster
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      {/* Global Styles for FGS Brand Colors - Applied to ENTIRE PROJECT */}
+      <GlobalStyles
+        styles={{
+          // ========================================
+          // BRAND COLOR OVERRIDES - ENTIRE PROJECT
+          // ========================================
+          
+          // Override ALL orange/amber colors with brand blue
+          'button[style*="#020291"], button[style*="#020291"], button[style*="primary.light"]': {
+            backgroundColor: '#020291 !important',
+            color: 'white !important',
+            borderColor: '#020291 !important',
+          },
+          'button[style*="#020291"]:hover, button[style*="#020291"]:hover': {
+            backgroundColor: '#06109E !important',
+          },
+          
+          // Fix ALL gradients with orange
+          '*[style*="linear-gradient"][style*="#020291"], *[style*="linear-gradient"][style*="#020291"]': {
+            background: '#020291 !important',
+          },
+          
+          // Fix ALL icon colors
+          'i[style*="color: #020291"], i[style*="color:#020291"], i[style*="color: #020291"]': {
+            color: '#020291 !important',
+          },
+          'svg[style*="color: #020291"], svg[style*="color:#020291"]': {
+            color: '#020291 !important',
+          },
+          
+          // Fix ALL text colors
+          '*[style*="color: #020291"], *[style*="color:#020291"], *[style*="color: #020291"]': {
+            color: '#020291 !important',
+          },
+          
+          // Fix ALL border colors
+          '*[style*="border"][style*="#020291"], *[style*="border"][style*="#020291"]': {
+            borderColor: '#020291 !important',
+          },
+          '*[style*="borderColor: #020291"], *[style*="borderColor:#020291"]': {
+            borderColor: '#020291 !important',
+          },
+          
+          // Fix ALL background colors
+          '*[style*="background"][style*="#020291"], *[style*="background"][style*="#020291"]': {
+            backgroundColor: '#020291 !important',
+          },
+          '*[style*="backgroundColor: #020291"], *[style*="backgroundColor:#020291"]': {
+            backgroundColor: '#020291 !important',
+          },
+          
+          // Fix ALL rgba orange colors
+          '*[style*="rgba(245, 158, 11"]': {
+            backgroundColor: 'rgba(2, 2, 145, 0.1) !important',
+            borderColor: 'rgba(2, 2, 145, 0.3) !important',
+            color: '#020291 !important',
+          },
+          
+          // Fix MUI Chips with orange
+          '.MuiChip-root[style*="#020291"]': {
+            backgroundColor: 'rgba(2, 2, 145, 0.1) !important',
+            color: '#020291 !important',
+            borderColor: '#020291 !important',
+          },
+          
+          // Fix MUI CircularProgress with orange
+          '.MuiCircularProgress-root[style*="#020291"]': {
+            color: '#020291 !important',
+          },
+          
+          // Fix MUI Date/Time Pickers with orange
+          '.MuiPickersCalendarHeader-root[style*="#020291"]': {
+            backgroundColor: '#020291 !important',
+          },
+          '.MuiPickersDay-root.Mui-selected[style*="#020291"]': {
+            backgroundColor: '#020291 !important',
+          },
+          '.MuiClock-pin[style*="#020291"], .MuiClockPointer-root[style*="#020291"]': {
+            backgroundColor: '#020291 !important',
+          },
+          
+          // Fix hover states with orange
+          '*:hover[style*="#020291"]': {
+            borderColor: '#020291 !important',
+            color: '#020291 !important',
+          },
+          
+          // Fix focus states with orange
+          '*:focus[style*="#020291"], *.Mui-focused[style*="#020291"]': {
+            borderColor: '#020291 !important',
+            color: '#020291 !important',
+          },
+          
+          // Fix box shadows with orange
+          '*[style*="boxShadow"][style*="245, 158, 11"]': {
+            boxShadow: '0 4px 12px rgba(2, 2, 145, 0.3) !important',
+          },
+          
+          // Fix specific component patterns
+          '.MuiButton-containedPrimary': {
+            backgroundColor: '#020291 !important',
+            '&:hover': {
+              backgroundColor: '#06109E !important',
+            },
+          },
+          
+          // Fix any remaining orange in backgrounds
+          '*[style*="background: rgba(245, 158, 11"]': {
+            background: 'rgba(2, 2, 145, 0.1) !important',
+          },
+          
+          // Card hover effects with brand color
+          '.MuiCard-root:hover': {
+            boxShadow: '0 4px 12px rgba(2, 2, 145, 0.15) !important',
+          },
+          
+          // Primary text color override
+          '.primary-text, *[class*="primary"]': {
+            color: '#020291 !important',
+          },
+        }}
+      />
+      <AuthProvider>
+        <Router>
+          <div className="App" style={{ height: '100vh', overflow: 'hidden' }}>
+            {/* Toast Notifications */}
+            <Toaster
             position="top-right"
             reverseOrder={false}
             gutter={8}
@@ -137,13 +271,13 @@ function App(): JSX.Element {
               // Loading toast styling
               loading: {
                 style: {
-                  background: '#fffbeb',
-                  color: '#d97706',
-                  border: '1px solid #fed7aa',
+                  background: '#EEF0FF', // brand-50
+                  color: '#020291', // brand-900
+                  border: '1px solid #BBC3FF', // brand-200
                 },
                 iconTheme: {
-                  primary: '#f59e0b',
-                  secondary: '#fffbeb',
+                  primary: '#020291', // brand-900
+                  secondary: '#EEF0FF', // brand-50
                 },
               },
             }}
@@ -461,6 +595,7 @@ function App(): JSX.Element {
         </div>
       </Router>
     </AuthProvider>
+    </ThemeProvider>
   )
 }
 

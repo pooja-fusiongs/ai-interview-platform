@@ -348,8 +348,8 @@ const Candidates = () => {
       return <i className="fas fa-sort" style={{ color: '#cbd5e1', fontSize: '12px', marginLeft: '4px' }}></i>
     }
     return sortDirection === 'asc'
-      ? <i className="fas fa-sort-up" style={{ color: '#f59e0b', fontSize: '12px', marginLeft: '4px' }}></i>
-      : <i className="fas fa-sort-down" style={{ color: '#f59e0b', fontSize: '12px', marginLeft: '4px' }}></i>
+      ? <i className="fas fa-sort-up" style={{ color: '#020291', fontSize: '12px', marginLeft: '4px' }}></i>
+      : <i className="fas fa-sort-down" style={{ color: '#020291', fontSize: '12px', marginLeft: '4px' }}></i>
   }
 
   const filteredCandidates = candidates.filter((candidate) => {
@@ -458,7 +458,7 @@ const Candidates = () => {
                     borderColor: '#cbd5e1'
                   },
                   '&.Mui-focused': {
-                    borderColor: '#f59e0b'
+                    borderColor: '#020291'
                   }
                 },
                 '& .MuiOutlinedInput-input': {
@@ -519,8 +519,8 @@ const Candidates = () => {
                 gap: { xs: '4px', sm: '8px' },
                 flex: { xs: 1, sm: 'none' },
                 '&:hover': {
-                  borderColor: '#f59e0b',
-                  color: '#f59e0b',
+                  borderColor: '#020291',
+                  color: '#020291',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(245, 158, 11, 0.15)'
                 }
@@ -544,8 +544,8 @@ const Candidates = () => {
                 gap: { xs: '4px', sm: '8px' },
                 flex: { xs: 1, sm: 'none' },
                 '&:hover': {
-                  borderColor: '#f59e0b',
-                  color: '#f59e0b',
+                  borderColor: '#020291',
+                  color: '#020291',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(245, 158, 11, 0.15)'
                 }
@@ -593,7 +593,7 @@ const Candidates = () => {
                 textAlign: 'center',
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
               }}>
-                <Typography sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, fontWeight: 700, color: '#f59e0b', marginBottom: { xs: '4px', md: '8px' } }}>
+                <Typography sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, fontWeight: 700, color: '#020291', marginBottom: { xs: '4px', md: '8px' } }}>
                   {stat.number}
                 </Typography>
                 <Typography sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, color: '#64748b', fontWeight: 500 }}>
@@ -732,7 +732,7 @@ const Candidates = () => {
                         {/* Header */}
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
                           <Box sx={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar sx={{ width: 50, height: 50, background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontSize: '18px', fontWeight: 700 }}>
+                            <Avatar sx={{ width: 50, height: 50, background: '#020291', fontSize: '18px', fontWeight: 700 }}>
                               {candidate.name.charAt(0).toUpperCase()}
                             </Avatar>
                             <Box sx={{
@@ -743,7 +743,7 @@ const Candidates = () => {
                               height: 12,
                               borderRadius: '50%',
                               border: '2px solid white',
-                              background: candidate.isOnline ? '#10b981' : '#f59e0b'
+                              background: candidate.isOnline ? '#10b981' : '#020291'
                             }} />
                           </Box>
                           <Box sx={{ flex: 1 }}>
@@ -820,9 +820,9 @@ const Candidates = () => {
                               size="small"
                               onClick={() => navigate(`/interview-outline/${candidateQuestionSessions[candidate.id]}`)}
                               sx={{
-                                background: 'rgba(245, 158, 11, 0.1)',
-                                color: '#f59e0b',
-                                border: '2px solid #f59e0b',
+                                background: 'tranperant',
+                                color: '#020291',
+                                border: '2px solid #020291',
                                 borderRadius: '10px',
                                 fontSize: { xs: '12px', sm: '14px' },
                                 fontWeight: 600,
@@ -832,8 +832,8 @@ const Candidates = () => {
                                 gap: { xs: '4px', sm: '8px' },
                                 minWidth: { xs: 'auto', sm: '120px' },
                                 '&:hover': {
-                                  background: 'rgba(245, 158, 11, 0.1)',
-                                  borderColor: '#f59e0b',
+                                  background: '#EEF0FF',
+                                  borderColor: '#020291',
                                   transform: 'translateY(-2px)',
                                   boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                                 }
@@ -863,7 +863,7 @@ const Candidates = () => {
                         <Button
                           onClick={refreshCandidates}
                           sx={{
-                            background: '#f59e0b',
+                            background: '#020291',
                             color: 'white',
                             padding: '8px 16px',
                             borderRadius: '8px',
@@ -871,7 +871,7 @@ const Candidates = () => {
                             fontWeight: 600,
                             textTransform: 'none',
                             '&:hover': {
-                              background: '#d97706'
+                              background: '#020291'
                             }
                           }}
                         >
@@ -987,7 +987,7 @@ const Candidates = () => {
                 <Button
                   onClick={refreshCandidates}
                   sx={{
-                    background: '#f59e0b',
+                    background: '#020291',
                     color: 'white',
                     padding: '8px 16px',
                     borderRadius: '8px',
@@ -995,7 +995,7 @@ const Candidates = () => {
                     fontWeight: 600,
                     textTransform: 'none',
                     '&:hover': {
-                      background: '#d97706'
+                      background: '#020291'
                     }
                   }}
                 >
@@ -1013,7 +1013,7 @@ const Candidates = () => {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                           <Box sx={{ position: 'relative' }}>
-                            <Avatar sx={{ width: 40, height: 40, backgroundColor: '#f59e0b', color: '#fff', fontSize: '1rem' }}>
+                            <Avatar sx={{ width: 40, height: 40, backgroundColor: '#020291', color: '#fff', fontSize: '1rem' }}>
                               {candidate.name.charAt(0).toUpperCase()}
                             </Avatar>
                             <Box sx={{
@@ -1040,7 +1040,7 @@ const Candidates = () => {
                             >
                               {candidate.name}
                             </Typography>
-                            <Typography sx={{ color: '#f59e0b', fontSize: '12px', fontWeight: 600 }}>
+                            <Typography sx={{ color: '#020291', fontSize: '12px', fontWeight: 600 }}>
                               {candidate.role}
                             </Typography>
                           </Box>
@@ -1050,8 +1050,8 @@ const Candidates = () => {
                           label={candidate.status}
                           sx={{
                             textTransform: 'capitalize',
-                            background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                            color: candidate.status === 'active' ? '#10b981' : '#f59e0b',
+                            background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(2, 2, 145, 0.12)',
+                            color: candidate.status === 'active' ? '#10b981' : '#020291',
                             fontWeight: 600,
                             fontSize: '11px'
                           }}
@@ -1075,7 +1075,7 @@ const Candidates = () => {
                           <Typography sx={{
                             fontSize: '13px',
                             fontWeight: 700,
-                            color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#f59e0b' : '#ef4444'
+                            color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#020291' : '#ef4444'
                           }}>
                             {candidate.score}%
                           </Typography>
@@ -1143,8 +1143,8 @@ const Candidates = () => {
                             color: '#64748b',
                             border: '1px solid #e2e8f0',
                             '&:hover': {
-                              color: '#f59e0b',
-                              borderColor: '#f59e0b',
+                              color: '#020291',
+                              borderColor: '#020291',
                               background: 'rgba(245,158,11,0.06)'
                             }
                           }}
@@ -1169,7 +1169,7 @@ const Candidates = () => {
                             color: '#475569',
                             cursor: 'pointer',
                             userSelect: 'none',
-                            '&:hover': { color: '#f59e0b' }
+                            '&:hover': { color: '#020291' }
                           }}
                           onClick={() => handleSort('name')}
                         >
@@ -1184,7 +1184,7 @@ const Candidates = () => {
                             color: '#475569',
                             cursor: 'pointer',
                             userSelect: 'none',
-                            '&:hover': { color: '#f59e0b' }
+                            '&:hover': { color: '#020291' }
                           }}
                           onClick={() => handleSort('role')}
                         >
@@ -1199,7 +1199,7 @@ const Candidates = () => {
                             color: '#475569',
                             cursor: 'pointer',
                             userSelect: 'none',
-                            '&:hover': { color: '#f59e0b' }
+                            '&:hover': { color: '#020291' }
                           }}
                           onClick={() => handleSort('department')}
                         >
@@ -1214,7 +1214,7 @@ const Candidates = () => {
                             color: '#475569',
                             cursor: 'pointer',
                             userSelect: 'none',
-                            '&:hover': { color: '#f59e0b' }
+                            '&:hover': { color: '#020291' }
                           }}
                           onClick={() => handleSort('status')}
                         >
@@ -1232,7 +1232,7 @@ const Candidates = () => {
                             color: '#475569',
                             cursor: 'pointer',
                             userSelect: 'none',
-                            '&:hover': { color: '#f59e0b' }
+                            '&:hover': { color: '#020291' }
                           }}
                           align="right"
                           onClick={() => handleSort('score')}
@@ -1264,7 +1264,7 @@ const Candidates = () => {
                               {candidate.email}
                             </Typography>
                           </TableCell>
-                          <TableCell sx={{ color: '#f59e0b', fontWeight: 700 }}>{candidate.role}</TableCell>
+                          <TableCell sx={{ color: '#020291', fontWeight: 700 }}>{candidate.role}</TableCell>
                           <TableCell sx={{ color: '#1e293b', fontWeight: 600 }}>{candidate.department}</TableCell>
                           <TableCell>
                             <Chip
@@ -1272,8 +1272,8 @@ const Candidates = () => {
                               label={candidate.status}
                               sx={{
                                 textTransform: 'capitalize',
-                                background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                                color: candidate.status === 'active' ? '#10b981' : '#f59e0b',
+                                background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(2, 2, 145, 0.12)',
+                                color: candidate.status === 'active' ? '#10b981' : '#020291',
                                 fontWeight: 800
                               }}
                             />
@@ -1296,7 +1296,7 @@ const Candidates = () => {
                               </Typography>
                             </Box>
                           </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 800, color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#f59e0b' : '#ef4444' }}>
+                          <TableCell align="right" sx={{ fontWeight: 800, color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#020291' : '#ef4444' }}>
                             {candidate.score}%
                           </TableCell>
                           <TableCell align="right">
@@ -1320,7 +1320,7 @@ const Candidates = () => {
                                 sx={{
                                   color: '#64748b',
                                   '&:hover': {
-                                    color: '#f59e0b',
+                                    color: '#020291',
                                     background: 'rgba(245,158,11,0.06)'
                                   }
                                 }}
@@ -1398,7 +1398,7 @@ const Candidates = () => {
           }}
         >
           <DialogTitle sx={{
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
             color: 'white',
             padding: { xs: '16px 20px', md: '24px 32px' },
             borderRadius: { xs: '12px 12px 0 0', md: '16px 16px 0 0' },
@@ -1440,14 +1440,14 @@ const Candidates = () => {
                 gap: '8px',
                 mt: "10px"
               }}>
-                <i className="fas fa-search" style={{ fontSize: '16px', color: '#f59e0b' }}></i>
+                <i className="fas fa-search" style={{ fontSize: '16px', color: '#020291' }}></i>
                 Available Positions
               </Typography>
 
               <FormControl fullWidth>
                 <InputLabel sx={{
                   color: '#64748b',
-                  '&.Mui-focused': { color: '#f59e0b' }
+                  '&.Mui-focused': { color: '#020291' }
                 }}>
                   Select Job Position
                 </InputLabel>
@@ -1461,10 +1461,10 @@ const Candidates = () => {
                       borderColor: '#e2e8f0'
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#f59e0b'
+                      borderColor: '#020291'
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#f59e0b',
+                      borderColor: '#020291',
                       borderWidth: '2px'
                     }
                   }}
@@ -1544,16 +1544,16 @@ const Candidates = () => {
               variant="contained"
               disabled={!selectedJobId || jobs.length === 0}
               sx={{
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                 textTransform: 'none',
                 fontWeight: 600,
                 padding: { xs: '10px 20px', md: '10px 32px' },
                 borderRadius: '10px',
                 width: { xs: '100%', sm: 'auto' },
                 order: { xs: 1, sm: 2 },
-                boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 4px 15px rgba(2, 2, 145, 0.3)',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                  background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)',
                   boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4)'
                 },
                 '&:disabled': {
@@ -2054,7 +2054,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 borderBottom: '1px solid #e2e8f0'
               }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Avatar sx={{ width: 48, height: 48, background: '#f59e0b', fontWeight: 600 }}>
+                  <Avatar sx={{ width: 48, height: 48, background: '#020291', fontWeight: 600 }}>
                     {detailCandidate.name?.charAt(0).toUpperCase() || 'C'}
                   </Avatar>
                   <Box>
@@ -2099,7 +2099,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                       sx={{
                         textTransform: 'capitalize',
                         background: detailCandidate.status === 'active' ? '#dcfce7' : '#fef3c7',
-                        color: detailCandidate.status === 'active' ? '#16a34a' : '#d97706',
+                        color: detailCandidate.status === 'active' ? '#16a34a' : '#020291',
                         fontWeight: 600,
                         fontSize: '12px'
                       }}
@@ -2110,7 +2110,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                     <Typography sx={{
                       fontSize: '20px',
                       fontWeight: 700,
-                      color: (detailCandidate.score || 0) >= 80 ? '#16a34a' : (detailCandidate.score || 0) >= 60 ? '#d97706' : '#dc2626'
+                      color: (detailCandidate.score || 0) >= 80 ? '#16a34a' : (detailCandidate.score || 0) >= 60 ? '#020291' : '#dc2626'
                     }}>
                       {detailCandidate.score || 0}%
                     </Typography>
@@ -2173,10 +2173,10 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                     }}
                     variant="contained"
                     sx={{
-                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      background: 'transparant',
                       textTransform: 'none',
                       fontWeight: 600,
-                      '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' }
+                      '&:hover': { background: '#EEF0FF' }
                     }}
                   >
                     <i className="fas fa-list-check" style={{ marginRight: 8 }} />

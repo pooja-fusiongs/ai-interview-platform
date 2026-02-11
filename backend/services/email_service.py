@@ -27,7 +27,7 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
                                 <tr>
                                     <td align="center">
                                         <a href="{meeting_url}"
-                                           style="background:#f59e0b; color:#ffffff; text-decoration:none;
+                                           style="background:#020291; color:#ffffff; text-decoration:none;
                                                   padding:12px 28px; font-size:14px; font-weight:600;
                                                   border-radius:4px; display:inline-block;">
                                             Join Interview
@@ -57,7 +57,7 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
                         <td style="padding:40px 40px 35px 40px;">
 
                             <!-- Header -->
-                            <h2 style="margin:0 0 25px 0; color:#f59e0b; font-size:24px; font-weight:700;">
+                            <h2 style="margin:0 0 25px 0; color:#020291; font-size:24px; font-weight:700;">
                                 Interview Scheduled!
                             </h2>
 
@@ -161,7 +161,7 @@ def send_expert_review_request(expert_email: str, expert_name: str, job_title: s
         <tr><td align="center">
             <table width="560" cellpadding="0" cellspacing="0" style="background:#fff; border-radius:8px; border:1px solid #e5e7eb;">
                 <tr><td style="padding:40px;">
-                    <h2 style="margin:0 0 20px; color:#f59e0b; font-size:22px;">Questions Need Your Review</h2>
+                    <h2 style="margin:0 0 20px; color:#020291; font-size:22px;">Questions Need Your Review</h2>
                     <p style="color:#374151; font-size:15px;">Dear <strong>{expert_name}</strong>,</p>
                     <p style="color:#374151; font-size:15px;">{question_count} AI-generated questions for <strong>{candidate_name}</strong> (position: <strong>{job_title}</strong>) are ready for your expert review.</p>
                     <table width="100%" style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin:20px 0;">

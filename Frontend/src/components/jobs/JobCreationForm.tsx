@@ -186,10 +186,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                     borderRadius: '8px',
                     backgroundColor: 'white',
                     border: '1px solid #e2e8f0',
-                    '&:hover': { borderColor: '#f59e0b' },
+                    '&:hover': { borderColor: '#F9FAFB' },
                     '&.Mui-focused': { 
-                      borderColor: '#f59e0b',
-                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                      borderColor: '#F9FAFB',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -215,8 +215,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused': { 
+                      borderColor: '#06109E',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
+                    },
                       '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
                     }}
                   >
@@ -244,9 +248,11 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused': { 
+                      borderColor: '#06109E',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'}
                     }}
                   >
                     <MenuItem value="" disabled>Select Experience</MenuItem>
@@ -276,10 +282,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#F9FAFB' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#F9FAFB',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -302,9 +308,11 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused': { 
+                      borderColor: '#06109E',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)' }
                     }}
                   >
                     <MenuItem value="Remote">Remote</MenuItem>
@@ -329,16 +337,16 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       padding: { xs: '10px 8px', sm: '12px 16px' },
                       borderRadius: '8px',
                       border: '2px solid',
-                      borderColor: jobData.employmentType === type ? '#f59e0b' : '#e2e8f0',
-                      backgroundColor: jobData.employmentType === type ? 'rgba(245, 158, 11, 0.1)' : 'white',
-                      color: jobData.employmentType === type ? '#f59e0b' : '#64748b',
+                      borderColor: jobData.employmentType === type ? '#BBC3FF' : '#e2e8f0',
+                      backgroundColor: jobData.employmentType === type ? '#EEF0FF' : 'white',
+                      color: jobData.employmentType === type ? '#020291 ' : '#64748b',
                       fontSize: { xs: '12px', sm: '14px' },
                       fontWeight: 600,
                       textTransform: 'none',
                       minWidth: 'auto',
                       '&:hover': {
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        borderColor: '#F9FAFB',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                   >
@@ -370,10 +378,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                     borderRadius: '8px',
                     backgroundColor: 'white',
                     border: '1px solid #e2e8f0',
-                    '&:hover': { borderColor: '#f59e0b' },
+                    '&:hover': { borderColor: '#06109E' },
                     '&.Mui-focused': { 
-                      borderColor: '#f59e0b',
-                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                      borderColor: '#020291 ',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -400,10 +408,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                     borderRadius: '8px',
                     backgroundColor: 'white',
                     border: '1px solid #e2e8f0',
-                    '&:hover': { borderColor: '#f59e0b' },
+                    '&:hover': { borderColor: '#06109E' },
                     '&.Mui-focused': { 
-                      borderColor: '#f59e0b',
-                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -422,7 +430,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
               
               <Box sx={{
                 padding: '16px',
-                backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                backgroundColor: '#EEF0FF',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
                 minHeight: '80px'
@@ -435,14 +443,14 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                         label={skill}
                         onDelete={() => removeSkill(skill)}
                         sx={{
-                          backgroundColor: '#f59e0b',
-                          color: 'white',
+                          backgroundColor: '#DDE1FF',
+                          color: '#1A22E0',
                           fontSize: '12px',
                           fontWeight: 600,
-                          height: '28px',
+                          height: '28px',border:"1px solid #1A22E0",
                           '& .MuiChip-deleteIcon': {
                             color: 'white',
-                            '&:hover': { color: '#fed7aa' }
+                            '&:hover': { color: '#1A22E0' }
                           }
                         }}
                       />
@@ -454,15 +462,15 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                   <Button
                     onClick={() => setShowSkillInput(true)}
                     sx={{
-                      color: '#f59e0b',
-                      backgroundColor: 'white',
-                      border: '1px dashed #f59e0b',
+                      color: '#1A22E0',
+                      backgroundColor: '#DDE1FF',
+                      border: '1px dashed #1A22E0',
                       borderRadius: '6px',
                       padding: '8px 16px',
                       fontSize: '14px',
                       fontWeight: 600,
                       textTransform: 'none',
-                      '&:hover': { backgroundColor: 'rgba(245, 158, 11, 0.1)' }
+                      '&:hover': { backgroundColor: 'rgba(2, 2, 145, 0.1)' }
                     }}
                   >
                     + Add Skill
@@ -500,7 +508,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       onClick={addSkill}
                       disabled={!newSkill.trim()}
                       sx={{
-                        backgroundColor: '#f59e0b',
+                        backgroundColor: '#020291 ',
                         color: 'white',
                         minWidth: '60px',
                         height: '32px',
@@ -508,7 +516,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                         textTransform: 'none',
                         fontSize: '12px',
                         fontWeight: 600,
-                        '&:hover': { backgroundColor: '#d97706' },
+                        '&:hover': { backgroundColor: '#06109E' },
                         '&:disabled': { backgroundColor: '#e5e7eb', color: '#9ca3af' }
                       }}
                     >
@@ -560,10 +568,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#06109E' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#06109E',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -588,8 +596,8 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
                       '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
                     }}
                   >
@@ -615,8 +623,8 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#06109E' },
                       '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
                     }}
                   >
@@ -641,10 +649,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#06109E' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#06109E',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -673,10 +681,10 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                     borderRadius: '8px',
                     backgroundColor: 'white',
                     border: '1px solid #e2e8f0',
-                    '&:hover': { borderColor: '#f59e0b' },
+                    '&:hover': { borderColor: '#06109E' },
                     '&.Mui-focused': { 
-                      borderColor: '#f59e0b',
-                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                      borderColor: '#06109E',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -690,9 +698,9 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             {/* AI Configuration */}
             <Box sx={{
               padding: { xs: '16px', sm: '20px' },
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              backgroundColor: 'rgba(2, 2, 145, 0.1)',
               borderRadius: '8px',
-              border: '1px solid #fed7aa'
+              border: '1px solid #06109E'
             }}>
               <Typography sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 700, color: '#1e293b', marginBottom: { xs: '12px', sm: '16px' } }}>
                 AI Configuration (Static for Prototype)
@@ -726,7 +734,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                     width: 12,
                     height: 12,
                     borderRadius: '50%',
-                    background: jobData.expertReviewStatus === 'completed' ? '#10b981' : '#f59e0b'
+                    background: jobData.expertReviewStatus === 'completed' ? '#10b981' : '#020291'
                   }} />
                   <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
                     Expert Review {jobData.expertReviewStatus === 'completed' ? 'Completed' : 'Pending'}
@@ -738,9 +746,9 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             {/* Job Summary Preview */}
             <Box sx={{
               padding: { xs: '16px', sm: '20px' },
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              backgroundColor: 'rgba(2, 2, 145, 0.1)',
               borderRadius: '8px',
-              border: '1px solid #fed7aa'
+              border: '1px solid #06109E'
             }}>
               <Typography sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 700, color: '#1e293b', marginBottom: { xs: '12px', sm: '16px' } }}>
                 Job Summary
@@ -822,7 +830,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
         justifyContent: 'space-between'
       }}>
         <Box>
-          <Typography sx={{ fontSize: { xs: '18px', sm: '20px' }, fontWeight: 700, color: '#1e293b' }}>
+          <Typography sx={{ fontSize: { xs: '18px', sm: '20px' }, fontWeight: 700, color: '#111827' }}>
             Create New Job
           </Typography>
           <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b' }}>
@@ -833,7 +841,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
           onClick={onClose}
           sx={{
             color: '#64748b',
-            '&:hover': { backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }
+            '&:hover': { backgroundColor: 'rgba(2, 2, 145, 0.1)', color: '#020291 ' }
           }}
         >
           ✕
@@ -871,7 +879,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             left: { xs: '35px', sm: '45px' },
             width: `calc(${(activeStep / (steps.length - 1)) * 100}% - 0px)`,
             height: '3px',
-            backgroundColor: '#f59e0b',
+            backgroundColor: '#0F17BF',
             zIndex: 1,
             borderRadius: '2px',
             transition: 'width 0.3s ease'
@@ -892,14 +900,14 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                 width: { xs: 40, sm: 50 },
                 height: { xs: 40, sm: 50 },
                 borderRadius: '50%',
-                backgroundColor: index <= activeStep ? '#f59e0b' : '#e2e8f0',
+                backgroundColor: index <= activeStep ? '#0F17BF' : '#e2e8f0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginBottom: { xs: '8px', sm: '12px' },
                 transition: 'all 0.3s ease',
-                border: index === activeStep ? '3px solid rgba(245, 158, 11, 0.3)' : 'none',
-                boxShadow: index === activeStep ? '0 0 0 6px rgba(245, 158, 11, 0.1)' : 'none'
+                border: index === activeStep ? '3px solid rgba(2, 2, 145, 0.3)' : 'none',
+                boxShadow: index === activeStep ? '0 0 0 6px rgba(2, 2, 145, 0.1)' : 'none'
               }}>
                 {index === 0 && (
                   <WorkIcon sx={{
@@ -925,7 +933,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
               <Typography sx={{
                 fontSize: { xs: '9px', sm: '11px' },
                 fontWeight: index === activeStep ? 700 : 500,
-                color: index <= activeStep ? '#f59e0b' : '#94a3b8',
+                color: index <= activeStep ? '#374151' : '#94a3b8',
                 textAlign: 'center',
                 lineHeight: 1.2,
                 maxWidth: { xs: '70px', sm: '100px' },
@@ -971,7 +979,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             fontWeight: 600,
             textTransform: 'none',
             minWidth: { xs: 'auto', sm: '100px' },
-            '&:hover': { borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' },
+            '&:hover': { borderColor: '#06109E', backgroundColor: 'rgba(2, 2, 145, 0.1)' },
             '&:disabled': { color: '#9ca3af', borderColor: '#f3f4f6' }
           }}
         >
@@ -991,7 +999,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
               fontWeight: 600,
               textTransform: 'none',
               minWidth: { xs: 'auto', sm: '80px' },
-              '&:hover': { borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' }
+              '&:hover': { borderColor: '#06109E', backgroundColor: 'rgba(2, 2, 145, 0.1)' }
             }}
           >
             Cancel
@@ -1001,7 +1009,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             <Button
               onClick={handleSubmit}
               sx={{
-                backgroundColor: '#f59e0b',
+                backgroundColor: '#020291 ',
                 color: 'white',
                 padding: { xs: '8px 16px', sm: '10px 24px' },
                 borderRadius: '8px',
@@ -1009,7 +1017,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                 fontWeight: 600,
                 textTransform: 'none',
                 minWidth: { xs: 'auto', sm: '100px' },
-                '&:hover': { backgroundColor: '#d97706' }
+                '&:hover': { backgroundColor: '#06109E' }
               }}
             >
               Create Job
@@ -1018,7 +1026,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
             <Button
               onClick={handleNext}
               sx={{
-                backgroundColor: '#f59e0b',
+                backgroundColor: '#020291 ',
                 color: 'white',
                 padding: { xs: '8px 16px', sm: '10px 20px' },
                 borderRadius: '8px',
@@ -1026,7 +1034,7 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
                 fontWeight: 600,
                 textTransform: 'none',
                 minWidth: { xs: 'auto', sm: '80px' },
-                '&:hover': { backgroundColor: '#d97706' }
+                '&:hover': { backgroundColor: '#06109E' }
               }}
             >
               Next

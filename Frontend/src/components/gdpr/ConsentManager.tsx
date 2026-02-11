@@ -126,7 +126,7 @@ const ConsentManager: React.FC = () => {
   const getConsentColor = (type: string) => {
     const colors: Record<string, { bg: string; icon: string; gradient: string }> = {
       data_processing: { bg: '#ede9fe', icon: '#7c3aed', gradient: 'linear-gradient(135deg, #7c3aed, #5b21b6)' },
-      video_recording: { bg: '#fef3c7', icon: '#d97706', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' },
+      video_recording: { bg: '#fef3c7', icon: '#020291', gradient: 'linear-gradient(135deg, #020291, #020291)' },
       interview_data: { bg: '#dbeafe', icon: '#2563eb', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
       biometric_analysis: { bg: '#fce7f3', icon: '#db2777', gradient: 'linear-gradient(135deg, #ec4899, #db2777)' },
     };
@@ -185,9 +185,9 @@ const ConsentManager: React.FC = () => {
             onClick={() => setGrantDialogOpen(true)}
             disabled={availableConsentTypes.length === 0}
            sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                border: '2px solid #f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#020291',
+                border: '2px solid #020291',
                 borderRadius: '10px',
                 fontSize: '14px',
                 fontWeight: 600,
@@ -197,8 +197,8 @@ const ConsentManager: React.FC = () => {
                 gap: '8px',
                 minWidth: '120px',
                 '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
+                  background: 'rgba(2, 2, 145, 0.1)',
+                  borderColor: '#020291',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                 }
@@ -266,7 +266,7 @@ const ConsentManager: React.FC = () => {
                     width: 44,
                     height: 44,
                     borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    background: 'linear-gradient(135deg, #020291, #020291)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -477,7 +477,7 @@ const ConsentManager: React.FC = () => {
                             Granted: {formatDate(consent.granted_at)}
                           </Typography>
                           {consent.expires_at && (
-                            <Typography sx={{ fontSize: '12px', color: '#f59e0b' }}>
+                            <Typography sx={{ fontSize: '12px', color: '#020291' }}>
                               <i className="fas fa-hourglass-half" style={{ marginRight: 6, fontSize: 10 }}></i>
                               Expires: {formatDate(consent.expires_at)}
                             </Typography>

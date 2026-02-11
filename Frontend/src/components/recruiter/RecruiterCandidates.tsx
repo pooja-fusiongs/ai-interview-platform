@@ -156,7 +156,7 @@ const RecruiterCandidates = () => {
   const getScoreDisplay = (candidate: RecruiterCandidate) => {
     if (candidate.has_scores) {
       const score = candidate.overall_score || 0
-      const color = score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#ef4444'
+      const color = score >= 75 ? '#16a34a' : score >= 50 ? '#020291' : '#ef4444'
       return (
         <Typography sx={{ fontSize: '13px', color, fontWeight: 600 }}>
           Score: {(score / 10).toFixed(1)}/10
@@ -235,8 +235,8 @@ const RecruiterCandidates = () => {
             <Button
               onClick={() => setAddDialogOpen(true)}
               sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#020291',
                 border: '2px solid #f59f0baf',
                 borderRadius: '8px',
                 fontSize: { xs: '12px', sm: '14px' },
@@ -245,8 +245,8 @@ const RecruiterCandidates = () => {
                 whiteSpace: 'nowrap',
                 px: { xs: 1.5, sm: 2 },
                 '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
+                  background: 'rgba(2, 2, 145, 0.1)',
+                  borderColor: '#020291',
                   transform: 'translateY(-1px)',
                   boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
                 }
@@ -265,7 +265,7 @@ const RecruiterCandidates = () => {
                 <Box key={step} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{
                     width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: '12px', fontWeight: 700
+                    background: 'linear-gradient(135deg, #020291, #020291)', color: 'white', fontSize: '12px', fontWeight: 700
                   }}>{i + 1}</Box>
                   <Typography sx={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>{step}</Typography>
                   {i < 5 && <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '10px' }} />}
@@ -313,15 +313,15 @@ const RecruiterCandidates = () => {
         {!loading && candidates.length === 0 && (
           <Card sx={{ p: 6, textAlign: 'center', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
             <Box sx={{
-              width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #f59e0b20, #d9770620)',
+              width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #02029120, #02029120)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2
             }}>
-              <i className="fas fa-users" style={{ fontSize: 24, color: '#f59e0b' }} />
+              <i className="fas fa-users" style={{ fontSize: 24, color: '#020291' }} />
             </Box>
             <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', mb: 1 }}>No candidates yet</Typography>
             <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3 }}>Add candidates by uploading their resumes to get started.</Typography>
             <Button onClick={() => setAddDialogOpen(true)} sx={{
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
+              background: 'linear-gradient(135deg, #020291, #020291)', color: 'white',
               borderRadius: '10px', textTransform: 'none', fontWeight: 600
             }}>
               <i className="fas fa-plus" style={{ marginRight: 8 }} /> Add First Candidate
@@ -358,13 +358,13 @@ const RecruiterCandidates = () => {
         {!loading && currentCandidates.map((candidate) => (
           <Card key={candidate.id} sx={{
             mb: 2, p: 0, borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white',
-            transition: 'all 0.2s', '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderColor: '#f59e0b40' }
+            transition: 'all 0.2s', '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderColor: '#02029140' }
           }}>
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, p: { xs: 2, sm: 2.5 }, gap: { xs: 1.5, sm: 2.5 } }}>
               {/* Top row: Avatar + Info */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2.5 }, flex: 1, minWidth: 0 }}>
                 <Avatar sx={{
-                  width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 }, background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 }, background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                   fontSize: { xs: '16px', sm: '18px' }, fontWeight: 700, flexShrink: 0
                 }}>
                   {candidate.applicant_name.charAt(0).toUpperCase()}
@@ -412,13 +412,13 @@ const RecruiterCandidates = () => {
                     sx={{
                       minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
-                      background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', border: '1px solid #fbbf2480',
+                      background: 'rgba(2, 2, 145, 0.1)', color: '#020291', border: '1px solid primary.light80',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
-                      '&:hover': { background: 'rgba(245, 158, 11, 0.2)' }
+                      '&:hover': { background: 'rgba(2, 2, 145, 0.2)' }
                     }}
                   >
                     {generatingFor === candidate.id ? (
-                      <><CircularProgress size={14} sx={{ mr: 0.5, color: '#d97706' }} /> Generating...</>
+                      <><CircularProgress size={14} sx={{ mr: 0.5, color: '#020291' }} /> Generating...</>
                     ) : (
                       <><i className="fas fa-robot" style={{ marginRight: 6 }} /> Generate Questions</>
                     )}
@@ -434,8 +434,8 @@ const RecruiterCandidates = () => {
                       minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
                       background: '#fef3c720',
-                      color: '#d97706',
-                      border: '1px solid #d9770640',
+                      color: '#020291',
+                      border: '1px solid #02029140',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
                       '&:hover': { background: '#fef3c740' }
                     }}
@@ -489,7 +489,7 @@ const RecruiterCandidates = () => {
               </Box>
             </Box>
             {(generatingFor === candidate.id || scoringFor === candidate.id) && (
-              <LinearProgress sx={{ '& .MuiLinearProgress-bar': { background: 'linear-gradient(90deg, #f59e0b, #d97706)' } }} />
+              <LinearProgress sx={{ '& .MuiLinearProgress-bar': { background: 'linear-gradient(90deg, #020291, #020291)' } }} />
             )}
           </Card>
         ))}
@@ -521,11 +521,11 @@ const RecruiterCandidates = () => {
                 width: 40,
                 height: 40,
                 borderRadius: '10px',
-                background: currentPage === 1 ? '#f1f5f9' : 'rgba(245, 158, 11, 0.1)',
-                color: currentPage === 1 ? '#94a3b8' : '#f59e0b',
-                border: `1px solid ${currentPage === 1 ? '#e2e8f0' : '#f59e0b40'}`,
+                background: currentPage === 1 ? '#f1f5f9' : 'rgba(2, 2, 145, 0.1)',
+                color: currentPage === 1 ? '#94a3b8' : '#020291',
+                border: `1px solid ${currentPage === 1 ? '#e2e8f0' : '#02029140'}`,
                 '&:hover': {
-                  background: currentPage === 1 ? '#f1f5f9' : 'rgba(245, 158, 11, 0.2)',
+                  background: currentPage === 1 ? '#f1f5f9' : 'rgba(2, 2, 145, 0.2)',
                 }
               }}
             >
@@ -555,13 +555,13 @@ const RecruiterCandidates = () => {
                       width: 40,
                       height: 40,
                       borderRadius: '10px',
-                      background: currentPage === pageNum ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(245, 158, 11, 0.1)',
-                      color: currentPage === pageNum ? 'white' : '#f59e0b',
-                      border: `1px solid ${currentPage === pageNum ? 'transparent' : '#f59e0b40'}`,
+                      background: currentPage === pageNum ? 'linear-gradient(135deg, #020291, #020291)' : 'rgba(2, 2, 145, 0.1)',
+                      color: currentPage === pageNum ? 'white' : '#020291',
+                      border: `1px solid ${currentPage === pageNum ? 'transparent' : '#02029140'}`,
                       fontWeight: 600,
                       fontSize: '14px',
                       '&:hover': {
-                        background: currentPage === pageNum ? 'linear-gradient(135deg, #d97706, #b45309)' : 'rgba(245, 158, 11, 0.2)',
+                        background: currentPage === pageNum ? 'linear-gradient(135deg, #020291, #b45309)' : 'rgba(2, 2, 145, 0.2)',
                       }
                     }}
                   >
@@ -580,13 +580,13 @@ const RecruiterCandidates = () => {
                       width: 40,
                       height: 40,
                       borderRadius: '10px',
-                      background: 'rgba(245, 158, 11, 0.1)',
-                      color: '#f59e0b',
-                      border: '1px solid #f59e0b40',
+                      background: 'rgba(2, 2, 145, 0.1)',
+                      color: '#020291',
+                      border: '1px solid #02029140',
                       fontWeight: 600,
                       fontSize: '14px',
                       '&:hover': {
-                        background: 'rgba(245, 158, 11, 0.2)',
+                        background: 'rgba(2, 2, 145, 0.2)',
                       }
                     }}
                   >
@@ -605,11 +605,11 @@ const RecruiterCandidates = () => {
                 width: 40,
                 height: 40,
                 borderRadius: '10px',
-                background: currentPage >= Math.max(totalPages, 1) ? '#f1f5f9' : 'rgba(245, 158, 11, 0.1)',
-                color: currentPage >= Math.max(totalPages, 1) ? '#94a3b8' : '#f59e0b',
-                border: `1px solid ${currentPage >= Math.max(totalPages, 1) ? '#e2e8f0' : '#f59e0b40'}`,
+                background: currentPage >= Math.max(totalPages, 1) ? '#f1f5f9' : 'rgba(2, 2, 145, 0.1)',
+                color: currentPage >= Math.max(totalPages, 1) ? '#94a3b8' : '#020291',
+                border: `1px solid ${currentPage >= Math.max(totalPages, 1) ? '#e2e8f0' : '#02029140'}`,
                 '&:hover': {
-                  background: currentPage >= Math.max(totalPages, 1) ? '#f1f5f9' : 'rgba(245, 158, 11, 0.2)',
+                  background: currentPage >= Math.max(totalPages, 1) ? '#f1f5f9' : 'rgba(2, 2, 145, 0.2)',
                 }
               }}
             >
@@ -627,7 +627,7 @@ const RecruiterCandidates = () => {
             <Box sx={{ display: 'flex', gap: 1.5 }}>
               <Box sx={{
                 width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white'
+                background: 'linear-gradient(135deg, #020291, #020291)', color: 'white'
               }}>
                 <i className="fas fa-user-plus" />
               </Box>
@@ -740,7 +740,7 @@ const RecruiterCandidates = () => {
               <Box sx={{
                 border: '2px dashed #cbd5e1', borderRadius: '12px', p: 3, textAlign: 'center',
                 background: addForm.resume ? '#f0fdf4' : '#f8fafc', cursor: 'pointer',
-                transition: 'all 0.2s', '&:hover': { borderColor: '#f59e0b', background: '#fffbeb' }
+                transition: 'all 0.2s', '&:hover': { borderColor: '#020291', background: '#EEF0FF' }
               }}
                 onClick={() => document.getElementById('resume-upload')?.click()}>
                 <input id="resume-upload" type="file" hidden accept=".pdf,.doc,.docx,.txt"
@@ -772,9 +772,9 @@ const RecruiterCandidates = () => {
             }}>Cancel</Button>
             <Button onClick={handleAddCandidate} disabled={submitting}
               sx={{
-                background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
+                background: 'linear-gradient(135deg, #020291, #020291)', color: 'white',
                 borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: "40px",
-                '&:hover': { background: 'linear-gradient(135deg, #d97706, #b45309)' },
+                '&:hover': { background: 'linear-gradient(135deg, #020291, #b45309)' },
                 '&:disabled': { opacity: 0.6 }
               }}>
               {submitting ? 'Adding...' : 'Add Candidate'}

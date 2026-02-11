@@ -215,7 +215,7 @@ const AdminAuditLog: React.FC = () => {
                 label={`To: ${dateTo}`}
                 size="small"
                 onDelete={() => setDateTo('')}
-                sx={{ bgcolor: '#fef3c7', color: '#d97706', '& .MuiChip-deleteIcon': { color: '#d97706' } }}
+                sx={{ bgcolor: '#fef3c7', color: '#020291', '& .MuiChip-deleteIcon': { color: '#020291' } }}
               />
             )}
             <Button size="small" onClick={clearFilters} sx={{ fontSize: '12px', color: '#64748b', textTransform: 'none' }}>

@@ -218,11 +218,8 @@ const ATSSettings: React.FC = () => {
             fontWeight: 600,
             fontSize: '14px',
             padding: '12px 24px',
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-            boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
-            },
+            background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
+           
           }}
         >
           Add Your First Connection
@@ -337,9 +334,9 @@ const ATSSettings: React.FC = () => {
               startIcon={<Add />}
               onClick={() => setDialogOpen(true)}
                sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                border: '2px solid #f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#fff',
+                border: '2px solid #020291',
                 borderRadius: '10px',
                 fontSize: '14px',
                 fontWeight: 600,
@@ -348,12 +345,6 @@ const ATSSettings: React.FC = () => {
                 alignItems: 'center',
                 gap: '8px',
                 minWidth: '120px',
-                '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
-                }
               }}
             >
               Add Connection
@@ -596,8 +587,8 @@ const ATSSettings: React.FC = () => {
                         sx={{
                           padding: '14px 16px',
                           borderRadius: '10px',
-                          backgroundColor: isSuccess ? '#f0fdf4' : '#fffbeb',
-                          border: `1px solid ${isSuccess ? '#22c55e' : '#f59e0b'}20`,
+                          backgroundColor: isSuccess ? '#f0fdf4' : '#EEF0FF',
+                          border: `1px solid ${isSuccess ? '#22c55e' : '#020291'}20`,
                           mb: '16px',
                         }}
                       >
@@ -606,10 +597,10 @@ const ATSSettings: React.FC = () => {
                             {isSuccess ? (
                               <CheckCircle sx={{ color: '#22c55e', fontSize: '18px' }} />
                             ) : (
-                              <Schedule sx={{ color: '#f59e0b', fontSize: '18px' }} />
+                              <Schedule sx={{ color: '#020291', fontSize: '18px' }} />
                             )}
                             <Box>
-                              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: isSuccess ? '#16a34a' : '#d97706' }}>
+                              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: isSuccess ? '#16a34a' : '#020291' }}>
                                 {isSuccess ? 'Sync Successful' : conn.sync_status || 'Pending Sync'}
                               </Typography>
                               <Typography sx={{ fontSize: '11px', color: '#64748b' }}>

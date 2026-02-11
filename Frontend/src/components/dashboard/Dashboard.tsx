@@ -211,16 +211,16 @@ const Dashboard = () => {
                 fontSize: "18px",
                 color: "#fff",
                 flexShrink: 0,
-                background:
+                backgroundColor:
                   stat.color === "blue"
-                    ? "linear-gradient(135deg,#3b82f6,#2563eb)"
+                    ? "primary.main"
                     : stat.color === "green"
-                      ? "linear-gradient(135deg,#10b981,#059669)"
+                      ? "success.main"
                       : stat.color === "orange"
-                        ? "linear-gradient(135deg,#f59e0b,#d97706)"
+                        ? "primary.main"
                         : stat.color === "red"
-                          ? "linear-gradient(135deg,#ef4444,#dc2626)"
-                          : "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                          ? "error.main"
+                          : "primary.main",
               }}
             >
               <i className={stat.icon}></i>
@@ -270,7 +270,7 @@ const Dashboard = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'rgba(245, 158, 11, 0.08)'
+            background: 'rgba(2, 2, 145, 0.08)'
           }}>
             <Typography sx={{
               fontSize: '15px',
@@ -280,20 +280,19 @@ const Dashboard = () => {
               alignItems: 'center',
               gap: '8px'
             }}>
-              <i className="fas fa-briefcase" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
+              <i className="fas fa-briefcase" style={{ color: 'primary.main', fontSize: '14px' }}></i>
               Recent Jobs
             </Typography>
             <Button
               onClick={() => navigate('/jobs')}
               sx={{
-                color: '#f59e0b',
+                color: 'primary.main',
                 fontSize: '12px',
                 fontWeight: 500,
                 padding: '4px 8px',
                 borderRadius: '6px',
                 textTransform: 'none',
-                minWidth: 'auto',
-                '&:hover': { background: '#fef3c7' }
+                minWidth: 'auto'
               }}>
               View All
             </Button>
@@ -344,8 +343,8 @@ const Dashboard = () => {
                       fontWeight: 600,
                       textTransform: 'uppercase',
                       height: '22px',
-                      backgroundColor: (job.status?.toLowerCase() === 'active' || !job.status) ? '#dcfce7' : '#fef3c7',
-                      color: (job.status?.toLowerCase() === 'active' || !job.status) ? '#166534' : '#92400e',
+                      backgroundColor: (job.status?.toLowerCase() === 'active' || !job.status) ? '#dcfce7' : 'rgba(2, 2, 145, 0.1)',
+                      color: (job.status?.toLowerCase() === 'active' || !job.status) ? '#166534' : 'primary.main',
                       ml: 1
                     }}
                   />
@@ -368,7 +367,7 @@ const Dashboard = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'rgba(245, 158, 11, 0.08)'
+            background: 'rgba(2, 2, 145, 0.08)'
           }}>
             <Typography sx={{
               fontSize: '15px',
@@ -378,20 +377,19 @@ const Dashboard = () => {
               alignItems: 'center',
               gap: '8px'
             }}>
-              <i className="fas fa-calendar" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
+              <i className="fas fa-calendar" style={{ color: 'primary.main', fontSize: '14px' }}></i>
               Upcoming Interviews
             </Typography>
             <Button
               onClick={() => navigate('/video-interviews')}
               sx={{
-                color: '#f59e0b',
+                color: 'primary.main',
                 fontSize: '12px',
                 fontWeight: 500,
                 padding: '4px 8px',
                 borderRadius: '6px',
                 textTransform: 'none',
-                minWidth: 'auto',
-                '&:hover': { background: '#fef3c7' }
+                minWidth: 'auto'
               }}>
               View Schedule
             </Button>
@@ -432,9 +430,9 @@ const Dashboard = () => {
                     </Typography>
                     <Box sx={{
                       fontSize: '10px',
-                      color: '#f59e0b',
+                      color: 'primary.main',
                       fontWeight: 600,
-                      background: '#fef3c7',
+                      background: 'rgba(2, 2, 145, 0.1)',
                       padding: '2px 6px',
                       borderRadius: '4px',
                       display: 'inline-block'
@@ -451,9 +449,9 @@ const Dashboard = () => {
                       textTransform: 'uppercase',
                       height: '22px',
                       backgroundColor: interview.status?.toLowerCase() === 'confirmed' ? '#dcfce7' :
-                        interview.status?.toLowerCase() === 'scheduled' ? '#dbeafe' : '#fef3c7',
+                        interview.status?.toLowerCase() === 'scheduled' ? '#dbeafe' : 'rgba(2, 2, 145, 0.1)',
                       color: interview.status?.toLowerCase() === 'confirmed' ? '#166534' :
-                        interview.status?.toLowerCase() === 'scheduled' ? '#1e40af' : '#92400e',
+                        interview.status?.toLowerCase() === 'scheduled' ? '#1e40af' : 'primary.main',
                       ml: 1
                     }}
                   />
@@ -558,9 +556,9 @@ const Dashboard = () => {
                     size="small"
                     sx={{
                       backgroundColor: qs.status?.toLowerCase() === 'approved' ? '#dcfce7' :
-                        qs.status?.toLowerCase() === 'pending' ? '#fef3c7' : '#ede9fe',
+                        qs.status?.toLowerCase() === 'pending' ? 'rgba(2, 2, 145, 0.1)' : '#ede9fe',
                       color: qs.status?.toLowerCase() === 'approved' ? '#166534' :
-                        qs.status?.toLowerCase() === 'pending' ? '#92400e' : '#6d28d9',
+                        qs.status?.toLowerCase() === 'pending' ? 'primary.main' : '#6d28d9',
                       fontSize: '10px',
                       fontWeight: 600,
                       height: '20px',

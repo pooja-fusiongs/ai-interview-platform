@@ -44,7 +44,7 @@ const RoleTester: React.FC = () => {
       background: 'white',
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       borderRadius: '12px',
-      border: '2px solid #f59e0b'
+      border: '2px solid #020291'
     }}>
       <Typography sx={{ 
         fontSize: '16px', 
@@ -55,7 +55,7 @@ const RoleTester: React.FC = () => {
         alignItems: 'center',
         gap: '8px'
       }}>
-        <i className="fas fa-flask" style={{ color: '#f59e0b' }}></i>
+        <i className="fas fa-flask" style={{ color: '#020291' }}></i>
         Role Tester (DEV ONLY)
       </Typography>
       
@@ -91,12 +91,12 @@ const RoleTester: React.FC = () => {
       <Button
         onClick={() => simulateRoleSwitch(selectedRole)}
         sx={{
-          background: '#f59e0b',
+          background: '#020291',
           color: 'white',
           width: '100%',
           marginBottom: '16px',
           '&:hover': {
-            background: '#d97706'
+            background: '#020291'
           }
         }}
       >

@@ -331,7 +331,7 @@ const CandidateMatching = () => {
 
     return (
       <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'}`} style={{
-        color: '#f59e0b',
+        color: '#020291',
         fontSize: '12px',
         marginLeft: '6px',
         transition: 'all 0.2s ease'
@@ -585,7 +585,7 @@ const CandidateMatching = () => {
 
   const getMatchScoreColor = (score: number) => {
     if (score > 50) return '#10b981' // green for 50%+
-    if (score >= 30) return '#f59e0b' // yellow for 30-50%
+    if (score >= 30) return '#020291' // yellow for 30-50%
     return '#ef4444' // red for 0-30%
   }
 
@@ -766,8 +766,8 @@ const CandidateMatching = () => {
               sx={{
                 minWidth: '120px',
                 height: '40px',
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#020291',
                 border: '2px solid #f59f0baf',
                 borderRadius: '8px',
                 fontSize: { xs: '12px', sm: '14px' },
@@ -776,8 +776,8 @@ const CandidateMatching = () => {
                 whiteSpace: 'nowrap',
                 position: 'relative',
                 '&:hover': {
-                  border: '2px solid #f59e0b',
-                  color: '#f59e0b',
+                  border: '2px solid #020291',
+                  color: '#020291',
                   background: 'rgba(245, 158, 11, 0.15)',
                 }
               }}
@@ -820,7 +820,7 @@ const CandidateMatching = () => {
                   <TableCell
                     sx={{
                       fontWeight: 700,
-                      color: sortField === 'matchScore' ? '#f59e0b' : '#374151',
+                      color: sortField === 'matchScore' ? '#020291' : '#374151',
                       fontSize: { xs: '12px', sm: '14px' },
                       cursor: 'pointer',
                       userSelect: 'none',
@@ -828,8 +828,8 @@ const CandidateMatching = () => {
                       backgroundColor: sortField === 'matchScore' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        color: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        color: '#020291',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                     onClick={() => handleSort('matchScore')}
@@ -842,7 +842,7 @@ const CandidateMatching = () => {
                   <TableCell
                     sx={{
                       fontWeight: 700,
-                      color: sortField === 'name' ? '#f59e0b' : '#374151',
+                      color: sortField === 'name' ? '#020291' : '#374151',
                       fontSize: { xs: '12px', sm: '14px' },
                       cursor: 'pointer',
                       userSelect: 'none',
@@ -850,8 +850,8 @@ const CandidateMatching = () => {
                       backgroundColor: sortField === 'name' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        color: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        color: '#020291',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                     onClick={() => handleSort('name')}
@@ -864,7 +864,7 @@ const CandidateMatching = () => {
                   <TableCell
                     sx={{
                       fontWeight: 700,
-                      color: sortField === 'email' ? '#f59e0b' : '#374151',
+                      color: sortField === 'email' ? '#020291' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
@@ -872,8 +872,8 @@ const CandidateMatching = () => {
                       backgroundColor: sortField === 'email' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        color: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        color: '#020291',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                     onClick={() => handleSort('email')}
@@ -886,7 +886,7 @@ const CandidateMatching = () => {
                   <TableCell
                     sx={{
                       fontWeight: 700,
-                      color: sortField === 'location' ? '#f59e0b' : '#374151',
+                      color: sortField === 'location' ? '#020291' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
@@ -894,8 +894,8 @@ const CandidateMatching = () => {
                       backgroundColor: sortField === 'location' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        color: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        color: '#020291',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                     onClick={() => handleSort('location')}
@@ -908,7 +908,7 @@ const CandidateMatching = () => {
                   <TableCell
                     sx={{
                       fontWeight: 700,
-                      color: sortField === 'category' ? '#f59e0b' : '#374151',
+                      color: sortField === 'category' ? '#020291' : '#374151',
                       fontSize: '14px',
                       cursor: 'pointer',
                       userSelect: 'none',
@@ -916,8 +916,8 @@ const CandidateMatching = () => {
                       backgroundColor: sortField === 'category' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        color: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        color: '#020291',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                     onClick={() => handleSort('category')}
@@ -930,7 +930,7 @@ const CandidateMatching = () => {
                   <TableCell
                     sx={{
                       fontWeight: 700,
-                      color: sortField === 'status' ? '#f59e0b' : '#374151',
+                      color: sortField === 'status' ? '#020291' : '#374151',
                       fontSize: { xs: '12px', sm: '14px' },
                       cursor: 'pointer',
                       userSelect: 'none',
@@ -938,8 +938,8 @@ const CandidateMatching = () => {
                       backgroundColor: sortField === 'status' ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        color: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                        color: '#020291',
+                        backgroundColor: 'rgba(2, 2, 145, 0.1)'
                       }
                     }}
                     onClick={() => handleSort('status')}
@@ -1433,9 +1433,9 @@ const CandidateMatching = () => {
               onClick={handleApplyFilters}
               variant="contained"
               sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                border: '2px solid #f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#020291',
+                border: '2px solid #020291',
                 borderRadius: '10px',
                 fontSize: '14px',
                 fontWeight: 600,
@@ -1445,8 +1445,8 @@ const CandidateMatching = () => {
                 gap: '8px',
                 minWidth: '120px',
                 '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
+                  background: 'rgba(2, 2, 145, 0.1)',
+                  borderColor: '#020291',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                 }
@@ -1545,7 +1545,7 @@ const CandidateMatching = () => {
                     color: '#64748b',
                     padding: '24px'
                   }}>
-                    <i className="fas fa-exclamation-triangle" style={{ fontSize: '48px', marginBottom: '16px', color: '#f59e0b' }} />
+                    <i className="fas fa-exclamation-triangle" style={{ fontSize: '48px', marginBottom: '16px', color: '#020291' }} />
                     <Typography variant="h6" sx={{ marginBottom: '8px' }}>
                       Failed to load resume
                     </Typography>

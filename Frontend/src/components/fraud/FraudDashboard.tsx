@@ -441,7 +441,7 @@ const FraudDashboard: React.FC = () => {
                             sx={{
                               fontSize: '12px',
                               fontWeight: 600,
-                              color: '#64748b',
+                              color: 'black',
                               mb: '6px',
                               textTransform: 'uppercase',
                               letterSpacing: '0.8px',
@@ -453,7 +453,7 @@ const FraudDashboard: React.FC = () => {
                             sx={{
                               fontSize: '36px',
                               fontWeight: 700,
-                              color: '#1e293b',
+                              color: '#020291',
                               lineHeight: 1,
                               mb: '4px',
                             }}
@@ -495,7 +495,7 @@ const FraudDashboard: React.FC = () => {
                     borderRadius: '16px',
                     border: '1px solid #e5e7eb',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)',
-                    background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+                    background: 'linear-gradient(135deg, #EEF0FF 0%, #fef3c7 100%)',
                     transition: 'all 0.25s ease',
                     '&:hover': {
                       boxShadow: '0 12px 32px rgba(245, 158, 11, 0.15)',
@@ -774,15 +774,19 @@ const FraudDashboard: React.FC = () => {
                               </TableCell>
                               <TableCell sx={{ borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
                                 <Button
-                                  className="action-btn"
-                                  variant="contained"
+                                  variant="text"
                                   size="small"
                                   href={`/fraud-analysis/${row.video_interview_id}`}
                                   sx={{
-                                    background:"none",
-                                    boxShadow:"none"
+                                    minWidth: 'auto',
+                                    background: 'none',
+                                    boxShadow: 'none',
+                                    '&:hover': {
+                                      background: 'none',
+                                      boxShadow: 'none',
+                                    },
                                   }}
-                                  startIcon={<Visibility sx={{ fontSize: '16px',color:"grey" }} />}
+                                  startIcon={<Visibility sx={{ fontSize: '16px', color: 'grey' }} />}
                                 >
                                 </Button>
                               </TableCell>

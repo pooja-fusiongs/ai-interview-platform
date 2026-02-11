@@ -317,7 +317,7 @@ const ATSConnectionForm: React.FC<ATSConnectionFormProps> = ({ open, onClose, on
                         </Box>
                         <Box>
                           <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>{p.name}</Typography>
-                          <Chip label="Popular" size="small" sx={{ height: '18px', fontSize: '10px', backgroundColor: '#fffbeb', color: '#d97706' }} />
+                          <Chip label="Popular" size="small" sx={{ height: '18px', fontSize: '10px', backgroundColor: '#EEF0FF', color: '#020291' }} />
                         </Box>
                       </Box>
                       <Typography sx={{ fontSize: '12px', color: '#64748b' }}>{p.description}</Typography>
@@ -587,11 +587,11 @@ const ATSConnectionForm: React.FC<ATSConnectionFormProps> = ({ open, onClose, on
               fontWeight: 600,
               fontSize: '14px',
               padding: '10px 24px',
-              background: saving || !apiKey ? '#e5e7eb' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              background: saving || !apiKey ? '#e5e7eb' : 'linear-gradient(135deg, primary.main0%, #020291 100%)',
               color: saving || !apiKey ? '#9ca3af' : '#fff',
               boxShadow: saving || !apiKey ? 'none' : '0 4px 14px rgba(245, 158, 11, 0.35)',
               '&:hover': {
-                background: saving || !apiKey ? '#e5e7eb' : 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                background: saving || !apiKey ? '#e5e7eb' : 'linear-gradient(135deg, #020291 0%, #b45309 100%)',
               },
               '&.Mui-disabled': {
                 background: '#e5e7eb',

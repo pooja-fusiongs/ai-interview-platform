@@ -338,8 +338,8 @@ const CandidateProfileEdit: React.FC = () => {
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 3,
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   },
                   '& .MuiInputLabel-root': {
                     fontWeight: 500,
@@ -360,8 +360,8 @@ const CandidateProfileEdit: React.FC = () => {
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 3,
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   }
                 }}
               />
@@ -377,8 +377,8 @@ const CandidateProfileEdit: React.FC = () => {
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 3,
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   }
                 }}
               />
@@ -394,8 +394,8 @@ const CandidateProfileEdit: React.FC = () => {
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 3,
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   }
                 }}
               />
@@ -421,9 +421,9 @@ const CandidateProfileEdit: React.FC = () => {
                       mr: 4,
                       ml: "7px",
                       '& .MuiRadio-root': {
-                        color: '#f59e0b',
+                        color: '#020291',
                         '&.Mui-checked': {
-                          color: '#f59e0b'
+                          color: '#020291'
                         }
                       }
                     }
@@ -450,8 +450,8 @@ const CandidateProfileEdit: React.FC = () => {
                     borderRadius: 3,
                     ml: "10px",
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   }
                 }}
               />
@@ -481,8 +481,8 @@ const CandidateProfileEdit: React.FC = () => {
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 3,
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   }
                 }}
               />
@@ -498,8 +498,8 @@ const CandidateProfileEdit: React.FC = () => {
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 3,
                     '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#f59e0b' },
-                    '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                    '&:hover fieldset': { borderColor: '#020291' },
+                    '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                   }
                 }}
               />
@@ -517,10 +517,10 @@ const CandidateProfileEdit: React.FC = () => {
                       borderColor: '#e2e8f0 !important' 
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': { 
-                      borderColor: '#f59e0b !important' 
+                      borderColor: 'primary.main!important' 
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                      borderColor: '#f59e0b !important', 
+                      borderColor: 'primary.main!important', 
                       borderWidth: '2px !important' 
                     },
                     '& .MuiSelect-select:focus': {
@@ -561,7 +561,7 @@ const CandidateProfileEdit: React.FC = () => {
                       <Box
                         onDragOver={(e) => {
                           e.preventDefault()
-                          e.currentTarget.style.borderColor = '#f59e0b'
+                          e.currentTarget.style.borderColor = '#020291'
                           e.currentTarget.style.backgroundColor = '#f0f9ff'
                         }}
                         onDragLeave={(e) => {
@@ -708,8 +708,8 @@ const CandidateProfileEdit: React.FC = () => {
                         borderRadius: 2,
                         bgcolor: 'white',
                         '& fieldset': { borderColor: '#e2e8f0' },
-                        '&:hover fieldset': { borderColor: '#f59e0b' },
-                        '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                        '&:hover fieldset': { borderColor: '#020291' },
+                        '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                       }
                     }}
                   />
@@ -726,8 +726,8 @@ const CandidateProfileEdit: React.FC = () => {
                         borderRadius: 2,
                         bgcolor: 'white',
                         '& fieldset': { borderColor: '#e2e8f0' },
-                        '&:hover fieldset': { borderColor: '#f59e0b' },
-                        '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                        '&:hover fieldset': { borderColor: '#020291' },
+                        '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                       }
                     }}
                   />
@@ -744,8 +744,8 @@ const CandidateProfileEdit: React.FC = () => {
                         borderRadius: 2,
                         bgcolor: 'white',
                         '& fieldset': { borderColor: '#e2e8f0' },
-                        '&:hover fieldset': { borderColor: '#f59e0b' },
-                        '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                        '&:hover fieldset': { borderColor: '#020291' },
+                        '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                       }
                     }}
                   />
@@ -762,8 +762,8 @@ const CandidateProfileEdit: React.FC = () => {
                         borderRadius: 2,
                         bgcolor: 'white',
                         '& fieldset': { borderColor: '#e2e8f0' },
-                        '&:hover fieldset': { borderColor: '#f59e0b' },
-                        '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                        '&:hover fieldset': { borderColor: '#020291' },
+                        '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                       }
                     }}
                   />
@@ -800,8 +800,8 @@ const CandidateProfileEdit: React.FC = () => {
               '& .MuiOutlinedInput-root': {
                 borderRadius: 3,
                 '& fieldset': { borderColor: '#e2e8f0' },
-                '&:hover fieldset': { borderColor: '#f59e0b' },
-                '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                '&:hover fieldset': { borderColor: '#020291' },
+                '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
               }
             }}
           />
@@ -828,8 +828,8 @@ const CandidateProfileEdit: React.FC = () => {
               '& .MuiOutlinedInput-root': {
                 borderRadius: 3,
                 '& fieldset': { borderColor: '#e2e8f0' },
-                '&:hover fieldset': { borderColor: '#f59e0b' },
-                '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                '&:hover fieldset': { borderColor: '#020291' },
+                '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
               }
             }}
           />
@@ -882,8 +882,8 @@ const CandidateProfileEdit: React.FC = () => {
                             borderRadius: 2,
                             bgcolor: 'white',
                             '& fieldset': { borderColor: '#e2e8f0' },
-                            '&:hover fieldset': { borderColor: '#f59e0b' },
-                            '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                            '&:hover fieldset': { borderColor: '#020291' },
+                            '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                           }
                         }}
                       />
@@ -900,8 +900,8 @@ const CandidateProfileEdit: React.FC = () => {
                             borderRadius: 2,
                             bgcolor: 'white',
                             '& fieldset': { borderColor: '#e2e8f0' },
-                            '&:hover fieldset': { borderColor: '#f59e0b' },
-                            '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                            '&:hover fieldset': { borderColor: '#020291' },
+                            '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                           }
                         }}
                       />
@@ -918,8 +918,8 @@ const CandidateProfileEdit: React.FC = () => {
                             borderRadius: 2,
                             bgcolor: 'white',
                             '& fieldset': { borderColor: '#e2e8f0' },
-                            '&:hover fieldset': { borderColor: '#f59e0b' },
-                            '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                            '&:hover fieldset': { borderColor: '#020291' },
+                            '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                           }
                         }}
                       />
@@ -936,8 +936,8 @@ const CandidateProfileEdit: React.FC = () => {
                             borderRadius: 2,
                             bgcolor: 'white',
                             '& fieldset': { borderColor: '#e2e8f0' },
-                            '&:hover fieldset': { borderColor: '#f59e0b' },
-                            '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
+                            '&:hover fieldset': { borderColor: '#020291' },
+                            '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                           }
                         }}
                       />
@@ -1029,7 +1029,7 @@ const CandidateProfileEdit: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <i className="fas fa-question-circle" style={{ color: '#d97706', fontSize: 20 }} />
+              <i className="fas fa-question-circle" style={{ color: '#020291', fontSize: 20 }} />
             </Box>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
@@ -1070,7 +1070,7 @@ const CandidateProfileEdit: React.FC = () => {
                           size="small"
                           sx={{ 
                             bgcolor: question.difficulty === 'advanced' ? '#fef2f2' : question.difficulty === 'intermediate' ? '#fef3c7' : '#f0fdf4',
-                            color: question.difficulty === 'advanced' ? '#dc2626' : question.difficulty === 'intermediate' ? '#d97706' : '#16a34a',
+                            color: question.difficulty === 'advanced' ? '#dc2626' : question.difficulty === 'intermediate' ? '#020291' : '#16a34a',
                             fontSize: '10px'
                           }}
                         />
@@ -1165,7 +1165,7 @@ const CandidateProfileEdit: React.FC = () => {
                           size="small"
                           sx={{ 
                             bgcolor: transcript.status === 'scored' ? '#f0fdf4' : '#fef3c7',
-                            color: transcript.status === 'scored' ? '#16a34a' : '#d97706',
+                            color: transcript.status === 'scored' ? '#16a34a' : '#020291',
                             fontSize: '10px'
                           }}
                         />
@@ -1175,7 +1175,7 @@ const CandidateProfileEdit: React.FC = () => {
                             size="small"
                             sx={{ 
                               bgcolor: transcript.score >= 80 ? '#f0fdf4' : transcript.score >= 60 ? '#fef3c7' : '#fef2f2',
-                              color: transcript.score >= 80 ? '#16a34a' : transcript.score >= 60 ? '#d97706' : '#dc2626',
+                              color: transcript.score >= 80 ? '#16a34a' : transcript.score >= 60 ? '#020291' : '#dc2626',
                               fontSize: '10px',
                               fontWeight: 600
                             }}
@@ -1242,13 +1242,13 @@ const CandidateProfileEdit: React.FC = () => {
               onClick={() => navigate('/candidate-profile')}
               sx={{
                 textTransform: 'none',
-                color: '#f59e0b',
+                color: '#020291',
                 fontSize: '1rem',
                 fontWeight: 500,
-                border: "1px solid #f59e0b",
+                border: "1px solid #020291",
                 '&:hover': {
                   bgcolor: 'transparent',
-                  color: '#f59e0b'
+                  color: '#020291'
                 }
               }}
             >
@@ -1457,17 +1457,17 @@ const CandidateProfileEdit: React.FC = () => {
                         py: 3,
                         transition: 'all 0.3s ease',
                         '&.Mui-selected': {
-                          color: '#f59e0b',
+                          color: '#020291',
                           fontWeight: 700
                         },
                         '&:hover': {
-                          color: '#f59e0b',
+                          color: '#020291',
                           bgcolor: 'rgba(59, 130, 246, 0.05)',
                           transform: 'translateY(-2px)'
                         }
                       },
                       '& .MuiTabs-indicator': {
-                        backgroundColor: '#f59e0b',
+                        backgroundColor: '#020291',
                         height: 4,
                         borderRadius: '2px 2px 0 0'
                       }
@@ -1519,8 +1519,8 @@ const CandidateProfileEdit: React.FC = () => {
                     startIcon={<Save />}
                     size="large"
                     sx={{
-                      background: 'rgba(245, 158, 11, 0.1)',
-                      color: '#f59e0b',
+                      background: 'rgba(2, 2, 145, 0.1)',
+                      color: '#020291',
                       border: '2px solid #f59f0baf',
                       padding: '10px 16px',
                       borderRadius: '8px',
@@ -1528,8 +1528,8 @@ const CandidateProfileEdit: React.FC = () => {
                       fontWeight: 600,
                       textTransform: 'none',
                       '&:hover': {
-                        background: 'rgba(245, 158, 11, 0.1)',
-                        borderColor: '#f59e0b',
+                        background: 'rgba(2, 2, 145, 0.1)',
+                        borderColor: '#020291',
                         transform: 'translateY(-1px)',
                         boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
                       }

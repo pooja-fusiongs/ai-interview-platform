@@ -12,9 +12,7 @@ import {
   TextField,
   InputAdornment,
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
   FormControl,
   // InputLabel,
   Select,
@@ -254,14 +252,14 @@ const Jobs = () => {
 
   const getJobColor = (department: string) => {
     const colors: { [key: string]: string } = {
-      'Engineering': '#3b82f6',
-      'Design': '#8b5cf6',
+      'Engineering': '#1A22E0',
+      'Design': '#5560FF',
       'Product': '#059669',
-      'Marketing': '#f59e0b',
+      'Marketing': '#2E38F7',
       'Sales': '#ef4444',
       'HR': '#06b6d4'
     }
-    return colors[department] || '#6366f1'
+    return colors[department] || '#2E38F7'
   }
 
   // Helper function to get experience level from either field format
@@ -543,28 +541,18 @@ const Jobs = () => {
               <Button
                 variant="contained"
                 onClick={handleOpenAddJobDialog}
-               sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                border: '2px solid #f59e0b',
-                borderRadius: '10px',
-                fontSize: { xs: '12px', sm: '14px' },
-                fontWeight: 600,
-                textTransform: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: { xs: '4px', sm: '8px' },
-                minWidth: { xs: 'auto', sm: '120px' },
-                padding: { xs: '8px 12px', sm: '8px 16px' },
-                '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
-                }
-              }}
+                startIcon={<i className="fas fa-plus"></i>}
+                sx={{
+                  color:"#fffff",'&:hover':{
+                background:"#06109E"
+               },
+                  fontSize: { xs: '12px', sm: '14px' },
+                  minWidth: { xs: 'auto', sm: '120px' },
+                  padding: { xs: '8px 12px', sm: '8px 16px' },
+                }}
               >
-                <i className="fas fa-plus"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Add Job</Box><Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Add</Box>
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Add Job</Box>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Add</Box>
               </Button>
             </CanCreateJob>
             
@@ -572,37 +560,22 @@ const Jobs = () => {
             <Button
               variant="outlined"
               onClick={handleOpenFilterDialog}
+              startIcon={<i className="fas fa-filter"></i>}
               sx={{
-            background: 'white',
-            color: '#64748b',
-            border: '2px solid #e2e8f0',
-            borderRadius: '10px',
-            fontSize: { xs: '12px', sm: '14px' },
-            fontWeight: 600,
-            textTransform: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: { xs: '4px', sm: '8px' },
-            minWidth: { xs: 'auto', sm: '100px' },
-            padding: { xs: '8px 12px', sm: '8px 16px' },
-            position: 'relative',
-            '&:hover': {
-              borderColor: '#f59e0b',
-              color: '#f59e0b',
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 25px rgba(245, 158, 11, 0.15)'
-            }
-          }}
+                fontSize: { xs: '12px', sm: '14px' },
+                minWidth: { xs: 'auto', sm: '100px' },
+                padding: { xs: '8px 12px', sm: '8px 16px' },
+                position: 'relative',
+              }}
             >
-              <i className="fas fa-filter" style={{ marginRight: '8px' }}></i>
               Filter
               {getActiveFilterCount() > 0 && (
                 <Chip 
                   label={getActiveFilterCount()} 
                   size="small" 
+                  color="primary"
                   sx={{ 
-                    backgroundColor: '#f59e0b', 
-                    color: 'white', 
+                    marginLeft: '8px',
                     fontSize: '10px',
                     height: '18px',
                     minWidth: '18px'
@@ -617,7 +590,7 @@ const Jobs = () => {
         {/* Active Filters Display */}
         {getActiveFilterCount() > 0 && (
           <Box sx={{ marginBottom: '20px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
               Active Filters:
             </Typography>
             {Object.entries(filters).map(([key, value]) => 
@@ -627,18 +600,16 @@ const Jobs = () => {
                   label={`${key}: ${value}`}
                   onDelete={() => handleFilterChange(key, '')}
                   size="small"
-                  sx={{
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    color: '#f59e0b',
-                    border: '1px solid #f59e0b'
-                  }}
+                  color="primary"
+                  variant="outlined"
                 />
               )
             )}
             <Button
               size="small"
               onClick={handleClearFilters}
-              sx={{ color: '#64748b', fontSize: '12px' }}
+              color="secondary"
+              sx={{ fontSize: '12px' }}
             >
               Clear All
             </Button>
@@ -665,7 +636,9 @@ const Jobs = () => {
                 setSearchQuery('')
                 handleClearFilters()
               }}
-              sx={{ marginTop: '16px', color: '#f59e0b' }}
+              variant="outlined"
+              color="primary"
+              sx={{ marginTop: '16px' }}
             >
               Clear Search & Filters
             </Button>
@@ -827,13 +800,12 @@ const Jobs = () => {
                     {jobApplicationStatus[job.id] ? (
                       // Already Applied Button
                       <Button 
-                        variant="contained" 
                         size="small"
                         disabled
                         sx={{
                           flex: 1,
-                          background: '#dcfce7',
-                          color: '#166534',
+                          background: 'rgba(0, 0, 0, 0.26)',
+                          color: 'grey',
                           // border: '2px solid grey',
                           // padding: '10px 16px',
                           borderRadius: '8px',
@@ -852,8 +824,8 @@ const Jobs = () => {
                       </Button>
                     ) : (
                       // Apply Now Button
-                      <Button 
-                        variant="contained" 
+                      <Button
+                        variant="contained"
                         size="small"
                         onClick={() => {
                           console.log('Apply Now clicked for job:', job.id)
@@ -862,22 +834,21 @@ const Jobs = () => {
                         }}
                         sx={{
                           flex: 1,
-                          background: 'rgba(245, 158, 11, 0.1)',
-                          color: '#f59e0b',
-                          border: '2px solid #f59f0baf',
                           padding: '10px 16px',
                           borderRadius: '8px',
                           fontSize: '14px',
                           fontWeight: 600,
                           textTransform: 'none',
+                          background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
+                          color: '#ffffff',
                           '&:hover': {
-                            background: 'rgba(245, 158, 11, 0.1)',
-                            borderColor: '#f59e0b',
+                            background: 'linear-gradient(135deg, #01016b 0%, #010150 100%)',
                             transform: 'translateY(-1px)',
-                            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                            boxShadow: '0 4px 12px rgba(2, 2, 145, 0.3)'
                           }
                         }}
                       >
+                        <i className="fas fa-paper-plane" style={{ marginRight: '6px', fontSize: '12px' }}></i>
                         Apply Now
                       </Button>
                     )}
@@ -893,540 +864,418 @@ const Jobs = () => {
         <Dialog
           open={openFilterDialog}
           onClose={handleCloseFilterDialog}
-          maxWidth="lg"
+          maxWidth="sm"
           fullWidth
           slotProps={{
             paper: {
               sx: {
-                borderRadius: { xs: '12px', md: '20px' },
-                maxHeight: { xs: '90vh', md: '85vh' },
-                margin: { xs: '12px', md: '32px' },
-                width: { xs: 'calc(100% - 24px)', md: 'auto' },
-                background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                border: '1px solid rgba(245, 158, 11, 0.1)'
+                borderRadius: '16px',
+                maxHeight: '90vh',
+                overflow: 'hidden',
               }
             }
           }}
         >
-          <DialogTitle sx={{ padding: { xs: '16px 16px 0 16px', md: '32px 32px 0 32px' } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Box sx={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 8px 25px rgba(245, 158, 11, 0.3)'
-                }}>
-                  <i className="fas fa-filter" style={{ color: 'white', fontSize: '20px' }}></i>
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
-                    Filter Jobs
-                  </Typography>
-                  <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
-                    Find the perfect job with advanced filters
-                  </Typography>
-                </Box>
-              </Box>
-              <IconButton 
-                onClick={handleCloseFilterDialog} 
-                sx={{ 
-                  color: '#64748b',
-                  backgroundColor: 'rgba(100, 116, 139, 0.1)',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  '&:hover': {
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    color: '#f59e0b',
-                    transform: 'scale(1.05)'
-                  },
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <i className="fas fa-times" style={{ fontSize: '16px' }}></i>
-              </IconButton>
-            </Box>
-          </DialogTitle>
-
-          <DialogContent sx={{ padding: { xs: '16px', md: '32px' }, paddingTop: { xs: '16px', md: '24px' } }}>
-            {/* Filter Categories */}
-            <Box sx={{ marginBottom: '32px' }}>
-              <Typography sx={{ 
-                fontSize: '16px', 
-                fontWeight: 600, 
-                color: '#374151', 
-                marginBottom: '20px',
+          {/* Header */}
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '20px 24px',
+            borderBottom: '1px solid #e5e7eb',
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Box sx={{
+                width: 40,
+                height: 40,
+                borderRadius: '10px',
+                background: `linear-gradient(135deg, ${'#020291'} 0%, ${'#0F17BF'} 100%)`,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                justifyContent: 'center',
               }}>
-                <i className="fas fa-sliders-h" style={{ color: '#f59e0b', fontSize: '14px' }}></i>
-                Filter Categories
-              </Typography>
-              
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
-                
-                {/* Job Basics Section */}
-                <Box sx={{
-                  padding: '24px',
-                  borderRadius: '16px',
-                  background: 'white',
-                  border: '2px solid #f1f5f9',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  '&:hover': {
-                    borderColor: 'rgba(245, 158, 11, 0.3)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
-                  },
-                  transition: 'all 0.3s ease'
-                }}>
-                  <Typography sx={{ 
-                    fontSize: '14px', 
-                    fontWeight: 700, 
-                    color: '#1e293b', 
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <i className="fas fa-briefcase" style={{ color: '#3b82f6', fontSize: '12px' }}></i>
-                    Job Basics
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Job Type */}
-                    <FormControl fullWidth>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Job Type
-                      </Typography>
-                      <Select
-                        value={filters.jobType}
-                        onChange={(e) => handleFilterChange('jobType', e.target.value)}
-                        displayEmpty
-                        sx={{
-                          borderRadius: '12px',
-                          backgroundColor: '#f8fafc',
-                          border: 'none',
-                          '& .MuiOutlinedInput-notchedOutline': { 
-                            border: '2px solid #e2e8f0',
-                            borderRadius: '12px'
-                          },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b' 
-                          },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b',
-                            boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                          },
-                          '& .MuiSelect-select': { 
-                            padding: '12px 16px', 
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      >
-                        <MenuItem value="">All Types</MenuItem>
-                        <MenuItem value="Full-Time">Full-Time</MenuItem>
-                        <MenuItem value="Part-Time">Part-Time</MenuItem>
-                        <MenuItem value="Contract">Contract</MenuItem>
-                        <MenuItem value="Internship">Internship</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    {/* Experience Level */}
-                    <FormControl fullWidth>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Experience Level
-                      </Typography>
-                      <Select
-                        value={filters.experienceLevel}
-                        onChange={(e) => handleFilterChange('experienceLevel', e.target.value)}
-                        displayEmpty
-                        sx={{
-                          borderRadius: '12px',
-                          backgroundColor: '#f8fafc',
-                          '& .MuiOutlinedInput-notchedOutline': { 
-                            border: '2px solid #e2e8f0',
-                            borderRadius: '12px'
-                          },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b' 
-                          },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b',
-                            boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                          },
-                          '& .MuiSelect-select': { 
-                            padding: '12px 16px', 
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      >
-                        <MenuItem value="">All Levels</MenuItem>
-                        <MenuItem value="Entry Level">Entry Level</MenuItem>
-                        <MenuItem value="<5 yrs">Less than 5 years</MenuItem>
-                        <MenuItem value="5-10 yrs">5-10 years</MenuItem>
-                        <MenuItem value="10+ yrs">10+ years</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Box>
-                </Box>
-
-                {/* Work Environment Section */}
-                <Box sx={{
-                  padding: '24px',
-                  borderRadius: '16px',
-                  background: 'white',
-                  border: '2px solid #f1f5f9',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  '&:hover': {
-                    borderColor: 'rgba(245, 158, 11, 0.3)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
-                  },
-                  transition: 'all 0.3s ease'
-                }}>
-                  <Typography sx={{ 
-                    fontSize: '14px', 
-                    fontWeight: 700, 
-                    color: '#1e293b', 
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <i className="fas fa-map-marker-alt" style={{ color: '#10b981', fontSize: '12px' }}></i>
-                    Work Environment
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Work Mode */}
-                    <FormControl fullWidth>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Work Mode
-                      </Typography>
-                      <Select
-                        value={filters.workMode}
-                        onChange={(e) => handleFilterChange('workMode', e.target.value)}
-                        displayEmpty
-                        sx={{
-                          borderRadius: '12px',
-                          backgroundColor: '#f8fafc',
-                          '& .MuiOutlinedInput-notchedOutline': { 
-                            border: '2px solid #e2e8f0',
-                            borderRadius: '12px'
-                          },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b' 
-                          },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b',
-                            boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                          },
-                          '& .MuiSelect-select': { 
-                            padding: '12px 16px', 
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      >
-                        <MenuItem value="">All Modes</MenuItem>
-                        <MenuItem value="Remote">🏠 Remote</MenuItem>
-                        <MenuItem value="On-site">🏢 On-site</MenuItem>
-                        <MenuItem value="Hybrid">🔄 Hybrid</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    {/* Location */}
-                    <Box>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Location
-                      </Typography>
-                      <TextField
-                        fullWidth
-                        placeholder="Enter city or location..."
-                        value={filters.location}
-                        onChange={(e) => handleFilterChange('location', e.target.value)}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: '12px',
-                            backgroundColor: '#f8fafc',
-                            border: '2px solid #e2e8f0',
-                            '&:hover': { 
-                              borderColor: '#f59e0b' 
-                            },
-                            '&.Mui-focused': { 
-                              borderColor: '#f59e0b',
-                              boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                            }
-                          },
-                          '& .MuiOutlinedInput-input': {
-                            padding: '12px 16px',
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                </Box>
-
-                {/* Company & Status Section */}
-                <Box sx={{
-                  padding: '24px',
-                  borderRadius: '16px',
-                  background: 'white',
-                  border: '2px solid #f1f5f9',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  '&:hover': {
-                    borderColor: 'rgba(245, 158, 11, 0.3)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
-                  },
-                  transition: 'all 0.3s ease'
-                }}>
-                  <Typography sx={{ 
-                    fontSize: '14px', 
-                    fontWeight: 700, 
-                    color: '#1e293b', 
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <i className="fas fa-building" style={{ color: '#8b5cf6', fontSize: '12px' }}></i>
-                    Company & Status
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Status */}
-                    <FormControl fullWidth>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Job Status
-                      </Typography>
-                      <Select
-                        value={filters.status}
-                        onChange={(e) => handleFilterChange('status', e.target.value)}
-                        displayEmpty
-                        sx={{
-                          borderRadius: '12px',
-                          backgroundColor: '#f8fafc',
-                          '& .MuiOutlinedInput-notchedOutline': { 
-                            border: '2px solid #e2e8f0',
-                            borderRadius: '12px'
-                          },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b' 
-                          },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b',
-                            boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                          },
-                          '& .MuiSelect-select': { 
-                            padding: '12px 16px', 
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      >
-                        <MenuItem value="">All Status</MenuItem>
-                        <MenuItem value="Open">🟢 Open</MenuItem>
-                        <MenuItem value="Closed">🔴 Closed</MenuItem>
-                        <MenuItem value="Paused">🟡 Paused</MenuItem>
-                        <MenuItem value="Interview In Progress">🔵 Interview In Progress</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    {/* Department */}
-                    <FormControl fullWidth>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Department
-                      </Typography>
-                      <Select
-                        value={filters.department}
-                        onChange={(e) => handleFilterChange('department', e.target.value)}
-                        displayEmpty
-                        sx={{
-                          borderRadius: '12px',
-                          backgroundColor: '#f8fafc',
-                          '& .MuiOutlinedInput-notchedOutline': { 
-                            border: '2px solid #e2e8f0',
-                            borderRadius: '12px'
-                          },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b' 
-                          },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                            borderColor: '#f59e0b',
-                            boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                          },
-                          '& .MuiSelect-select': { 
-                            padding: '12px 16px', 
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      >
-                        <MenuItem value="">All Departments</MenuItem>
-                        <MenuItem value="Engineering">💻 Engineering</MenuItem>
-                        <MenuItem value="Design">🎨 Design</MenuItem>
-                        <MenuItem value="Product">💡 Product</MenuItem>
-                        <MenuItem value="Marketing">📢 Marketing</MenuItem>
-                        <MenuItem value="Sales">📈 Sales</MenuItem>
-                        <MenuItem value="HR">👥 HR</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    {/* Company */}
-                    <Box>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                        Company Name
-                      </Typography>
-                      <TextField
-                        fullWidth
-                        placeholder="Enter company name..."
-                        value={filters.company}
-                        onChange={(e) => handleFilterChange('company', e.target.value)}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: '12px',
-                            backgroundColor: '#f8fafc',
-                            border: '2px solid #e2e8f0',
-                            '&:hover': { 
-                              borderColor: '#f59e0b' 
-                            },
-                            '&.Mui-focused': { 
-                              borderColor: '#f59e0b',
-                              boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
-                            }
-                          },
-                          '& .MuiOutlinedInput-input': {
-                            padding: '12px 16px',
-                            fontSize: '14px',
-                            fontWeight: 500
-                          }
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                </Box>
-
+                <i className="fas fa-sliders-h" style={{ color: 'white', fontSize: '16px' }}></i>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', lineHeight: 1.2 }}>
+                  Filter Jobs
+                </Typography>
+                <Typography sx={{ fontSize: '13px', color: '#94a3b8' }}>
+                  {getActiveFilterCount() > 0
+                    ? `${getActiveFilterCount()} filter${getActiveFilterCount() > 1 ? 's' : ''} active`
+                    : 'Narrow down your search'
+                  }
+                </Typography>
               </Box>
             </Box>
+            <IconButton
+              onClick={handleCloseFilterDialog}
+              size="small"
+              sx={{
+                color: '#94a3b8',
+                '&:hover': { backgroundColor: '#f1f5f9', color: '#64748b' },
+              }}
+            >
+              <i className="fas fa-times" style={{ fontSize: '14px' }}></i>
+            </IconButton>
+          </Box>
 
-            {/* Quick Filter Chips */}
-            {getActiveFilterCount() > 0 && (
-              <Box sx={{ 
-                padding: '20px',
-                borderRadius: '16px',
-                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.1) 100%)',
-                border: '2px solid rgba(245, 158, 11, 0.2)',
-                marginBottom: '24px'
-              }}>
-                <Typography sx={{ 
-                  fontSize: '14px', 
-                  fontWeight: 600, 
-                  color: '#92400e', 
-                  marginBottom: '12px',
+          {/* Active Filter Chips */}
+          {getActiveFilterCount() > 0 && (
+            <Box sx={{
+              padding: '12px 24px',
+              backgroundColor: '#EEF0FF',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              gap: '6px',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}>
+              {Object.entries(filters).map(([key, value]) =>
+                value && (
+                  <Chip
+                    key={key}
+                    label={value}
+                    onDelete={() => handleFilterChange(key, '')}
+                    size="small"
+                    sx={{
+                      backgroundColor: 'white',
+                      color: '#020291',
+                      border: `1px solid ${'#BBC3FF'}`,
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      height: '28px',
+                      '& .MuiChip-deleteIcon': {
+                        color: '#5560FF',
+                        fontSize: '16px',
+                        '&:hover': { color: '#020291' }
+                      }
+                    }}
+                  />
+                )
+              )}
+              <Chip
+                label="Clear all"
+                onClick={handleClearFilters}
+                size="small"
+                variant="outlined"
+                sx={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  height: '28px',
+                  color: '#ef4444',
+                  borderColor: '#fecaca',
+                  '&:hover': { backgroundColor: '#fef2f2', borderColor: '#ef4444' }
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Filter Content */}
+          <DialogContent sx={{ padding: '0 !important' }}>
+            <Box sx={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+              {/* Row 1: Job Type + Experience Level */}
+              <Box>
+                <Typography sx={{
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#475569',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '14px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
                 }}>
-                  <i className="fas fa-tags" style={{ fontSize: '12px' }}></i>
-                  Active Filters ({getActiveFilterCount()})
+                  <i className="fas fa-briefcase" style={{ color: '#1A22E0', fontSize: '12px' }}></i>
+                  Job Basics
                 </Typography>
-                <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {Object.entries(filters).map(([key, value]) => 
-                    value && (
-                      <Chip
-                        key={key}
-                        label={`${key}: ${value}`}
-                        onDelete={() => handleFilterChange(key, '')}
-                        size="small"
-                        sx={{
-                          backgroundColor: 'white',
-                          color: '#f59e0b',
-                          border: '2px solid #f59e0b',
-                          fontWeight: 600,
-                          '& .MuiChip-deleteIcon': {
-                            color: '#f59e0b',
-                            '&:hover': {
-                              color: '#d97706'
-                            }
-                          }
-                        }}
-                      />
-                    )
-                  )}
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <FormControl fullWidth size="small">
+                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                      Job Type
+                    </Typography>
+                    <Select
+                      value={filters.jobType}
+                      onChange={(e) => handleFilterChange('jobType', e.target.value)}
+                      displayEmpty
+                      sx={{
+                        borderRadius: '10px',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                      }}
+                    >
+                      <MenuItem value="">All Types</MenuItem>
+                      <MenuItem value="Full-Time">Full-Time</MenuItem>
+                      <MenuItem value="Part-Time">Part-Time</MenuItem>
+                      <MenuItem value="Contract">Contract</MenuItem>
+                      <MenuItem value="Internship">Internship</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControl fullWidth size="small">
+                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                      Experience
+                    </Typography>
+                    <Select
+                      value={filters.experienceLevel}
+                      onChange={(e) => handleFilterChange('experienceLevel', e.target.value)}
+                      displayEmpty
+                      sx={{
+                        borderRadius: '10px',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                      }}
+                    >
+                      <MenuItem value="">All Levels</MenuItem>
+                      <MenuItem value="Entry Level">Entry Level</MenuItem>
+                      <MenuItem value="<5 yrs">&lt;5 years</MenuItem>
+                      <MenuItem value="5-10 yrs">5-10 years</MenuItem>
+                      <MenuItem value="10+ yrs">10+ years</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Box>
               </Box>
-            )}
+
+              {/* Divider */}
+              <Box sx={{ height: '1px', backgroundColor: '#f1f5f9' }} />
+
+              {/* Row 2: Work Mode + Location */}
+              <Box>
+                <Typography sx={{
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#475569',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <i className="fas fa-map-marker-alt" style={{ color: '#10b981', fontSize: '12px' }}></i>
+                  Work Environment
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <FormControl fullWidth size="small">
+                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                      Work Mode
+                    </Typography>
+                    <Select
+                      value={filters.workMode}
+                      onChange={(e) => handleFilterChange('workMode', e.target.value)}
+                      displayEmpty
+                      sx={{
+                        borderRadius: '10px',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                      }}
+                    >
+                      <MenuItem value="">All Modes</MenuItem>
+                      <MenuItem value="Remote">Remote</MenuItem>
+                      <MenuItem value="On-site">On-site</MenuItem>
+                      <MenuItem value="Hybrid">Hybrid</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <Box>
+                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                      Location
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder="City or location..."
+                      value={filters.location}
+                      onChange={(e) => handleFilterChange('location', e.target.value)}
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <i className="fas fa-search" style={{ color: '#cbd5e1', fontSize: '12px' }}></i>
+                            </InputAdornment>
+                          ),
+                        }
+                      }}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '10px',
+                          backgroundColor: '#f8fafc',
+                          fontSize: '13px',
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                        },
+                      }}
+                    />
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Divider */}
+              <Box sx={{ height: '1px', backgroundColor: '#f1f5f9' }} />
+
+              {/* Row 3: Status + Department */}
+              <Box>
+                <Typography sx={{
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#475569',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <i className="fas fa-building" style={{ color: '#8b5cf6', fontSize: '12px' }}></i>
+                  Company & Status
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <FormControl fullWidth size="small">
+                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                      Status
+                    </Typography>
+                    <Select
+                      value={filters.status}
+                      onChange={(e) => handleFilterChange('status', e.target.value)}
+                      displayEmpty
+                      sx={{
+                        borderRadius: '10px',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                      }}
+                    >
+                      <MenuItem value="">All Status</MenuItem>
+                      <MenuItem value="Open">Open</MenuItem>
+                      <MenuItem value="Closed">Closed</MenuItem>
+                      <MenuItem value="Paused">Paused</MenuItem>
+                      <MenuItem value="Interview In Progress">In Progress</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControl fullWidth size="small">
+                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                      Department
+                    </Typography>
+                    <Select
+                      value={filters.department}
+                      onChange={(e) => handleFilterChange('department', e.target.value)}
+                      displayEmpty
+                      sx={{
+                        borderRadius: '10px',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                      }}
+                    >
+                      <MenuItem value="">All Departments</MenuItem>
+                      <MenuItem value="Engineering">Engineering</MenuItem>
+                      <MenuItem value="Design">Design</MenuItem>
+                      <MenuItem value="Product">Product</MenuItem>
+                      <MenuItem value="Marketing">Marketing</MenuItem>
+                      <MenuItem value="Sales">Sales</MenuItem>
+                      <MenuItem value="HR">HR</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+
+                {/* Company Name - full width below */}
+                <Box sx={{ marginTop: '12px' }}>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
+                    Company Name
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search company..."
+                    value={filters.company}
+                    onChange={(e) => handleFilterChange('company', e.target.value)}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <i className="fas fa-search" style={{ color: '#cbd5e1', fontSize: '12px' }}></i>
+                          </InputAdornment>
+                        ),
+                      }
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '10px',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                      },
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Box>
           </DialogContent>
 
-          <DialogActions sx={{
-            padding: { xs: '16px', md: '24px 32px 32px 32px' },
-            gap: { xs: '8px', md: '16px' },
-            flexDirection: { xs: 'column', sm: 'row' },
-            background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)',
-            borderTop: '2px solid #f1f5f9'
+          {/* Footer */}
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 24px',
+            borderTop: '1px solid #e5e7eb',
+            backgroundColor: '#fafbfc',
           }}>
             <Button
               onClick={handleClearFilters}
+              variant="text"
               sx={{
                 color: '#64748b',
-                backgroundColor: 'white',
-                border: '2px solid #e2e8f0',
-                padding: { xs: '10px 16px', md: '12px 24px' },
-                borderRadius: '12px',
-                fontSize: { xs: '12px', md: '14px' },
+                fontSize: '13px',
                 fontWeight: 600,
                 textTransform: 'none',
-                minWidth: { xs: '100%', sm: '120px' },
-                order: { xs: 2, sm: 1 },
-                '&:hover': {
-                  borderColor: '#f59e0b',
-                  backgroundColor: 'rgba(245, 158, 11, 0.05)',
-                  color: '#f59e0b',
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.15)'
-                },
-                transition: 'all 0.2s ease'
+                padding: '8px 16px',
+                '&:hover': { backgroundColor: '#f1f5f9', color: '#ef4444' }
               }}
+              startIcon={<i className="fas fa-undo" style={{ fontSize: '11px' }}></i>}
             >
-              <i className="fas fa-eraser" style={{ marginRight: '8px', fontSize: '12px' }}></i>
-              Clear All
+              Reset Filters
             </Button>
             <Button
               onClick={handleCloseFilterDialog}
+              variant="contained"
               sx={{
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                background: `linear-gradient(135deg, ${'#020291'} 0%, ${'#0F17BF'} 100%)`,
                 color: 'white',
-                padding: { xs: '10px 16px', md: '12px 32px' },
-                borderRadius: '12px',
-                fontSize: { xs: '12px', md: '14px' },
+                fontSize: '13px',
                 fontWeight: 600,
                 textTransform: 'none',
-                minWidth: { xs: '100%', sm: '140px' },
-                order: { xs: 1, sm: 2 },
-                boxShadow: '0 8px 25px rgba(245, 158, 11, 0.3)',
+                padding: '8px 28px',
+                borderRadius: '10px',
+                boxShadow: '0 4px 14px rgba(2, 2, 145, 0.3)',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 12px 35px rgba(245, 158, 11, 0.4)'
-                },
-                transition: 'all 0.2s ease'
+                  boxShadow: '0 6px 20px rgba(2, 2, 145, 0.4)',
+                }
               }}
+              startIcon={<i className="fas fa-check" style={{ fontSize: '11px' }}></i>}
             >
-              <i className="fas fa-check" style={{ marginRight: '8px', fontSize: '12px' }}></i>
               Apply Filters
             </Button>
-          </DialogActions>
+          </Box>
         </Dialog>
 
         {/* Job Creation Dialog */}

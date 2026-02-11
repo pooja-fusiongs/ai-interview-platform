@@ -213,7 +213,7 @@ const Interview = () => {
           sx={{
             padding: '20px 24px',
             borderBottom: '1px solid #f1f5f9',
-            background: 'rgba(245,158,11,0.1)',
+            background: '#EEF0FF',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
@@ -224,7 +224,7 @@ const Interview = () => {
               width: 40,
               height: 40,
               borderRadius: '10px',
-              background: 'linear-gradient(135deg,#f59e0b,#d97706)',
+              background: 'linear-gradient(135deg,#020291,#020291)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -257,7 +257,7 @@ const Interview = () => {
                 width: 80,
                 height: 80,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg,#fef3c7,#fde68a)',
+                background: '#EEF0FF',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -265,7 +265,7 @@ const Interview = () => {
                 fontSize: '36px',
               }}
             >
-              <i className="fas fa-video" style={{ color: '#d97706' }}></i>
+              <i className="fas fa-video" style={{ color: '#020291' }}></i>
             </Box>
             <Typography sx={{ fontSize: '14px', color: '#64748b', maxWidth: 360, margin: '0 auto' }}>
               You will be presented with expert-approved questions. Answer each one to the best of your ability.
@@ -286,8 +286,8 @@ const Interview = () => {
               mb: '20px',
               fontSize: '14px',
               '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
             }}
           >
             <MenuItem value="" disabled>
@@ -311,12 +311,7 @@ const Interview = () => {
               fontSize: '15px',
               textTransform: 'none',
               color: '#fff',
-              background: 'linear-gradient(135deg,#f59e0b,#d97706)',
-              boxShadow: '0 4px 12px rgba(245,158,11,0.35)',
-              '&:hover': {
-                background: 'linear-gradient(135deg,#d97706,#b45309)',
-                boxShadow: '0 6px 16px rgba(245,158,11,0.45)',
-              },
+              background: 'linear-gradient(135deg,#020291,#020291)',
               '&.Mui-disabled': {
                 background: '#e2e8f0',
                 color: '#94a3b8',
@@ -401,9 +396,9 @@ const Interview = () => {
                     size="small"
                     sx={{
                       mt: 0.5, textTransform: 'none', fontSize: '11px', fontWeight: 600,
-                      color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)',
+                      color: '#020291', border: '1px solid #020291 ',
                       borderRadius: '8px', px: 2,
-                      '&:hover': { background: 'rgba(245,158,11,0.1)' },
+                      '&:hover': { background: '#EEF0FF' },
                     }}
                   >
                     <i className="fas fa-redo" style={{ marginRight: 6, fontSize: '10px' }}></i>
@@ -454,7 +449,7 @@ const Interview = () => {
                 mb: '8px',
                 '& .MuiLinearProgress-bar': {
                   borderRadius: 4,
-                  background: 'linear-gradient(90deg,#f59e0b,#d97706)',
+                  background: 'linear-gradient(90deg,#020291,#020291)',
                 },
               }}
             />
@@ -462,7 +457,7 @@ const Interview = () => {
               <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
                 Question {currentQuestionIndex + 1} of {questions.length}
               </Typography>
-              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b' }}>
+              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#020291' }}>
                 {Math.round(progress)}%
               </Typography>
             </Box>
@@ -485,7 +480,7 @@ const Interview = () => {
                     transition: 'all 0.2s',
                     background:
                       idx === currentQuestionIndex
-                        ? 'linear-gradient(135deg,#f59e0b,#d97706)'
+                        ? 'linear-gradient(135deg,#020291,#020291)'
                         : answers[idx]
                           ? '#dcfce7'
                           : '#f1f5f9',
@@ -521,14 +516,14 @@ const Interview = () => {
             sx={{
               padding: '18px 24px',
               borderBottom: '1px solid #f1f5f9',
-              background: 'rgba(245,158,11,0.06)',
+              background: '#EEF0FF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}
           >
             <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
-              <i className="fas fa-question-circle" style={{ color: '#f59e0b', marginRight: 8 }}></i>
+              <i className="fas fa-question-circle" style={{ color: '#020291', marginRight: 8 }}></i>
               Question {currentQuestionIndex + 1}
             </Typography>
             <Box sx={{ display: 'flex', gap: '8px' }}>
@@ -596,7 +591,7 @@ const Interview = () => {
                 resize: 'vertical',
                 outline: 'none',
                 transition: 'border-color 0.2s',
-                '&:focus': { borderColor: '#f59e0b', boxShadow: '0 0 0 3px rgba(245,158,11,0.12)' },
+                '&:focus': { borderColor: '#020291', boxShadow: '0 0 0 3px rgba(245,158,11,0.12)' },
                 '&::placeholder': { color: '#cbd5e1' },
               }}
             />
@@ -643,17 +638,8 @@ const Interview = () => {
                   background:
                     currentQuestionIndex === questions.length - 1
                       ? 'linear-gradient(135deg,#10b981,#059669)'
-                      : 'linear-gradient(135deg,#f59e0b,#d97706)',
-                  boxShadow:
-                    currentQuestionIndex === questions.length - 1
-                      ? '0 4px 12px rgba(16,185,129,0.35)'
-                      : '0 4px 12px rgba(245,158,11,0.35)',
-                  '&:hover': {
-                    background:
-                      currentQuestionIndex === questions.length - 1
-                        ? 'linear-gradient(135deg,#059669,#047857)'
-                        : 'linear-gradient(135deg,#d97706,#b45309)',
-                  },
+                      : 'linear-gradient(135deg,#020291,#020291)',
+                 
                 }}
               >
                 {currentQuestionIndex === questions.length - 1 ? (
@@ -680,7 +666,7 @@ const Interview = () => {
         {/* Page title */}
         <Box sx={{ mb: '24px' }}>
           <Typography sx={{ fontSize: '22px', fontWeight: 700, color: '#1e293b' }}>
-            <i className="fas fa-video" style={{ color: '#f59e0b', marginRight: 10 }}></i>
+            <i className="fas fa-video" style={{ color: '#020291', marginRight: 10 }}></i>
             Interview
           </Typography>
           <Typography sx={{ fontSize: '13px', color: '#64748b', mt: '4px' }}>

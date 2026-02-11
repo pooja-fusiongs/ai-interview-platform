@@ -204,10 +204,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -232,10 +232,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -264,10 +264,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -292,10 +292,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -323,10 +323,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -351,10 +351,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -382,10 +382,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -410,10 +410,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -445,8 +445,8 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                       '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
                     }}
                   >
@@ -473,8 +473,8 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#f59e0b' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#020291' },
                       '& .MuiSelect-select': { padding: '12px 16px', fontSize: '14px' }
                     }}
                   >
@@ -505,10 +505,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -533,10 +533,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -565,10 +565,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                     borderRadius: '8px',
                     backgroundColor: 'white',
                     border: '1px solid #e2e8f0',
-                    '&:hover': { borderColor: '#f59e0b' },
+                    '&:hover': { borderColor: '#020291' },
                     '&.Mui-focused': { 
-                      borderColor: '#f59e0b',
-                      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                      borderColor: '#020291',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
@@ -598,7 +598,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                 backgroundColor: 'white',
                 cursor: 'pointer',
                 '&:hover': {
-                  borderColor: '#f59e0b',
+                  borderColor: '#020291',
                   backgroundColor: 'rgba(245, 158, 11, 0.05)'
                 }
               }}>
@@ -639,10 +639,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -667,10 +667,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -698,10 +698,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -724,10 +724,10 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      '&:hover': { borderColor: '#f59e0b' },
+                      '&:hover': { borderColor: '#020291' },
                       '&.Mui-focused': { 
-                        borderColor: '#f59e0b',
-                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                        borderColor: '#020291',
+                        boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.1)'
                       }
                     },
                     '& .MuiOutlinedInput-input': {
@@ -842,7 +842,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             {/* Terms and Conditions */}
             <Box sx={{
               padding: '16px',
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              backgroundColor: 'rgba(2, 2, 145, 0.1)',
               borderRadius: '8px',
               border: '1px solid #fed7aa'
             }}>
@@ -852,8 +852,8 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                     checked={formData.agreeTerms}
                     onChange={handleCheckboxChange('agreeTerms')}
                     sx={{
-                      color: '#f59e0b',
-                      '&.Mui-checked': { color: '#f59e0b' }
+                      color: '#020291',
+                      '&.Mui-checked': { color: '#020291' }
                     }}
                   />
                 }
@@ -939,7 +939,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
               left: { xs: '12%', sm: '45px' },
               width: `calc(${((currentStep - 1) / (steps.length - 1)) * 76}%)`,
               height: '3px',
-              backgroundColor: '#f59e0b',
+              backgroundColor: '#020291',
               zIndex: 1,
               borderRadius: '2px',
               transition: 'width 0.3s ease'
@@ -960,14 +960,14 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                   width: { xs: 36, sm: 50 },
                   height: { xs: 36, sm: 50 },
                   borderRadius: '50%',
-                  backgroundColor: index + 1 <= currentStep ? '#f59e0b' : '#e2e8f0',
+                  backgroundColor: index + 1 <= currentStep ? '#020291' : '#e2e8f0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginBottom: { xs: '6px', sm: '12px' },
                   transition: 'all 0.3s ease',
-                  border: index + 1 === currentStep ? '3px solid rgba(245, 158, 11, 0.3)' : 'none',
-                  boxShadow: index + 1 === currentStep ? '0 0 0 4px rgba(245, 158, 11, 0.1)' : 'none'
+                  border: index + 1 === currentStep ? '3px solid rgba(2, 2, 145, 0.3)' : 'none',
+                  boxShadow: index + 1 === currentStep ? '0 0 0 4px rgba(2, 2, 145, 0.1)' : 'none'
                 }}>
                   {index === 0 && (
                     <PersonIcon sx={{ 
@@ -999,7 +999,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
                 <Typography sx={{
                   fontSize: { xs: '9px', sm: '11px' },
                   fontWeight: index + 1 === currentStep ? 700 : 500,
-                  color: index + 1 <= currentStep ? '#f59e0b' : '#94a3b8',
+                  color: index + 1 <= currentStep ? '#020291' : '#94a3b8',
                   textAlign: 'center',
                   lineHeight: 1.2,
                   maxWidth: { xs: '70px', sm: '100px' },
@@ -1041,7 +1041,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             fontSize: '14px',
             fontWeight: 600,
             textTransform: 'none',
-            '&:hover': { borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' },
+            '&:hover': { borderColor: '#020291', backgroundColor: 'rgba(2, 2, 145, 0.1)' },
             '&:disabled': { color: '#9ca3af', borderColor: '#f3f4f6' }
           }}
         >
@@ -1060,7 +1060,7 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
               fontSize: '14px',
               fontWeight: 600,
               textTransform: 'none',
-              '&:hover': { borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' }
+              '&:hover': { borderColor: '#020291', backgroundColor: 'rgba(2, 2, 145, 0.1)' }
             }}
           >
             Cancel
@@ -1070,14 +1070,14 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
             <Button
               onClick={handleNext}
               sx={{
-                backgroundColor: '#f59e0b',
+                backgroundColor: '#020291',
                 color: 'white',
                 padding: '10px 24px',
                 borderRadius: '8px',
                 fontSize: '14px',
                 fontWeight: 600,
                 textTransform: 'none',
-                '&:hover': { backgroundColor: '#d97706' }
+                '&:hover': { backgroundColor: '#020291' }
               }}
             >
               Next
@@ -1087,14 +1087,14 @@ const JobApplicationForm: React.FC<JobApplicationFormProps> = ({ open, onClose, 
               onClick={handleSubmit}
               disabled={!formData.agreeTerms}
               sx={{
-                backgroundColor: formData.agreeTerms ? '#f59e0b' : '#e2e8f0',
+                backgroundColor: formData.agreeTerms ? '#020291' : '#e2e8f0',
                 color: formData.agreeTerms ? 'white' : '#9ca3af',
                 padding: '10px 24px',
                 borderRadius: '8px',
                 fontSize: '14px',
                 fontWeight: 600,
                 textTransform: 'none',
-                '&:hover': formData.agreeTerms ? { backgroundColor: '#d97706' } : {},
+                '&:hover': formData.agreeTerms ? { backgroundColor: '#020291' } : {},
                 '&:disabled': { backgroundColor: '#e2e8f0', color: '#9ca3af' }
               }}
             >

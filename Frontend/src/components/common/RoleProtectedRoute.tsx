@@ -117,7 +117,7 @@ const AccessDeniedPage: React.FC<{ message: string }> = ({ message }) => {
         <Button
           onClick={logout}
           sx={{
-            background: '#f59e0b',
+            background: '#020291',
             color: 'white',
             padding: '12px 24px',
             borderRadius: '8px',
@@ -125,7 +125,7 @@ const AccessDeniedPage: React.FC<{ message: string }> = ({ message }) => {
             fontWeight: 600,
             textTransform: 'none',
             '&:hover': {
-              background: '#d97706'
+              background: '#020291'
             }
           }}
         >

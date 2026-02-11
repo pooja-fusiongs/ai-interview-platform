@@ -115,11 +115,11 @@ const TrendIndicator: React.FC<{ value: number; threshold?: number }> = ({ value
         size="small"
         sx={{
           backgroundColor: '#fef3c7',
-          color: '#d97706',
+          color: '#020291',
           fontWeight: 600,
           fontSize: '12px',
           height: 24,
-          '& .MuiChip-icon': { color: '#d97706' },
+          '& .MuiChip-icon': { color: '#020291' },
         }}
       />
     );
@@ -294,7 +294,7 @@ const QualityDashboard: React.FC = () => {
   const getPerformanceLabel = (score: number) => {
     if (score >= 8) return { label: 'Excellent', color: '#16a34a' };
     if (score >= 6) return { label: 'Good', color: '#2563eb' };
-    if (score >= 4) return { label: 'Fair', color: '#d97706' };
+    if (score >= 4) return { label: 'Fair', color: '#020291' };
     return { label: 'Poor', color: '#dc2626' };
   };
 
@@ -377,9 +377,9 @@ const QualityDashboard: React.FC = () => {
                   onClick={handleRecompute}
                   disabled={recomputing}
                    sx={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                border: '2px solid #f59e0b',
+                background: 'rgba(2, 2, 145, 0.1)',
+                color: '#ffffff',
+                border: '2px solid #020291',
                 borderRadius: '10px',
                 fontSize: '14px',
                 fontWeight: 600,
@@ -389,8 +389,8 @@ const QualityDashboard: React.FC = () => {
                 gap: '8px',
                 minWidth: '120px',
                 '&:hover': {
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  borderColor: '#f59e0b',
+                  background: 'rgba(2, 2, 145, 0.1)',
+                  borderColor: '#020291',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                 }
@@ -572,8 +572,8 @@ const QualityDashboard: React.FC = () => {
                     boxShadow: 'none',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      borderColor: '#f59e0b',
-                      boxShadow: '0 4px 20px rgba(245, 158, 11, 0.1)',
+                      borderColor: '#020291',
+                      boxShadow: '0 4px 20px rgba(2, 2, 145, 0.1)',
                     },
                   }}
                 >
@@ -584,13 +584,13 @@ const QualityDashboard: React.FC = () => {
                           width: 48,
                           height: 48,
                           borderRadius: '12px',
-                          backgroundColor: '#fef3c7',
+                          backgroundColor: '#EEF0FF',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <Groups sx={{ color: '#f59e0b', fontSize: 24 }} />
+                        <Groups sx={{ color: '#020291', fontSize: 24 }} />
                       </Box>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>

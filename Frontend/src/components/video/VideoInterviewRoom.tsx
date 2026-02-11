@@ -490,7 +490,7 @@ const VideoInterviewRoom: React.FC = () => {
           minHeight: '100vh', background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)'
         }}>
           <Box sx={{ textAlign: 'center' }}>
-            <CircularProgress sx={{ color: '#f59e0b', mb: 2 }} />
+            <CircularProgress sx={{ color: '#020291', mb: 2 }} />
             <Typography sx={{ color: '#64748b' }}>Loading interview room...</Typography>
           </Box>
         </Box>
@@ -576,16 +576,18 @@ const VideoInterviewRoom: React.FC = () => {
               </>
             )}
             <Box sx={{
-              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              background: '#EEF0FF',
+              color:"#020291",
               borderRadius: '10px',
+              border:"1px solid #020291",
               padding: { xs: '8px 12px', sm: '10px 20px' },
               display: 'flex',
               alignItems: 'center',
               gap: 1,
-              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)'
+              boxShadow: '0 2px 8px rgba(2, 2, 145, 0.3)'
             }}>
-              <AccessTime sx={{ color: 'white', fontSize: { xs: 16, sm: 20 } }} />
-              <Typography sx={{ color: 'white', fontFamily: 'monospace', fontWeight: 700, fontSize: { xs: '16px', sm: '20px' } }}>
+              <AccessTime sx={{ color: '#020291', fontSize: { xs: 16, sm: 20 } }} />
+              <Typography sx={{  fontFamily: 'monospace', fontWeight: 700, fontSize: { xs: '16px', sm: '20px' },color:"#020291" }}>
                 {formatTime(elapsed)}
               </Typography>
             </Box>
@@ -654,12 +656,12 @@ const VideoInterviewRoom: React.FC = () => {
                         startIcon={<Description />}
                         onClick={() => navigate(`/video-detail/${videoId}`)}
                         sx={{
-                          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                           fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '14px 32px',
                           fontSize: '15px',
                           boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
                           '&:hover': {
-                            background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                            background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)'
                           }
                         }}
                       >
@@ -684,11 +686,11 @@ const VideoInterviewRoom: React.FC = () => {
                       background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
                       borderRadius: '16px', border: '2px solid #334155',
                       cursor: 'pointer', transition: 'all 0.3s',
-                      '&:hover': { border: '2px solid #f59e0b', transform: 'translateY(-4px)' }
+                      '&:hover': { border: '2px solid #334155', transform: 'translateY(-4px)' }
                     }}>
                       <Box sx={{
                         width: 64, height: 64, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         margin: '0 auto 16px'
                       }}>
@@ -700,7 +702,17 @@ const VideoInterviewRoom: React.FC = () => {
                       <Typography sx={{ color: '#94a3b8', fontSize: '12px', mb: 2 }}>
                         Live HD video call with candidate
                       </Typography>
-                      <Chip label="Zoom-like Quality" size="small" sx={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', fontSize: '10px' }} />
+                      <Chip label="Zoom-like Quality" size="small"  sx={{
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: '#C7D2FE',
+    border: '1px solid rgba(255,255,255,0.15)',
+    fontSize: '11.5px',
+    height: 22,
+    borderRadius: '999px',
+    '& .MuiChip-label': {
+      px: 1,
+    },
+  }} />
                     </Box>
 
                     {/* AI Interview Card */}
@@ -798,7 +810,7 @@ const VideoInterviewRoom: React.FC = () => {
                     Candidate{(user?.role === 'candidate' || user?.name?.toLowerCase() === interview?.candidate_name?.toLowerCase()) ? ' (You)' : ''}
                   </Typography>
                 </Box>
-                {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b' }} />}
+                {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#020291', boxShadow: '0 0 8px #020291' }} />}
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, background: '#f8fafc', borderRadius: '12px' }}>
                 <Avatar sx={{ width: 44, height: 44, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
@@ -874,8 +886,8 @@ const VideoInterviewRoom: React.FC = () => {
                     size="small"
                     sx={{
                       fontWeight: 700, fontSize: '11px',
-                      background: interview?.status === 'completed' ? '#ecfdf5' : interview?.status === 'in_progress' ? '#fffbeb' : '#eff6ff',
-                      color: interview?.status === 'completed' ? '#10b981' : interview?.status === 'in_progress' ? '#f59e0b' : '#3b82f6',
+                      background: interview?.status === 'completed' ? '#ecfdf5' : interview?.status === 'in_progress' ? '#EEF0FF' : '#eff6ff',
+                      color: interview?.status === 'completed' ? '#10b981' : interview?.status === 'in_progress' ? '#020291' : '#3b82f6',
                     }}
                   />
                 </Box>
@@ -894,7 +906,7 @@ const VideoInterviewRoom: React.FC = () => {
                   sx={{
                     justifyContent: 'flex-start', color: '#475569', textTransform: 'none',
                     borderRadius: '10px', padding: '12px 16px', border: '1px solid #e2e8f0',
-                    '&:hover': { background: '#f8fafc', borderColor: '#f59e0b', color: '#f59e0b' }
+                    '&:hover': { background: '#f8fafc', borderColor: '#020291', color: '#020291' }
                   }}
                 >
                   View Details & Transcript
@@ -905,7 +917,7 @@ const VideoInterviewRoom: React.FC = () => {
                   sx={{
                     justifyContent: 'flex-start', color: '#475569', textTransform: 'none',
                     borderRadius: '10px', padding: '12px 16px', border: '1px solid #e2e8f0',
-                    '&:hover': { background: '#f8fafc', borderColor: '#f59e0b', color: '#f59e0b' }
+                    '&:hover': { background: '#f8fafc', borderColor: '#020291', color: '#020291' }
                   }}
                 >
                   Fraud Analysis
@@ -923,7 +935,7 @@ const VideoInterviewRoom: React.FC = () => {
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             <Paper sx={{ p: 4, borderRadius: '16px', textAlign: 'center' }}>
-              <CircularProgress sx={{ color: '#f59e0b', mb: 2 }} />
+              <CircularProgress sx={{ color: '#020291', mb: 2 }} />
               <Typography sx={{ fontWeight: 600, color: '#1e293b' }}>Uploading Recording...</Typography>
               <Typography sx={{ color: '#64748b', fontSize: '13px', mt: 1 }}>Please wait, do not close this page.</Typography>
             </Paper>
