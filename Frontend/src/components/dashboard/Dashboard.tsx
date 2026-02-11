@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
@@ -8,14 +8,17 @@ import {
   CardContent,
   Avatar,
   Chip,
-  CircularProgress,
   Skeleton
 } from '@mui/material'
+import {
+  PieChart, Pie, Cell, Legend, Tooltip,
+  BarChart, Bar, XAxis, YAxis, ResponsiveContainer
+} from 'recharts'
 import Navigation from '../layout/Sidebar'
 import { jobService } from '../../services/jobService'
 import { videoInterviewService } from '../../services/videoInterviewService'
 import { questionGenerationService } from '../../services/questionGenerationService'
-import { useAuth } from '../../contexts/AuthContext'
+
 
 interface Job {
   id: number
@@ -46,7 +49,6 @@ interface QuestionSet {
 
 const Dashboard = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -56,6 +58,7 @@ const Dashboard = () => {
     aiQuestions: 0,
     closedJobs: 0
   })
+  const [allJobs, setAllJobs] = useState<Job[]>([])
   const [recentJobs, setRecentJobs] = useState<Job[]>([])
   const [upcomingInterviews, setUpcomingInterviews] = useState<Interview[]>([])
   const [recentQuestionSets, setRecentQuestionSets] = useState<QuestionSet[]>([])
@@ -69,7 +72,7 @@ const Dashboard = () => {
     try {
       // Fetch all data in parallel
       const [jobsData, interviewsData, questionSetsData] = await Promise.allSettled([
-        jobService.getJobs({ limit: 5 }),
+        jobService.getJobs(),
         videoInterviewService.getInterviews(),
         questionGenerationService.getQuestionSets()
       ])
@@ -77,9 +80,10 @@ const Dashboard = () => {
       // Process jobs data
       if (jobsData.status === 'fulfilled') {
         const jobs = Array.isArray(jobsData.value) ? jobsData.value : []
+        setAllJobs(jobs)
         setRecentJobs(jobs.slice(0, 3))
 
-        const activeJobsCount = jobs.filter((j: Job) => j.status === 'active' || j.status === 'Active').length
+        const activeJobsCount = jobs.filter((j: Job) => ['active', 'open'].includes(j.status?.toLowerCase())).length
         const closedJobsCount = jobs.filter((j: Job) => j.status === 'Closed' || j.status === 'closed').length
         const totalApplicants = jobs.reduce((sum: number, j: Job) => sum + (j.application_count || 0), 0)
 
@@ -165,6 +169,29 @@ const Dashboard = () => {
     { title: 'AI Questions Generated', value: stats.aiQuestions, icon: 'fas fa-robot', color: 'purple', change: 'Total generated' },
     { title: 'Closed Positions', value: stats.closedJobs, icon: 'fas fa-archive', color: 'red', change: 'Archived' }
   ]
+
+  const PIE_COLORS = ['#2E38F7', '#9ca3af', '#BBC3FF']
+
+  const pieData = useMemo(() => {
+    const active = allJobs.filter(j => ['active', 'open'].includes(j.status?.toLowerCase())).length
+    const closed = allJobs.filter(j => j.status?.toLowerCase() === 'closed').length
+    const other = allJobs.length - active - closed
+    return [
+      { name: 'Active', value: active },
+      { name: 'Closed', value: closed },
+      { name: 'Other', value: other },
+    ].filter(d => d.value > 0)
+  }, [allJobs])
+
+  const barData = useMemo(() => {
+    return [...allJobs]
+      .sort((a, b) => (b.application_count || 0) - (a.application_count || 0))
+      .slice(0, 10)
+      .map(j => ({
+        name: j.title.length > 15 ? j.title.slice(0, 13) + '...' : j.title,
+        candidates: j.application_count || 0,
+      }))
+  }, [allJobs])
 
   const renderOverview = () => (
     <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', minHeight: '100%' }}>
@@ -253,6 +280,88 @@ const Dashboard = () => {
             </Box>
           </Card>
         ))}
+      </Box>
+
+      {/* Charts Row */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: { xs: '12px', md: '16px' }, mb: { xs: '12px', md: '16px' } }}>
+        {/* Pie Chart - Position Status */}
+        <Card sx={{
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        }}>
+          <Box sx={{
+            padding: '14px 16px',
+            borderBottom: '1px solid #f1f5f9',
+            background: 'rgba(2, 2, 145, 0.08)'
+          }}>
+            <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="fas fa-chart-pie" style={{ fontSize: '14px' }}></i>
+              Position Status
+            </Typography>
+          </Box>
+          <CardContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 260 }}>
+            {loading ? (
+              <Skeleton variant="circular" width={180} height={180} />
+            ) : pieData.length === 0 ? (
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>No job data</Typography>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" paddingAngle={3}>
+                    {pieData.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Bar Chart - Candidates per Position */}
+        <Card sx={{
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        }}>
+          <Box sx={{
+            padding: '14px 16px',
+            borderBottom: '1px solid #f1f5f9',
+            background: 'rgba(2, 2, 145, 0.08)'
+          }}>
+            <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="fas fa-chart-bar" style={{ fontSize: '14px' }}></i>
+              Candidates per Position
+            </Typography>
+          </Box>
+          <CardContent sx={{ minHeight: 260, p: '16px !important' }}>
+            {loading ? (
+              <Skeleton variant="rectangular" width="100%" height={200} />
+            ) : barData.length === 0 ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200 }}>
+                <Typography sx={{ fontSize: '13px', color: '#64748b' }}>No job data</Typography>
+              </Box>
+            ) : (
+              <Box sx={{ width: '100%', overflowX: 'auto', overflowY: 'hidden' }}>
+                <Box sx={{ minWidth: Math.max(barData.length * 70, 300), height: 250 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="candidates" fill="#020291" radius={[4, 4, 0, 0]} maxBarSize={45} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
       </Box>
 
       {/* Two Column Layout */}

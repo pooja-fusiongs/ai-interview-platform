@@ -387,8 +387,9 @@ def read_jobs(
         print(f"🔍 Fetching jobs from YOUR database...")
         print(f"🔍 Filters: status={status}, company={company}")
         
-        # Build query with filters
-        query = db.query(Job).filter(Job.is_active == True)
+        # Build query with filters (eager-load applications for application_count)
+        from sqlalchemy.orm import subqueryload
+        query = db.query(Job).options(subqueryload(Job.applications)).filter(Job.is_active == True)
         
         if status:
             query = query.filter(Job.status == status)

@@ -110,6 +110,10 @@ class Job(Base):
     creator = relationship("User", back_populates="jobs")
     applications = relationship("JobApplication", back_populates="job")
 
+    @property
+    def application_count(self):
+        return len(self.applications) if self.applications else 0
+
 class JobApplication(Base):
     __tablename__ = "job_applications"
 
