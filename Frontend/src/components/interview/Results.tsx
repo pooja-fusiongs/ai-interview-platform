@@ -193,12 +193,6 @@ const Results = () => {
     return feedback
   }
 
-  /** Check if feedback was rule-based (not AI-generated) */
-  const isRuleBased = (feedback: string | null): boolean => {
-    if (!feedback) return false
-    return feedback.toLowerCase().includes('rule-based')
-  }
-
   const recChip = (rec: string | null | undefined) => {
     switch (rec) {
       case 'select':
@@ -474,7 +468,6 @@ const Results = () => {
                 && !answer.answer_text.includes('[Extracted from Transcript]')
                 && !answer.answer_text.startsWith('[')
               const feedbackText = enhanceFeedback(answer.feedback, answer.score)
-              const ruleBasedFlag = isRuleBased(answer.feedback)
 
               return (
                 <Card
@@ -729,7 +722,7 @@ const Results = () => {
               borderColor: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#020291' : '#e2e8f0',
               color: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#020291' : '#64748b',
               background: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? 'rgba(245,158,11,0.08)' : '#fff',
-              '&:hover': { borderColor: '#020291', color: '#020291', background: 'rgba(245,158,11,0.08)' },
+              '&:hover': { borderColor: '#020291', color: '#020291', background: 'EEF0FF' },
             }}
           >
             Filter

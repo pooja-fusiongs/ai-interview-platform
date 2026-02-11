@@ -329,7 +329,9 @@ const Login = () => {
                 '&:disabled': {
                   opacity: 0.7,
                   cursor: 'not-allowed',
-                  transform: 'none'
+                  transform: 'none',
+                  color: 'white',
+                  background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)'
                 }
               }}
             >
