@@ -464,7 +464,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 <Button
                   onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
                   sx={{
-                    background: 'rgba(2, 2, 145, 0.1)',
+                    background: '#EEF0FF',
                     color: '#020291',
                     padding: { xs: '8px 16px', sm: '12px 32px' },
                     borderRadius: '8px',
@@ -531,12 +531,12 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 alignItems: 'center',
                 gap: '8px',
                 padding: { xs: '6px 10px', sm: '8px 12px' },
-                backgroundColor: '#fef3c7',
+                backgroundColor: '#EEF0FF',
                 borderRadius: '8px',
                 border: '1px solid #020291'
               }}>
                 <i className="fas fa-clock" style={{ color: '#020291', fontSize: '12px' }}></i>
-                <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#92400e', fontWeight: 600 }}>
+                <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#020291', fontWeight: 600 }}>
                   Deadlined: {new Date(selectedJob.application_deadline).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'short',

@@ -197,7 +197,7 @@ const InterviewOutline: React.FC = () => {
         const pendingQuestions = questionSet.questions.filter(q => q.status === 'pending');
 
         if (pendingQuestions.length === 0) {
-            toast.info('All questions are already approved!');
+            toast('All questions are already approved!', { icon: 'ℹ️' });
             return;
         }
 
@@ -716,7 +716,7 @@ const InterviewOutline: React.FC = () => {
                                                     onClick={() => handleApproveQuestion(question.id)}
                                                     sx={{
                                                         backgroundColor: '#0202911A',
-                                                        color: '#020291',
+                                                        color: '#ffffff',
                                                         border:"1px solid #020291",
                                                         fontWeight: 600,
                                                         textTransform: 'none',

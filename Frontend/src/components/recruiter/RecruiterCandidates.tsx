@@ -237,7 +237,7 @@ const RecruiterCandidates = () => {
               sx={{
                 background: 'rgba(2, 2, 145, 0.1)',
                 color: '#020291',
-                border: '2px solid #f59f0baf',
+                border: '2px solid #020291',
                 borderRadius: '8px',
                 fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
@@ -433,11 +433,11 @@ const RecruiterCandidates = () => {
                     sx={{
                       minWidth: { xs: 'auto', sm: '140px' },
                       height: '36px',
-                      background: '#fef3c720',
+                      background: '#EEF0FF',
                       color: '#020291',
                       border: '1px solid #02029140',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
-                      '&:hover': { background: '#fef3c740' }
+                      '&:hover': { background: '#EEF0FF' }
                     }}
                   >
                     <i className="fas fa-list-check" style={{ marginRight: 6 }} />

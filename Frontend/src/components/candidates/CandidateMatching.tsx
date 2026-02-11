@@ -768,7 +768,7 @@ const CandidateMatching = () => {
                 height: '40px',
                 background: 'rgba(2, 2, 145, 0.1)',
                 color: '#020291',
-                border: '2px solid #f59f0baf',
+                border: '2px solid #020291',
                 borderRadius: '8px',
                 fontSize: { xs: '12px', sm: '14px' },
                 fontWeight: 600,
@@ -778,7 +778,7 @@ const CandidateMatching = () => {
                 '&:hover': {
                   border: '2px solid #020291',
                   color: '#020291',
-                  background: 'rgba(245, 158, 11, 0.15)',
+                  background: '#EEF0FF',
                 }
               }}
             >
@@ -1273,10 +1273,10 @@ const CandidateMatching = () => {
                     padding: 0,
                     fontSize: '14px',
                     fontWeight: 600,
-                    backgroundColor: isCurrentPage ? '#6366f1' : 'transparent',
+                    backgroundColor: isCurrentPage ? '#020291' : 'transparent',
                     color: isCurrentPage ? 'white' : '#64748b',
                     '&:hover': {
-                      backgroundColor: isCurrentPage ? '#5b5bd6' : '#f1f5f9',
+                      backgroundColor: isCurrentPage ? '#020291' : '#f1f5f9',
                     },
                   }}
                 >
@@ -1326,13 +1326,13 @@ const CandidateMatching = () => {
           }}
         >
 
-          <Box sx={{ display: "flex", justifyContent: "space-between", background: "#f59f0bb7" }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", background: "#EEF0FF" }}>
             <DialogTitle sx={{
-              color: 'white',
+              color: '#020291',
               fontWeight: 600,
               fontSize: '1.25rem'
             }}>
-              <i className="fas fa-filter" style={{ marginRight: '8px' }} />
+              <i className="fas fa-filter" style={{ marginRight: '8px' ,color:"#020291"}} />
               Filter Candidates
             </DialogTitle>
             <Button
@@ -1434,7 +1434,7 @@ const CandidateMatching = () => {
               variant="contained"
               sx={{
                 background: 'rgba(2, 2, 145, 0.1)',
-                color: '#020291',
+                color: '#fffff',
                 border: '2px solid #020291',
                 borderRadius: '10px',
                 fontSize: '14px',
