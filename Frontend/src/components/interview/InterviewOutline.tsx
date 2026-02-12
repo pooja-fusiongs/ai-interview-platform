@@ -25,7 +25,11 @@ import {
     Schedule as ScheduleIcon,
     History as HistoryIcon,
     Close as CloseIcon,
+    Autorenew as AutorenewIcon,
+    KeyboardArrowDown as KeyboardArrowDownIcon,
+    KeyboardArrowUp as KeyboardArrowUpIcon,
 } from '@mui/icons-material';
+import Collapse from '@mui/material/Collapse';
 import { toast } from 'react-hot-toast';
 import questionGenerationService from '../../services/questionGenerationService';
 
@@ -64,10 +68,12 @@ const InterviewOutline: React.FC = () => {
     const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
     const [loading, setLoading] = useState(true);
     const [approvingAll, setApprovingAll] = useState(false);
+    const [regenerating, setRegenerating] = useState(false);
     const [activeTab, setActiveTab] = useState(0); // 0: All, 1: Pending, 2: Approved
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editedAnswer, setEditedAnswer] = useState<string>('');
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -121,6 +127,9 @@ const InterviewOutline: React.FC = () => {
                         ...currentSet,
                         questions: transformedQuestions
                     });
+                    if (transformedQuestions.length > 0) {
+                        setExpandedQuestionId(transformedQuestions[0].id);
+                    }
                 } catch (error) {
                     // If detailed fetch fails, use the basic data
                     console.log('Detailed fetch failed, using basic data:', error);
@@ -137,7 +146,11 @@ const InterviewOutline: React.FC = () => {
                         ...currentSet,
                         questions: basicQuestions
                     });
+                    if (basicQuestions.length > 0) {
+                        setExpandedQuestionId(basicQuestions[0].id);
+                    }
                 }
+
             } else {
                 toast.error('Question set not found');
                 navigate('/ai-questions');
@@ -251,6 +264,37 @@ const InterviewOutline: React.FC = () => {
         }
     };
 
+
+    const handleRegenerate = async () => {
+        if (!questionSet) return;
+
+        const confirmed = window.confirm(
+            'Are you sure you want to regenerate all questions? This will delete the current questions and generate new ones.'
+        );
+        if (!confirmed) return;
+
+        setRegenerating(true);
+        try {
+            const result = await questionGenerationService.regenerateQuestions({
+                job_id: questionSet.job_id,
+                candidate_id: questionSet.application_id,
+                total_questions: questionSet.total_questions || 10
+            });
+            toast.success('Questions regenerated successfully!');
+            // Navigate to the new session ID since the old one was deleted
+            const newSessionId = result.session_id;
+            if (newSessionId && String(newSessionId) !== setId) {
+                navigate(`/interview-outline/${newSessionId}`, { replace: true });
+            } else {
+                await fetchQuestionSet();
+            }
+        } catch (error) {
+            console.error('Error regenerating questions:', error);
+            toast.error('Failed to regenerate questions');
+        } finally {
+            setRegenerating(false);
+        }
+    };
 
     const getApprovedCount = () => {
         if (!questionSet) return 0;
@@ -429,6 +473,45 @@ const InterviewOutline: React.FC = () => {
                                         )}
                                     </Button>
                                 )}
+                                {/* Regenerate Button */}
+                                <Button
+                                    onClick={handleRegenerate}
+                                    disabled={regenerating}
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 0.5,
+                                        p: { xs: '2px 10px', sm: '2px 16px' },
+                                        fontSize: { xs: '13px', sm: '14px' },
+                                        backgroundColor: 'white',
+                                        color: '#374151',
+                                        border: '1px solid #d1d5db',
+                                        borderRadius: 1,
+                                        textTransform: 'none',
+                                        fontWeight: 600,
+                                        '&:hover': {
+                                            backgroundColor: '#f9fafb',
+                                            border: '1px solid #9ca3af',
+                                        },
+                                        '&:disabled': {
+                                            backgroundColor: '#f3f4f6',
+                                            border: '1px solid #e5e7eb',
+                                            color: '#9ca3af',
+                                        },
+                                    }}
+                                >
+                                    {regenerating ? (
+                                        <>
+                                            <CircularProgress size={16} sx={{ color: '#374151' }} />
+                                            <Typography>Regenerating...</Typography>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AutorenewIcon fontSize="small" />
+                                            <Typography>Regenerate</Typography>
+                                        </>
+                                    )}
+                                </Button>
                                 {/* Back Button */}
                                 <Box
                                     onClick={handleGoBack}
@@ -647,271 +730,200 @@ const InterviewOutline: React.FC = () => {
                         </Tabs>
                     </Box>
 
-                    {/* Questions */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        {getFilteredQuestions().map((question) => (
-                            <Card
-                                key={question.id}
-                                sx={{
-                                    borderRadius: 3,
-                                    border: question.status === 'approved' ? '1px solid #d1fae5' : '1px solid #e5e7eb',
-                                    boxShadow: question.status === 'approved'
-                                        ? '0 1px 3px rgba(0, 0, 0, 0.05)'
-                                        : '0 1px 3px rgba(0, 0, 0, 0.05)',
-                                    '&:hover': {
-                                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)'
-                                    },
-                                    transition: 'all 0.2s ease-in-out'
-                                }}
-                            >
-                                <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                                    {/* Question Header */}
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, gap: 1 }}>
-                                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#333', fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-                                            Question {questionSet?.questions.findIndex(q => q.id === question.id) + 1}
+                    {/* Questions - Accordion Style */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                        {getFilteredQuestions().map((question) => {
+                            const qIndex = (questionSet?.questions.findIndex(q => q.id === question.id) ?? 0) + 1;
+                            const isExpanded = expandedQuestionId === question.id;
+                            return (
+                                <Box key={question.id}>
+                                    {/* Compact Row */}
+                                    <Box
+                                        onClick={() => setExpandedQuestionId(isExpanded ? null : question.id)}
+                                        sx={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: { xs: 1, sm: 2 },
+                                            px: { xs: 1.5, sm: 2.5 },
+                                            py: 1.5,
+                                            cursor: 'pointer',
+                                            borderBottom: '1px solid #f3f4f6',
+                                            backgroundColor: isExpanded ? '#f9fafb' : 'white',
+                                            '&:hover': { backgroundColor: '#f9fafb' },
+                                            transition: 'background-color 0.15s',
+                                        }}
+                                    >
+                                        {/* Q Number Badge */}
+                                        <Typography sx={{
+                                            fontWeight: 700,
+                                            fontSize: '0.85rem',
+                                            color: question.status === 'approved' ? '#059669' : '#d97706',
+                                            minWidth: 28,
+                                            flexShrink: 0,
+                                        }}>
+                                            Q{qIndex}
                                         </Typography>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                            <Chip
-                                                label={question.status === 'approved' ? 'Approved' : 'Pending'}
-                                                size="small"
-                                                icon={question.status === 'approved' ? <CheckCircleIcon /> : <ScheduleIcon />}
-                                                sx={{
-                                                    backgroundColor: question.status === 'approved' ? '#f0fdf4' : '#fef3c7',
-                                                    color: question.status === 'approved' ? '#166534' : '#92400e',
-                                                    fontWeight: 500,
-                                                    border: question.status === 'approved' ? '1px solid #bbf7d0' : '1px solid #fde68a',
-                                                    mr: 1,
-                                                    '& .MuiChip-icon': {
-                                                        color: question.status === 'approved' ? '#166534' : '#92400e'
-                                                    }
-                                                }}
-                                            />
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleEditAnswer(question.id, question.sample_answer)}
-                                                sx={{
-                                                    color: '#6b7280',
-                                                    cursor: 'pointer'
-                                                }}
-                                                title="Edit answer"
-                                            >
-                                                <EditIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleOpenHistory(question.id, questionSet?.questions.findIndex(q => q.id === question.id) ?? 0)}
-                                                sx={{
-                                                    color: '#6b7280',
-                                                    cursor: 'pointer'
-                                                }}
-                                                title="View history"
-                                            >
-                                                <HistoryIcon fontSize="small" />
-                                            </IconButton>
-                                            {/* Approve Button */}
-                                            {question.status === 'pending' && (
-                                                <Button
-                                                    variant="contained"
-                                                    size="small"
-                                                    onClick={() => handleApproveQuestion(question.id)}
-                                                    sx={{
-                                                        backgroundColor: '#0202911A',
-                                                        color: '#ffffff',
-                                                        border:"1px solid #020291",
-                                                        fontWeight: 600,
-                                                        textTransform: 'none',
-                                                        px: 2,
-                                                        py: 0.5,
-                                                        fontSize: '0.875rem',
-                                                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-                                                        '&:hover': {
-                                                            backgroundColor: '#0202911A',
-                                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                                                        }
-                                                    }}
-                                                >
-                                                    Approve
-                                                </Button>
-                                            )}
-                                        </Box>
-                                    </Box>
 
-                                    {/* Question Text */}
-                                    <Box sx={{ position: 'relative' }}>
-                                        <Typography
-                                            variant="body1"
-                                            sx={{
-                                                color: '#333',
-                                                lineHeight: 1.6,
-                                                mb: 3,
-                                                fontSize: { xs: '0.95rem', sm: '1.1rem' },
-                                                opacity: question.status === 'approved' ? 0.9 : 1
-                                            }}
-                                        >
+                                        {/* Question Text (truncated) */}
+                                        <Typography sx={{
+                                            flex: 1,
+                                            fontSize: { xs: '0.85rem', sm: '0.9rem' },
+                                            color: '#374151',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                        }}>
                                             {question.question}
                                         </Typography>
 
-                                        {/* Read-only indicator for approved questions */}
-                                        {question.status === 'approved' && (
-                                            <Box sx={{
-                                                position: 'absolute',
-                                                top: -8,
-                                                right: -8,
-                                                backgroundColor: '#f0fdf4',
-                                                border: '1px solid #bbf7d0',
-                                                borderRadius: '50%',
-                                                width: 24,
-                                                height: 24,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center'
-                                            }}>
-                                                <LockIcon sx={{ fontSize: 12, color: '#166534' }} />
-                                            </Box>
-                                        )}
+                                        {/* Edit icon */}
+                                        <IconButton
+                                            size="small"
+                                            onClick={(e) => { e.stopPropagation(); handleEditAnswer(question.id, question.sample_answer); }}
+                                            sx={{ color: '#6b7280', p: 0.5 }}
+                                            title="Edit answer"
+                                        >
+                                            <EditIcon sx={{ fontSize: '1rem' }} />
+                                        </IconButton>
+
+                                        {/* History icon */}
+                                        <IconButton
+                                            size="small"
+                                            onClick={(e) => { e.stopPropagation(); handleOpenHistory(question.id, qIndex - 1); }}
+                                            sx={{ color: '#6b7280', p: 0.5 }}
+                                            title="View history"
+                                        >
+                                            <HistoryIcon sx={{ fontSize: '1rem' }} />
+                                        </IconButton>
+
+                                        {/* Status chip */}
+                                        <Chip
+                                            label={question.status === 'approved' ? 'Approved' : 'Pending'}
+                                            size="small"
+                                            icon={question.status === 'approved' ? <CheckCircleIcon /> : <ScheduleIcon />}
+                                            sx={{
+                                                backgroundColor: question.status === 'approved' ? '#f0fdf4' : '#fffbeb',
+                                                color: question.status === 'approved' ? '#166534' : '#92400e',
+                                                fontWeight: 500,
+                                                fontSize: '0.75rem',
+                                                height: 26,
+                                                border: question.status === 'approved' ? '1px solid #bbf7d0' : '1px solid #fde68a',
+                                                display: { xs: 'none', sm: 'flex' },
+                                                '& .MuiChip-icon': {
+                                                    color: question.status === 'approved' ? '#166534' : '#92400e',
+                                                    fontSize: '0.9rem',
+                                                }
+                                            }}
+                                        />
+
+                                        {/* Chevron */}
+                                        {isExpanded
+                                            ? <KeyboardArrowUpIcon sx={{ color: '#9ca3af', flexShrink: 0 }} />
+                                            : <KeyboardArrowDownIcon sx={{ color: '#9ca3af', flexShrink: 0 }} />
+                                        }
                                     </Box>
 
-                                    {/* Tags Section */}
-                                    <Box sx={{ mb: 3 }}>
-                                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                                            {/* Skills */}
-                                            {question.skills_tested.length > 0 && (
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
-                                                        Skills:
-                                                    </Typography>
-                                                    {question.skills_tested.map((skill, skillIndex) => (
-                                                        <Chip
-                                                            key={skillIndex}
-                                                            label={skill}
-                                                            size="small"
-                                                            sx={{
-                                                                backgroundColor: '#f9fafb',
-                                                                color: '#374151',
-                                                                fontSize: '0.75rem',
-                                                                height: 24,
-                                                                border: '1px solid #e5e7eb'
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </Box>
-                                            )}
-
-                                            {/* Type */}
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
-                                                    Type:
-                                                </Typography>
-                                                <Chip
-                                                    label={question.category}
-                                                    size="small"
-                                                    sx={{
-                                                        backgroundColor: '#f9fafb',
-                                                        color: '#374151',
-                                                        fontSize: '0.75rem',
-                                                        height: 24,
-                                                        border: '1px solid #e5e7eb'
-                                                    }}
-                                                />
-                                            </Box>
-
-                                            {/* Difficulty */}
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
-                                                    Difficulty:
-                                                </Typography>
-                                                <Chip
-                                                    label={question.difficulty}
-                                                    size="small"
-                                                    sx={{
-                                                        backgroundColor: '#f9fafb',
-                                                        color: '#374151',
-                                                        fontSize: '0.75rem',
-                                                        height: 24,
-                                                        border: '1px solid #e5e7eb'
-                                                    }}
-                                                />
-                                            </Box>
-                                        </Box>
-                                    </Box>
-
-                                    {/* Golden Standard Answer */}
-                                    <Box sx={{
-                                        backgroundColor: question.is_golden ? '#f8fffe' : '#f9fafb',
-                                        border: question.is_golden ? '1px solid #d1fae5' : '1px solid #e5e7eb',
-                                        borderLeft: question.is_golden ? '3px solid #10b981' : '3px solid #6b7280',
-                                        borderRadius: 2,
-                                        p: 2,
-                                        mb: 3
-                                    }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>
-                                                    AI Answer
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-
-                                        {editingQuestionId === question.id ? (
-                                            // Edit Mode
-                                            <Box>
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    rows={4}
-                                                    value={editedAnswer}
-                                                    onChange={(e) => setEditedAnswer(e.target.value)}
-                                                    sx={{ mb: 2 }}
-                                                />
-                                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    {/* Expanded Content */}
+                                    <Collapse in={isExpanded}>
+                                        <Box sx={{
+                                            px: { xs: 2, sm: 3 },
+                                            py: 2.5,
+                                            backgroundColor: '#fafbfc',
+                                            borderBottom: '1px solid #e5e7eb',
+                                        }}>
+                                            {/* Approve button (only for pending) */}
+                                            {question.status === 'pending' && (
+                                                <Box sx={{ mb: 2 }}>
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        onClick={() => handleSaveAnswer(question.id)}
+                                                        onClick={(e) => { e.stopPropagation(); handleApproveQuestion(question.id); }}
                                                         sx={{
-                                                            backgroundColor: '#10b981',
-                                                            color: 'white',
-                                                            '&:hover': {
-                                                                backgroundColor: '#059669'
-                                                            }
+                                                            backgroundColor: '#020291',
+                                                            color: '#fff',
+                                                            fontWeight: 600,
+                                                            textTransform: 'none',
+                                                            px: 2,
+                                                            py: 0.5,
+                                                            fontSize: '0.8rem',
+                                                            boxShadow: 'none',
+                                                            '&:hover': { backgroundColor: '#01016d', boxShadow: 'none' }
                                                         }}
                                                     >
-                                                        Save
-                                                    </Button>
-                                                    <Button
-                                                        variant="outlined"
-                                                        size="small"
-                                                        onClick={handleCancelEdit}
-                                                        sx={{
-                                                            borderColor: '#6b7280',
-                                                            color: '#6b7280'
-                                                        }}
-                                                    >
-                                                        Cancel
+                                                        Approve
                                                     </Button>
                                                 </Box>
-                                            </Box>
-                                        ) : (
-                                            // View Mode
-                                            <Typography
-                                                variant="body2"
-                                                sx={{
-                                                    color: question.is_golden ? '#065f46' : '#4b5563',
-                                                    lineHeight: 1.6,
-                                                    mb: question.is_golden ? 1 : 0
-                                                }}
-                                            >
-                                                {question.sample_answer}
+                                            )}
+
+                                            {/* Full Question Text */}
+                                            <Typography sx={{ color: '#1f2937', lineHeight: 1.7, mb: 2, fontSize: { xs: '0.9rem', sm: '1rem' } }}>
+                                                {question.question}
                                             </Typography>
-                                        )}
 
+                                            {/* Tags */}
+                                            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+                                                {question.skills_tested.length > 0 && (
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>Skills:</Typography>
+                                                        {question.skills_tested.map((skill, i) => (
+                                                            <Chip key={i} label={skill} size="small" sx={{ backgroundColor: '#f9fafb', color: '#374151', fontSize: '0.75rem', height: 24, border: '1px solid #e5e7eb' }} />
+                                                        ))}
+                                                    </Box>
+                                                )}
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>Type:</Typography>
+                                                    <Chip label={question.category} size="small" sx={{ backgroundColor: '#f9fafb', color: '#374151', fontSize: '0.75rem', height: 24, border: '1px solid #e5e7eb' }} />
+                                                </Box>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>Difficulty:</Typography>
+                                                    <Chip label={question.difficulty} size="small" sx={{ backgroundColor: '#f9fafb', color: '#374151', fontSize: '0.75rem', height: 24, border: '1px solid #e5e7eb' }} />
+                                                </Box>
+                                            </Box>
 
-                                    </Box>
+                                            {/* AI Answer */}
+                                            <Box sx={{
+                                                backgroundColor: question.is_golden ? '#f8fffe' : '#fff',
+                                                border: question.is_golden ? '1px solid #d1fae5' : '1px solid #e5e7eb',
+                                                borderLeft: question.is_golden ? '3px solid #10b981' : '3px solid #6b7280',
+                                                borderRadius: 2,
+                                                p: 2,
+                                            }}>
+                                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151', mb: 1 }}>
+                                                    AI Answer
+                                                </Typography>
 
-
-                                </CardContent>
-                            </Card>
-                        ))}
+                                                {editingQuestionId === question.id ? (
+                                                    <Box>
+                                                        <TextField
+                                                            fullWidth
+                                                            multiline
+                                                            rows={4}
+                                                            value={editedAnswer}
+                                                            onChange={(e) => setEditedAnswer(e.target.value)}
+                                                            sx={{ mb: 2 }}
+                                                        />
+                                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                                            <Button variant="contained" size="small" onClick={() => handleSaveAnswer(question.id)}
+                                                                sx={{ backgroundColor: '#10b981', color: 'white', '&:hover': { backgroundColor: '#059669' } }}>
+                                                                Save
+                                                            </Button>
+                                                            <Button variant="outlined" size="small" onClick={handleCancelEdit}
+                                                                sx={{ borderColor: '#6b7280', color: '#6b7280' }}>
+                                                                Cancel
+                                                            </Button>
+                                                        </Box>
+                                                    </Box>
+                                                ) : (
+                                                    <Typography variant="body2" sx={{ color: question.is_golden ? '#065f46' : '#4b5563', lineHeight: 1.6 }}>
+                                                        {question.sample_answer}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+                                        </Box>
+                                    </Collapse>
+                                </Box>
+                            );
+                        })}
                     </Box>
 
                     {/* Empty State */}

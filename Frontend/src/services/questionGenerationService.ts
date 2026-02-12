@@ -82,6 +82,24 @@ class QuestionGenerationService {
   }
 
   /**
+   * Regenerate AI questions for a job candidate (deletes existing and creates new)
+   */
+  async regenerateQuestions(request: QuestionGenerateRequest) {
+    try {
+      const response = await apiClient.post('/api/interview/regenerate-questions', {
+        job_id: request.job_id,
+        candidate_id: request.candidate_id,
+        generation_mode: request.generation_mode || 'preview',
+        total_questions: request.total_questions || 10
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error regenerating questions:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to regenerate questions');
+    }
+  }
+
+  /**
    * Get question generation session with questions
    */
   async getGenerationSession(sessionId: number): Promise<QuestionGenerationSession> {

@@ -147,8 +147,8 @@ const Login = () => {
           <Box sx={{ marginBottom: { xs: '16px', md: '20px' }, textAlign: 'left' }}>
             <Typography variant="h2" sx={{
               fontSize: { xs: '28px', sm: '32px', md: '36px' },
-              fontWeight: 600,
-              color: '#2c3e50',
+              fontWeight: 700,
+              color: '#111827',
               margin: '0 0 10px 0'
             }}>
               Sign In
@@ -180,12 +180,12 @@ const Login = () => {
               <Box sx={{
                 width: { xs: 44, md: 50 },
                 height: { xs: 44, md: 50 },
-                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
-                borderRadius: '50%',
+                color: '#020291',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'white',
+                background: '#DDE1FF',
                 fontSize: '18px',
                 flexShrink: 0
               }}>
@@ -202,24 +202,24 @@ const Login = () => {
                 disabled={loading}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: '25px',
-                    fontSize: '16px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
                     background: 'white',
                     '& fieldset': {
-                      borderColor: '#e9ecef',
-                      borderWidth: '2px'
+                      borderColor: '#e5e7eb',
+                      borderWidth: '1px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#020291'
+                      borderColor: '#d1d5db'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#020291',
-                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
+                      borderColor: 'rgba(2, 2, 145, 0.3)',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.08)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
-                    padding: '15px 20px',
-                    color: '#2c3e50'
+                    padding: '10px 14px',
+                    color: '#111827'
                   }
                 }}
               />
@@ -236,12 +236,12 @@ const Login = () => {
               <Box sx={{
                 width: { xs: 44, md: 50 },
                 height: { xs: 44, md: 50 },
-                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
-                borderRadius: '50%',
+                color: '#020291',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'white',
+                background: '#DDE1FF',
                 fontSize: '18px',
                 flexShrink: 0
               }}>
@@ -281,24 +281,24 @@ const Login = () => {
                 }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: '25px',
-                    fontSize: '16px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
                     background: 'white',
                     '& fieldset': {
-                      borderColor: '#e9ecef',
-                      borderWidth: '2px'
+                      borderColor: '#e5e7eb',
+                      borderWidth: '1px'
                     },
                     '&:hover fieldset': {
-                      borderColor: '#020291'
+                      borderColor: '#d1d5db'
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#020291',
-                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.15)'
+                      borderColor: 'rgba(2, 2, 145, 0.3)',
+                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.08)'
                     }
                   },
                   '& .MuiOutlinedInput-input': {
-                    padding: '15px 20px',
-                    color: '#2c3e50',
+                    padding: '10px 14px',
+                    color: '#111827',
                     fontFamily: showPassword ? 'inherit' : 'Courier New, monospace',
                     letterSpacing: showPassword ? 'normal' : '2px'
                   }
@@ -313,25 +313,30 @@ const Login = () => {
               sx={{
                 width: '100%',
                 padding: '10px',
-                background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
+                background: '#020291',
                 color: 'white',
                 border: 'none',
-                borderRadius: '25px',
-                fontSize: '18px',
-                fontWeight: 600,
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
                 cursor: 'pointer',
-                textTransform: 'capitalize',
+                textTransform: 'none',
                 marginBottom: '10px',
+                boxShadow: '0 1px 3px rgba(2, 2, 145, 0.2)',
+                transition: 'all 0.2s',
                 '&:hover': {
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(2, 2, 145, 0.3)'
+                  background: '#0303b8',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 4px 14px rgba(2, 2, 145, 0.3)'
                 },
+                '&:active': { transform: 'translateY(0)' },
                 '&:disabled': {
-                  opacity: 0.7,
+                  opacity: 0.5,
                   cursor: 'not-allowed',
                   transform: 'none',
+                  boxShadow: 'none',
                   color: 'white',
-                  background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)'
+                  background: '#020291'
                 }
               }}
             >
@@ -345,10 +350,10 @@ const Login = () => {
               type="button"
               sx={{
                 background: 'none',
-                border: '2px solid #e9ecef',
-                color: '#6c757d',
-                padding: '10px 20px',
-                borderRadius: '20px',
+                border: '1px solid #e5e7eb',
+                color: '#6b7280',
+                padding: '8px 16px',
+                borderRadius: '8px',
                 fontSize: '14px',
                 cursor: 'pointer',
                 textTransform: 'none',
@@ -383,7 +388,7 @@ const Login = () => {
                 }
               }}
             >
-              Don't have an account? Sign Up
+              Don't have an account? <span style={{color:"#020291",fontWeight:"600"}}>Sign Up</span>
             </Button>
           </Box>
         </Box>

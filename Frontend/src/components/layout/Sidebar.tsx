@@ -109,19 +109,20 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
           <Box sx={{
             width: { xs: 36, md: 40 },
             height: { xs: 36, md: 40 },
-            backgroundColor: 'primary.main',
+            backgroundColor: '#020291',
             borderRadius: { xs: '8px', md: '10px' },
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
-            fontSize: { xs: '16px', md: '20px' }
+            fontSize: { xs: '14px', md: '16px' },
+            fontWeight: 700,
           }}>
-            <i className="fas fa-robot"></i>
+            iH
           </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ lineHeight: 1.2 }}>AI Interview</span>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>Platform</span>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ lineHeight: 1.2, fontSize: '18px', fontWeight: 700 }}>iHire</span>
+            <span style={{ fontSize: '10px', fontWeight: 500, color: '#9ca3af', letterSpacing: '0.05em' }}>by FGS</span>
           </Box>
         </Box>
       </Box>

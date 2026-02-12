@@ -14,6 +14,7 @@ const theme = createTheme({
 })
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { getDefaultRoute } from './utils/roleUtils'
+import LandingPage from './components/LandingPage'
 import Login from './components/auth/SignIn'
 import SignUp from './components/auth/SignUp'
 import Dashboard from './components/dashboard/Dashboard'
@@ -76,18 +77,18 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
 
 function DefaultRedirect() {
   const { user } = useAuth()
-  
+
   if (!user) {
     return <Navigate to="/login" replace />
   }
-  
+
   const defaultRoute = getDefaultRoute(user?.role)
-  
+
   // Prevent infinite redirect loop
-  if (defaultRoute === '/login') {
-    return <Navigate to="/login" replace />
+  if (defaultRoute === '/login' || defaultRoute === '/') {
+    return <Navigate to="/dashboard" replace />
   }
-  
+
   return <Navigate to={defaultRoute} replace />
 }
 
@@ -287,8 +288,8 @@ function App(): JSX.Element {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
             
-            {/* Default route - redirects to user's default page */}
-            <Route path="/" element={<DefaultRedirect />} />
+            {/* Landing page for unauthenticated users, redirect for authenticated */}
+            <Route path="/" element={<LandingPage />} />
             
             {/* Dashboard - All roles */}
             <Route path="/dashboard" element={

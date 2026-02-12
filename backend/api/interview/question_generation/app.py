@@ -130,6 +130,82 @@ def generate_questions(
             detail=f"Failed to generate questions: {str(e)}"
         )
 
+@router.post("/regenerate-questions", response_model=dict)
+def regenerate_questions(
+    request: QuestionGenerateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete existing questions and regenerate new ones for a job candidate.
+    Accessible by: Domain Experts, Recruiters, Admins
+    """
+    if not RoleManager.has_permission(current_user, "create_questions"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to regenerate questions"
+        )
+
+    job = db.query(Job).filter(Job.id == request.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    candidate = db.query(JobApplication).filter(JobApplication.id == request.candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Delete existing question versions first (FK dependency)
+    existing_questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == request.job_id,
+        InterviewQuestion.candidate_id == request.candidate_id
+    ).all()
+
+    question_ids = [q.id for q in existing_questions]
+    if question_ids:
+        db.query(InterviewQuestionVersion).filter(
+            InterviewQuestionVersion.question_id.in_(question_ids)
+        ).delete(synchronize_session=False)
+
+    # Delete existing questions
+    db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == request.job_id,
+        InterviewQuestion.candidate_id == request.candidate_id
+    ).delete(synchronize_session=False)
+
+    # Delete existing session
+    db.query(QuestionGenerationSession).filter(
+        QuestionGenerationSession.job_id == request.job_id,
+        QuestionGenerationSession.candidate_id == request.candidate_id
+    ).delete(synchronize_session=False)
+
+    db.commit()
+
+    # Generate new questions
+    try:
+        generator = get_question_generator()
+        result = generator.generate_questions(
+            db=db,
+            job_id=request.job_id,
+            candidate_id=request.candidate_id,
+            total_questions=request.total_questions
+        )
+
+        return {
+            "message": f"Successfully regenerated {result['total_questions']} questions in {result['mode']} mode",
+            "session_id": result["session_id"],
+            "mode": result["mode"],
+            "total_questions": result["total_questions"],
+            "status": "success",
+            "preview_mode": result["mode"] == "preview"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to regenerate questions: {str(e)}"
+        )
+
+
 @router.get("/sessions/{session_id}", response_model=QuestionGenerationSessionResponse)
 def get_generation_session(
     session_id: int,

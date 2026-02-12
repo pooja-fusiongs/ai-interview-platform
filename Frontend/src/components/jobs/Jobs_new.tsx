@@ -24,6 +24,7 @@ import JobCreationForm from './JobCreationForm'
 import JobApplicationForm from './JobApplicationForm'
 import JobDetails from './JobDetails'
 import { CanCreateJob, CanApplyJobs } from '../common/RoleBasedComponent'
+import Tooltip from '@mui/material/Tooltip'
 
 const Jobs = () => {
   const navigate = useNavigate()
@@ -456,6 +457,21 @@ const Jobs = () => {
     }
   ]
 
+  const handleToggleJobStatus = async (e: React.MouseEvent, job: any) => {
+    e.stopPropagation()
+    const newStatus = job.status === 'Closed' ? 'Open' : 'Closed'
+    try {
+      await jobService.updateJob(job.id, { status: newStatus } as any)
+      // Update local state
+      const updatedJobs = allJobs.map((j: any) =>
+        j.id === job.id ? { ...j, status: newStatus } : j
+      )
+      setAllJobs(updatedJobs)
+    } catch (error) {
+      console.error('Error toggling job status:', error)
+    }
+  }
+
   const handleJobCreate = (newJob: any) => {
     const updatedJobs = [newJob, ...allJobs]
     setAllJobs(updatedJobs)
@@ -682,6 +698,25 @@ const Jobs = () => {
                       {job.company}
                     </Typography>
                   </Box>
+                  {(user?.role === 'recruiter' || user?.role === 'admin') && (
+                    <Tooltip title={job.status === 'Closed' ? 'Reopen position' : 'Close position'}>
+                      <IconButton
+                        onClick={(e) => handleToggleJobStatus(e, job)}
+                        sx={{
+                          padding: '4px',
+                          '&:hover': { backgroundColor: 'transparent' }
+                        }}
+                      >
+                        <i
+                          className={job.status === 'Closed' ? 'fas fa-toggle-off' : 'fas fa-toggle-on'}
+                          style={{
+                            fontSize: '22px',
+                            color: job.status === 'Closed' ? '#9ca3af' : '#020291',
+                          }}
+                        ></i>
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Box>
 
                 {/* Job Details */}
