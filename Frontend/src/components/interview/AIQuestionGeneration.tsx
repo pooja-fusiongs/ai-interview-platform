@@ -331,7 +331,8 @@ const ExpertReview: React.FC = () => {
             gap: { xs: 1, sm: 2 },
             mb: { xs: 2, sm: 3 },
             alignItems: { xs: 'stretch', sm: 'center' },
-            flexDirection: { xs: 'column', sm: 'row' }
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'flex-end'
           }}>
             <TextField
               placeholder="Search here..."

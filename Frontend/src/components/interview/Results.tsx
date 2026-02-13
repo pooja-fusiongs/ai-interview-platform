@@ -721,7 +721,7 @@ const Results = () => {
               padding: '7px 16px',
               borderColor: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#020291' : '#e2e8f0',
               color: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#020291' : '#64748b',
-              background: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? 'rgba(245,158,11,0.08)' : '#fff',
+              background: (filterJob !== 'all' || filterCandidate !== 'all' || filterStatus !== 'all') ? '#EEF0FF' : '#fff',
               '&:hover': { borderColor: '#020291', color: '#020291', background: 'EEF0FF' },
             }}
           >
@@ -755,8 +755,8 @@ const Results = () => {
               }}
               sx={{
                 fontWeight: 600, fontSize: '12px',
-                backgroundColor: 'rgba(245,158,11,0.1)', color: '#020291',
-                border: '1px solid rgba(245,158,11,0.3)',
+                backgroundColor: '#EEF0FF', color: '#020291',
+                border: '1px solid #020291',
                 '& .MuiChip-deleteIcon': { color: '#020291', '&:hover': { color: '#020291' } },
               }}
             />

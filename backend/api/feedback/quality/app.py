@@ -38,7 +38,7 @@ def quality_dashboard(
 @router.post("/api/feedback/quality/compute")
 def trigger_quality_computation(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_any_role([UserRole.RECRUITER, UserRole.ADMIN])),
 ):
     """Trigger a full recomputation of all quality metrics. Admin only."""
     metrics = compute_all_metrics(db)

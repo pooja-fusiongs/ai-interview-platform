@@ -21,10 +21,7 @@ import {
   DialogContent,
   DialogActions,
   Divider,
-  FormControlLabel,
-  Checkbox,
   Slider,
-  FormGroup,
   Table,
   TableBody,
   TableCell,
@@ -43,6 +40,20 @@ import {
 } from '@mui/material'
 import Navigation from '../layout/Sidebar'
 import { CloudUpload as CloudUploadIcon, Visibility as VisibilityIcon } from '@mui/icons-material'
+
+const pastelColors = [
+  '#6C7A89', '#7E8C8D', '#5B7FA5', '#6B8E7B', '#8B7B8E',
+  '#7A8B99', '#6E8898', '#7B9EA8', '#8E8579', '#6D8A96',
+  '#7C8A6E', '#847D8B', '#6A8F8D', '#8B8178', '#7A7E93',
+];
+
+const getAvatarColor = (name: string): string => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return pastelColors[Math.abs(hash) % pastelColors.length];
+};
 
 const Candidates = () => {
   const navigate = useNavigate()
@@ -372,8 +383,9 @@ const Candidates = () => {
     if (!matchesSearch) return false
 
     // status filter
-    const statusAllowed = (filters.statuses as Record<string, boolean>)?.[candidate.status] ?? true
-    if (!statusAllowed) return false
+    // status filter (if no status selected, show all)
+    const selectedStatuses = Object.entries((filters.statuses as Record<string, boolean>) || {}).filter(([, v]) => v).map(([k]) => k)
+    if (selectedStatuses.length > 0 && !selectedStatuses.includes(candidate.status)) return false
 
     // min score filter
     if (typeof candidate.score === 'number' && candidate.score < (filters.minScore ?? 0)) return false
@@ -732,7 +744,7 @@ const Candidates = () => {
                         {/* Header */}
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
                           <Box sx={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar sx={{ width: 50, height: 50, background: '#020291', fontSize: '18px', fontWeight: 700 }}>
+                            <Avatar sx={{ width: 50, height: 50, background: getAvatarColor(candidate.name), fontSize: '18px', fontWeight: 700 }}>
                               {candidate.name.charAt(0).toUpperCase()}
                             </Avatar>
                             <Box sx={{
@@ -743,7 +755,7 @@ const Candidates = () => {
                               height: 12,
                               borderRadius: '50%',
                               border: '2px solid white',
-                              background: candidate.isOnline ? '#10b981' : '#020291'
+                              background: candidate.isOnline ? '#22c55e' : '#f59e0b'
                             }} />
                           </Box>
                           <Box sx={{ flex: 1 }}>
@@ -820,7 +832,7 @@ const Candidates = () => {
                               size="small"
                               onClick={() => navigate(`/interview-outline/${candidateQuestionSessions[candidate.id]}`)}
                               sx={{
-                                background: 'tranperant',
+                                background: '#EEF0FF',
                                 color: '#020291',
                                 border: '2px solid #020291',
                                 borderRadius: '10px',
@@ -835,7 +847,6 @@ const Candidates = () => {
                                   background: '#EEF0FF',
                                   borderColor: '#020291',
                                   transform: 'translateY(-2px)',
-                                  boxShadow: '0 8px 25px rgba(99, 102, 241, 0.25)'
                                 }
                               }}
                             >
@@ -1013,7 +1024,7 @@ const Candidates = () => {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                           <Box sx={{ position: 'relative' }}>
-                            <Avatar sx={{ width: 40, height: 40, backgroundColor: '#020291', color: '#fff', fontSize: '1rem' }}>
+                            <Avatar sx={{ width: 40, height: 40, backgroundColor: getAvatarColor(candidate.name), color: '#fff', fontSize: '1rem' }}>
                               {candidate.name.charAt(0).toUpperCase()}
                             </Avatar>
                             <Box sx={{
@@ -1024,7 +1035,7 @@ const Candidates = () => {
                               height: 10,
                               borderRadius: '50%',
                               border: '2px solid white',
-                              background: candidate.isOnline ? '#10b981' : '#94a3b8'
+                              background: candidate.isOnline ? '#22c55e' : '#f59e0b'
                             }} />
                           </Box>
                           <Box>
@@ -1898,81 +1909,138 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
         <Dialog
           open={isFilterOpen}
           onClose={handleCloseFilter}
-          maxWidth="sm"
+          maxWidth="xs"
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: { xs: '12px', md: '16px' },
-              margin: { xs: '12px', md: '32px' }
+              borderRadius: '16px',
+              margin: { xs: '12px', md: '32px' },
+              overflow: 'hidden'
             }
           }}
         >
           <DialogTitle sx={{
-            fontSize: { xs: '18px', md: '20px' },
+            fontSize: '17px',
             fontWeight: 700,
-            color: '#1e293b',
-            padding: { xs: '16px 20px', md: '20px 24px' }
+            color: 'white',
+            background: '#020291',
+            padding: '16px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
           }}>
             Filter Candidates
+            <IconButton onClick={handleCloseFilter} sx={{ color: 'white', p: 0.5 }}>
+              <i className="fas fa-times" style={{ fontSize: '14px' }} />
+            </IconButton>
           </DialogTitle>
-          <DialogContent sx={{ padding: { xs: '0 20px', md: '0 24px' } }}>
-            <Box sx={{ marginBottom: '24px' }}>
-              <Typography variant="h6" sx={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
-                Status
-              </Typography>
-              <FormGroup>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={(filters.statuses as Record<string, boolean>).active}
-                      onChange={(e) => setFilters(prev => ({
-                        ...prev,
-                        statuses: { ...(prev.statuses as Record<string, boolean>), active: e.target.checked }
-                      }))}
-                    />
-                  }
-                  label="Active"
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={(filters.statuses as Record<string, boolean>).pending}
-                      onChange={(e) => setFilters(prev => ({
-                        ...prev,
-                        statuses: { ...(prev.statuses as Record<string, boolean>), pending: e.target.checked }
-                      }))}
-                    />
-                  }
-                  label="Pending"
-                />
-              </FormGroup>
+          <DialogContent sx={{ padding: '20px 24px !important' }}>
+            {/* Status Section */}
+            <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 1.5 }}>
+              Status
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
+              {['active', 'pending'].map(status => {
+                const checked = (filters.statuses as Record<string, boolean>)[status] ?? false
+                return (
+                  <Chip
+                    key={status}
+                    label={status.charAt(0).toUpperCase() + status.slice(1)}
+                    onClick={() => setFilters(prev => ({
+                      ...prev,
+                      statuses: { ...(prev.statuses as Record<string, boolean>), [status]: !checked }
+                    }))}
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      borderRadius: '8px',
+                      border: '1.5px solid',
+                      borderColor: checked ? '#020291' : '#e2e8f0',
+                      background: checked ? '#EEF0FF' : 'white',
+                      color: checked ? '#020291' : '#64748b',
+                      cursor: 'pointer',
+                      '&:hover': { background: '#EEF0FF', borderColor: '#020291' }
+                    }}
+                  />
+                )
+              })}
             </Box>
 
-            <Box sx={{ marginBottom: '24px' }}>
-              <Typography variant="h6" sx={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
-                Minimum Score: {filters.minScore}%
-              </Typography>
+            <Divider sx={{ mb: 2.5 }} />
+
+            {/* Department Section */}
+            {(() => {
+              const departments = [...new Set(candidates.map(c => c.department).filter(Boolean))]
+              if (departments.length === 0) return null
+              return (
+                <>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 1.5 }}>
+                    Department
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
+                    {departments.map(dept => {
+                      const checked = (filters.departments as Record<string, boolean>)?.[dept] ?? false
+                      return (
+                        <Chip
+                          key={dept}
+                          label={dept}
+                          onClick={() => setFilters(prev => ({
+                            ...prev,
+                            departments: { ...(prev.departments as Record<string, boolean>), [dept]: !checked }
+                          }))}
+                          sx={{
+                            fontWeight: 600,
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            border: '1.5px solid',
+                            borderColor: checked ? '#020291' : '#e2e8f0',
+                            background: checked ? '#EEF0FF' : 'white',
+                            color: checked ? '#020291' : '#64748b',
+                            cursor: 'pointer',
+                            '&:hover': { background: '#EEF0FF', borderColor: '#020291' }
+                          }}
+                        />
+                      )
+                    })}
+                  </Box>
+                  <Divider sx={{ mb: 2.5 }} />
+                </>
+              )
+            })()}
+
+            {/* Min Score Section */}
+            <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', mb: 1 }}>
+              Minimum Score
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Slider
                 value={filters.minScore}
                 onChange={(_, value) => setFilters(prev => ({ ...prev, minScore: value as number }))}
                 min={0}
                 max={100}
                 step={5}
-                marks={[
-                  { value: 0, label: '0%' },
-                  { value: 50, label: '50%' },
-                  { value: 100, label: '100%' }
-                ]}
+                sx={{
+                  color: '#020291',
+                  '& .MuiSlider-thumb': { width: 18, height: 18 },
+                }}
               />
+              <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#020291', minWidth: '40px' }}>
+                {filters.minScore}%
+              </Typography>
             </Box>
           </DialogContent>
-          <DialogActions sx={{ padding: '0 24px 24px 24px', gap: '12px' }}>
+          <DialogActions sx={{ padding: '12px 24px 20px', gap: '10px' }}>
             <Button
               onClick={handleClearFilter}
               sx={{
                 color: '#64748b',
                 textTransform: 'none',
-                fontWeight: 600
+                fontWeight: 600,
+                fontSize: '13px',
+                borderRadius: '10px',
+                border: '1.5px solid #e2e8f0',
+                px: 2.5,
+                '&:hover': { background: '#f8fafc', borderColor: '#cbd5e1' }
               }}
             >
               Clear All
@@ -1981,12 +2049,13 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               onClick={handleCloseFilter}
               variant="contained"
               sx={{
-                background: '#6366f1',
+                background: '#020291',
                 textTransform: 'none',
                 fontWeight: 600,
-                '&:hover': {
-                  background: '#5855eb'
-                }
+                fontSize: '13px',
+                borderRadius: '10px',
+                px: 3,
+                '&:hover': { background: '#01016d' }
               }}
             >
               Apply Filters
@@ -2054,7 +2123,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 borderBottom: '1px solid #e2e8f0'
               }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Avatar sx={{ width: 48, height: 48, background: '#020291', fontWeight: 600 }}>
+                  <Avatar sx={{ width: 48, height: 48, background: getAvatarColor(detailCandidate.name || 'C'), fontWeight: 600 }}>
                     {detailCandidate.name?.charAt(0).toUpperCase() || 'C'}
                   </Avatar>
                   <Box>
@@ -2173,8 +2242,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                     }}
                     variant="contained"
                     sx={{
-                      background: 'transparant',
-                      textTransform: 'none',
+                      background:'#EEF0FF',
                       fontWeight: 600,
                       '&:hover': { background: '#EEF0FF' }
                     }}
