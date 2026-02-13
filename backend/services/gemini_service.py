@@ -73,19 +73,24 @@ Generate {total_questions} questions with a good mix:
 - 20% conceptual questions about core concepts
 - 20% behavioral questions about teamwork and problem-solving
 
-CRITICAL: For each question, write the ACTUAL factual answer (3-5 sentences), NOT a rubric or description of what a good answer should contain.
+CRITICAL: For each sample_answer, answer as a senior engineer with deep expertise. Your answer MUST:
+- Explain the core concept clearly
+- Mention specific tools, frameworks, or standards by name
+- Include a real-world example or scenario
+- Mention best practices and edge cases
+- Be 4-6 sentences of actual factual content
 
 BAD example (rubric - DO NOT do this):
 "A good answer should explain the core concepts of Python, provide practical examples, and demonstrate understanding."
 
 GOOD example (real answer - DO THIS):
-"Python is a high-level, interpreted programming language known for its readability and versatility. It supports multiple paradigms including OOP and functional programming. In web development, frameworks like Django and Flask are commonly used to build REST APIs and full-stack applications. Python's extensive standard library and package ecosystem (pip) make it ideal for rapid prototyping and production systems."
+"Python is a high-level, interpreted language built for readability, supporting OOP and functional paradigms. In web development, Django provides a batteries-included framework with ORM and admin panel, while Flask/FastAPI offer lightweight alternatives — FastAPI being the fastest due to ASGI and Pydantic validation. For example, a REST API built with FastAPI can handle ~15k req/sec vs Flask's ~2k. Best practices include using virtual environments (venv/poetry), type hints for maintainability, and pytest for testing. Edge case: Python's GIL limits true CPU parallelism, so use multiprocessing or async for I/O-bound tasks."
 
 Respond ONLY with a JSON array in this exact format:
 [
   {{
     "question_text": "The interview question",
-    "sample_answer": "The actual factual answer a strong candidate would give (3-5 sentences)",
+    "sample_answer": "Detailed factual answer with tools, examples, and best practices (4-6 sentences)",
     "question_type": "technical|scenario|conceptual|behavioral",
     "difficulty": "basic|intermediate|advanced",
     "skill_focus": "the primary skill being tested or null"
