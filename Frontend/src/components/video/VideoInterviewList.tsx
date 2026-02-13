@@ -155,7 +155,7 @@ const VideoInterviewList: React.FC = () => {
           <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b', fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Video Interviews</Typography>
           <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Filter Button */}
-            <Badge badgeContent={activeFilterCount} color="warning">
+            <Badge badgeContent={activeFilterCount} sx={{ '& .MuiBadge-badge': { backgroundColor: '#020291', color: '#fff' } }}>
               <Button
                 variant="outlined"
                 startIcon={<FilterList />}
@@ -163,7 +163,7 @@ const VideoInterviewList: React.FC = () => {
                 sx={{
                   borderColor: filterOpen || activeFilterCount > 0 ? '#020291' : '#e2e8f0',
                   color: filterOpen || activeFilterCount > 0 ? '#020291' : '#64748b',
-                  backgroundColor: '#fff',
+                  backgroundColor: 'trasperant',
                   textTransform: 'none',
                   fontWeight: 500,
                   borderRadius: '8px',

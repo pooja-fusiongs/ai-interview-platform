@@ -85,13 +85,13 @@ const CandidateProfileEdit: React.FC = () => {
       try {
         // Show loading state
         toast.loading('Uploading profile image...')
-        
+
         // Upload image to server
         const imageUrl = await candidateProfileService.uploadProfileImage(file)
-        
+
         // Update profile state with the server URL (store relative URL)
         handleInputChange('profile_image', imageUrl)
-        
+
         // Show success message
         toast.dismiss()
         toast.success('Profile image updated successfully!')
@@ -116,13 +116,13 @@ const CandidateProfileEdit: React.FC = () => {
     try {
       // Show loading state
       toast.loading('Uploading resume...')
-      
+
       // Upload resume to server
       const resumeUrl = await candidateProfileService.uploadResume(file)
-      
+
       // Update profile state with the server URL
       handleInputChange('resume_url', resumeUrl)
-      
+
       // Show success message
       toast.dismiss()
       toast.success('Resume uploaded successfully!')
@@ -247,7 +247,7 @@ const CandidateProfileEdit: React.FC = () => {
 
   const handleChangePassword = async () => {
     console.log('🔐 Password change initiated');
-    
+
     // Check if user is authenticated
     const token = localStorage.getItem('token');
     if (!token) {
@@ -255,7 +255,7 @@ const CandidateProfileEdit: React.FC = () => {
       return;
     }
     console.log('🔑 Token found:', token ? 'Yes' : 'No');
-    
+
     // Get current user info for debugging
     try {
       const currentUser = await candidateProfileService.getCurrentUser();
@@ -263,7 +263,7 @@ const CandidateProfileEdit: React.FC = () => {
     } catch (e) {
       console.log('❌ Could not get current user:', e);
     }
-    
+
     if (!oldPassword || !newPassword) {
       toast.error('Please fill in both password fields')
       return
@@ -283,7 +283,7 @@ const CandidateProfileEdit: React.FC = () => {
       console.log('🔐 Calling changePassword service...');
       console.log('🔐 Old password length:', oldPassword.length);
       console.log('🔐 New password length:', newPassword.length);
-      
+
       setChangingPassword(true)
       await candidateProfileService.changePassword(oldPassword, newPassword)
       console.log('✅ Password changed successfully');
@@ -295,9 +295,9 @@ const CandidateProfileEdit: React.FC = () => {
       console.error('❌ Error response:', error.response);
       console.error('❌ Error status:', error.response?.status);
       console.error('❌ Error data:', error.response?.data);
-      
+
       let errorMessage = 'Failed to change password';
-      
+
       if (error.response?.status === 401) {
         errorMessage = 'You are not authenticated. Please log in again.';
       } else if (error.response?.status === 400) {
@@ -307,7 +307,7 @@ const CandidateProfileEdit: React.FC = () => {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       toast.error(errorMessage)
     } finally {
       setChangingPassword(false)
@@ -513,15 +513,15 @@ const CandidateProfileEdit: React.FC = () => {
                   label="Job Type"
                   sx={{
                     borderRadius: 3,
-                    '& .MuiOutlinedInput-notchedOutline': { 
-                      borderColor: '#e2e8f0 !important' 
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#e2e8f0 !important'
                     },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { 
-                      borderColor: 'primary.main!important' 
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main!important'
                     },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { 
-                      borderColor: 'primary.main!important', 
-                      borderWidth: '2px !important' 
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main!important',
+                      borderWidth: '2px !important'
                     },
                     '& .MuiSelect-select:focus': {
                       backgroundColor: 'transparent'
@@ -536,120 +536,120 @@ const CandidateProfileEdit: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid sm={12} xs={12} sx={{p:"10px"}}>
-                 {/* Resume Upload Section */}
-                    <Box sx={{}}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                       
-                        <Box>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#1e293b' }}>
-                            Resume
-                          </Typography>
-                          
-                        </Box>
-                      </Box>
+            <Grid sm={12} xs={12} sx={{ p: "10px" }}>
+              {/* Resume Upload Section */}
+              <Box sx={{}}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
 
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx"
-                        onChange={handleResumeUpload}
-                        style={{ display: 'none' }}
-                        id="resume-upload-main"
-                      />
-                      
-                      {/* Drag and Drop Area */}
-                      <Box
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.style.borderColor = '#020291'
-                          e.currentTarget.style.backgroundColor = '#f0f9ff'
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                      Resume
+                    </Typography>
+
+                  </Box>
+                </Box>
+
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  style={{ display: 'none' }}
+                  id="resume-upload-main"
+                />
+
+                {/* Drag and Drop Area */}
+                <Box
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.currentTarget.style.borderColor = '#020291'
+                    e.currentTarget.style.backgroundColor = '#f0f9ff'
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault()
+                    e.currentTarget.style.borderColor = '#e2e8f0'
+                    e.currentTarget.style.backgroundColor = '#fafbfc'
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.currentTarget.style.borderColor = '#e2e8f0'
+                    e.currentTarget.style.backgroundColor = '#fafbfc'
+                    const files = e.dataTransfer.files
+                    if (files.length > 0) {
+                      const file = files[0]
+                      if (file.type === 'application/pdf' ||
+                        file.type === 'application/msword' ||
+                        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                        // Use the direct file upload function
+                        uploadResumeFile(file)
+                      } else {
+                        toast.error('Please upload a PDF or Word document')
+                      }
+                    }
+                  }}
+                  onClick={() => document.getElementById('resume-upload-main')?.click()}
+                  sx={{
+                    border: profile.resume_url ? '2px solid #bbf7d0' : '2px dashed #e2e8f0',
+                    borderRadius: 3,
+                    bgcolor: profile.resume_url ? '#f0fdf4' : '#fafbfc',
+                    p: 4,
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    mb: 2,
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      borderColor: profile.resume_url ? '#16a34a' : '#0ea5e9',
+                      bgcolor: profile.resume_url ? '#dcfce7' : '#f0f9ff'
+                    }
+                  }}
+                >
+                  {profile.resume_url ? (
+                    // Success state - show inside the box
+                    <>
+                      <Description sx={{ fontSize: 48, color: '#16a34a', mb: 2 }} />
+                      <Typography variant="h6" sx={{ color: '#16a34a', mb: 1, fontWeight: 600 }}>
+                        ✓ Resume uploaded successfully
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#16a34a', mb: 2 }}>
+                        Click to update or drag a new file
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          window.open(`${API_BASE_URL}${profile.resume_url}`, '_blank')
                         }}
-                        onDragLeave={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.style.borderColor = '#e2e8f0'
-                          e.currentTarget.style.backgroundColor = '#fafbfc'
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.style.borderColor = '#e2e8f0'
-                          e.currentTarget.style.backgroundColor = '#fafbfc'
-                          const files = e.dataTransfer.files
-                          if (files.length > 0) {
-                            const file = files[0]
-                            if (file.type === 'application/pdf' || 
-                                file.type === 'application/msword' || 
-                                file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                              // Use the direct file upload function
-                              uploadResumeFile(file)
-                            } else {
-                              toast.error('Please upload a PDF or Word document')
-                            }
-                          }
-                        }}
-                        onClick={() => document.getElementById('resume-upload-main')?.click()}
                         sx={{
-                          border: profile.resume_url ? '2px solid #bbf7d0' : '2px dashed #e2e8f0',
-                          borderRadius: 3,
-                          bgcolor: profile.resume_url ? '#f0fdf4' : '#fafbfc',
-                          p: 4,
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                          mb: 2,
-                          transition: 'all 0.2s ease',
+                          textTransform: 'none',
+                          color: '#16a34a',
+                          borderColor: '#16a34a',
                           '&:hover': {
-                            borderColor: profile.resume_url ? '#16a34a' : '#0ea5e9',
-                            bgcolor: profile.resume_url ? '#dcfce7' : '#f0f9ff'
+                            bgcolor: '#dcfce7',
+                            borderColor: '#16a34a'
                           }
                         }}
                       >
-                        {profile.resume_url ? (
-                          // Success state - show inside the box
-                          <>
-                            <Description sx={{ fontSize: 48, color: '#16a34a', mb: 2 }} />
-                            <Typography variant="h6" sx={{ color: '#16a34a', mb: 1, fontWeight: 600 }}>
-                              ✓ Resume uploaded successfully
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#16a34a', mb: 2 }}>
-                              Click to update or drag a new file
-                            </Typography>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(`${API_BASE_URL}${profile.resume_url}`, '_blank')
-                              }}
-                              sx={{ 
-                                textTransform: 'none',
-                                color: '#16a34a',
-                                borderColor: '#16a34a',
-                                '&:hover': { 
-                                  bgcolor: '#dcfce7',
-                                  borderColor: '#16a34a'
-                                }
-                              }}
-                            >
-                              View Resume
-                            </Button>
-                          </>
-                        ) : (
-                          // Default state - show upload prompt
-                          <>
-                            <CloudUpload sx={{ fontSize: 48, color: '#94a3b8', mb: 2 }} />
-                            <Typography variant="h6" sx={{ color: '#374151', mb: 1, fontWeight: 600 }}>
-                              Click to browse or drag and drop
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#94a3b8', mb: 1 }}>
-                              Upload your resume here
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#94a3b8', fontSize: '0.75rem' }}>
-                              Supported: PDF, DOC, DOCX (Max 10MB)
-                            </Typography>
-                          </>
-                        )}
-                      </Box>
-                      
-                    </Box>
+                        View Resume
+                      </Button>
+                    </>
+                  ) : (
+                    // Default state - show upload prompt
+                    <>
+                      <CloudUpload sx={{ fontSize: 48, color: '#EEF0FF', mb: 2 }} />
+                      <Typography variant="h6" sx={{ color: '#374151', mb: 1, fontWeight: 600 }}>
+                        Click to browse or drag and drop
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#94a3b8', mb: 1 }}>
+                        Upload your resume here
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+                        Supported: PDF, DOC, DOCX (Max 10MB)
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+
+              </Box>
             </Grid>
           </Grid>
         </Box>
@@ -665,7 +665,7 @@ const CandidateProfileEdit: React.FC = () => {
                 onChange={(e) => handleInputChange('has_internship', e.target.checked)}
                 sx={{
                   '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#64748b',
+                    color: '#020291',
                   },
                   '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
                     backgroundColor: '#64748b',
@@ -686,12 +686,12 @@ const CandidateProfileEdit: React.FC = () => {
               variant="outlined"
               sx={{
                 borderRadius: 3,
-                borderColor: '#d1fae5',
-                bgcolor: '#f0fdf4',
+                borderColor: '#020291',
+                bgcolor: '#EEF0FF',
                 p: 3
               }}
             >
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: '#065f46' }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: '#020291' }}>
                 Experience Details
               </Typography>
 
@@ -948,30 +948,7 @@ const CandidateProfileEdit: React.FC = () => {
             </Box>
           ))}
 
-          {/* Add Education Button */}
-          <Box sx={{ textAlign: 'center', mt: 3 }}>
-            <Button
-              startIcon={<Add />}
-              onClick={addEducation}
-              variant="outlined"
-              sx={{
-                textTransform: 'none',
-                borderRadius: 3,
-                borderColor: '#6366f1',
-                color: '#6366f1',
-                fontWeight: 600,
-                px: 4,
-                py: 1.5,
-                '&:hover': { 
-                  bgcolor: '#f0f9ff',
-                  borderColor: '#4f46e5',
-                  color: '#4f46e5'
-                }
-              }}
-            >
-              Add Education
-            </Button>
-          </Box>
+       
 
           {profile.education.length === 0 && (
             <Paper
@@ -1024,7 +1001,7 @@ const CandidateProfileEdit: React.FC = () => {
               width: 40,
               height: 40,
               borderRadius: 2,
-              bgcolor: '#fef3c7',
+              bgcolor: '#EEF0FF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
@@ -1045,9 +1022,9 @@ const CandidateProfileEdit: React.FC = () => {
             <Grid container spacing={2}>
               {profile.interview_questions.map((question, index) => (
                 <Grid xs={12} key={question.id}>
-                  <Card sx={{ 
-                    p: 3, 
-                    borderRadius: 3, 
+                  <Card sx={{
+                    p: 3,
+                    borderRadius: 3,
                     border: '1px solid #e2e8f0',
                     '&:hover': { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }
                   }}>
@@ -1059,8 +1036,8 @@ const CandidateProfileEdit: React.FC = () => {
                         <Chip
                           label={question.question_type}
                           size="small"
-                          sx={{ 
-                            bgcolor: '#f1f5f9', 
+                          sx={{
+                            bgcolor: '#f1f5f9',
                             color: '#475569',
                             fontSize: '10px'
                           }}
@@ -1068,7 +1045,7 @@ const CandidateProfileEdit: React.FC = () => {
                         <Chip
                           label={question.difficulty}
                           size="small"
-                          sx={{ 
+                          sx={{
                             bgcolor: question.difficulty === 'advanced' ? '#fef2f2' : question.difficulty === 'intermediate' ? '#fef3c7' : '#f0fdf4',
                             color: question.difficulty === 'advanced' ? '#dc2626' : question.difficulty === 'intermediate' ? '#020291' : '#16a34a',
                             fontSize: '10px'
@@ -1078,8 +1055,8 @@ const CandidateProfileEdit: React.FC = () => {
                           <Chip
                             label="Approved"
                             size="small"
-                            sx={{ 
-                              bgcolor: '#f0fdf4', 
+                            sx={{
+                              bgcolor: '#f0fdf4',
                               color: '#16a34a',
                               fontSize: '10px'
                             }}
@@ -1140,9 +1117,9 @@ const CandidateProfileEdit: React.FC = () => {
             <Grid container spacing={2}>
               {profile.interview_transcripts.map((transcript, index) => (
                 <Grid xs={12} key={transcript.id}>
-                  <Card sx={{ 
-                    p: 3, 
-                    borderRadius: 3, 
+                  <Card sx={{
+                    p: 3,
+                    borderRadius: 3,
                     border: '1px solid #e2e8f0',
                     '&:hover': { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }
                   }}>
@@ -1154,8 +1131,8 @@ const CandidateProfileEdit: React.FC = () => {
                         <Chip
                           label={transcript.interview_mode}
                           size="small"
-                          sx={{ 
-                            bgcolor: '#f1f5f9', 
+                          sx={{
+                            bgcolor: '#f1f5f9',
                             color: '#475569',
                             fontSize: '10px'
                           }}
@@ -1163,7 +1140,7 @@ const CandidateProfileEdit: React.FC = () => {
                         <Chip
                           label={transcript.status}
                           size="small"
-                          sx={{ 
+                          sx={{
                             bgcolor: transcript.status === 'scored' ? '#f0fdf4' : '#fef3c7',
                             color: transcript.status === 'scored' ? '#16a34a' : '#020291',
                             fontSize: '10px'
@@ -1173,7 +1150,7 @@ const CandidateProfileEdit: React.FC = () => {
                           <Chip
                             label={`Score: ${transcript.score}%`}
                             size="small"
-                            sx={{ 
+                            sx={{
                               bgcolor: transcript.score >= 80 ? '#f0fdf4' : transcript.score >= 60 ? '#fef3c7' : '#fef2f2',
                               color: transcript.score >= 80 ? '#16a34a' : transcript.score >= 60 ? '#020291' : '#dc2626',
                               fontSize: '10px',
@@ -1187,8 +1164,8 @@ const CandidateProfileEdit: React.FC = () => {
                       {transcript.created_at && new Date(transcript.created_at).toLocaleDateString()}
                     </Typography>
                     <Typography variant="body2" sx={{ color: '#374151', lineHeight: 1.6 }}>
-                      {transcript.transcript_text.length > 200 
-                        ? `${transcript.transcript_text.substring(0, 200)}...` 
+                      {transcript.transcript_text.length > 200
+                        ? `${transcript.transcript_text.substring(0, 200)}...`
                         : transcript.transcript_text}
                     </Typography>
                   </Card>
@@ -1333,8 +1310,8 @@ const CandidateProfileEdit: React.FC = () => {
                     style={{ display: 'none' }}
                     id="profile-image-upload"
                   />
-              
-              
+
+
                 </Box>
 
                 {/* Account Management Section */}
@@ -1372,8 +1349,8 @@ const CandidateProfileEdit: React.FC = () => {
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 3,
                           '& fieldset': { borderColor: '#e2e8f0' },
-                          '&:hover fieldset': { borderColor: '#ef4444' },
-                          '&.Mui-focused fieldset': { borderColor: '#ef4444', borderWidth: 2 }
+                          '&:hover fieldset': { borderColor: '#020291' },
+                          '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                         }
                       }}
                     />
@@ -1387,8 +1364,8 @@ const CandidateProfileEdit: React.FC = () => {
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 3,
                           '& fieldset': { borderColor: '#e2e8f0' },
-                          '&:hover fieldset': { borderColor: '#ef4444' },
-                          '&.Mui-focused fieldset': { borderColor: '#ef4444', borderWidth: 2 }
+                          '&:hover fieldset': { borderColor: '#020291' },
+                          '&.Mui-focused fieldset': { borderColor: '#020291', borderWidth: 2 }
                         }
                       }}
                     />
@@ -1400,14 +1377,12 @@ const CandidateProfileEdit: React.FC = () => {
                       sx={{
                         textTransform: 'none',
                         borderRadius: 3,
-                        bgcolor: '#ef4444',
+                        bgcolor: '#020291',
                         fontWeight: 600,
                         py: 1.5,
-                        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
                         '&:hover': {
-                          bgcolor: '#dc2626',
+                          bgcolor: '#020291',
                           transform: 'translateY(-1px)',
-                          boxShadow: '0 6px 16px rgba(239, 68, 68, 0.4)'
                         },
                         '&:disabled': {
                           bgcolor: '#9ca3af',
@@ -1420,7 +1395,7 @@ const CandidateProfileEdit: React.FC = () => {
                       {changingPassword ? 'Updating Password...' : 'Update Password'}
                     </Button>
 
-                 
+
                   </Stack>
                 </Box>
               </Card>
@@ -1519,9 +1494,8 @@ const CandidateProfileEdit: React.FC = () => {
                     startIcon={<Save />}
                     size="large"
                     sx={{
-                      background: 'rgba(2, 2, 145, 0.1)',
-                      color: '#020291',
-                      border: '2px solid #f59f0baf',
+                      background: '#020291',
+                      color: '#ffffff',
                       padding: '10px 16px',
                       borderRadius: '8px',
                       fontSize: '14px',
@@ -1532,6 +1506,12 @@ const CandidateProfileEdit: React.FC = () => {
                         borderColor: '#020291',
                         transform: 'translateY(-1px)',
                         boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                      },
+                      '&.Mui-disabled': {
+                        background: '#020291',
+                        color: '#ffffff',
+                        opacity: 0.7,
+                        cursor: 'not-allowed'
                       }
                     }}
                   >

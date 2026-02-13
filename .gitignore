@@ -22,3 +22,13 @@ nul
 
 # Claude Code
 .claude/
+
+# Git backup
+.git_backup/
+
+# Server logs
+backend/server.log
+
+
+# Git backup                                                                
+git_backup/                                                                
