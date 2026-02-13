@@ -1,0 +1,24 @@
+# Ignore test folder
+Test/
+.vscode/
+
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# SQLite database
+*.db
+
+# Uploaded files
+backend/uploads/
+
+# Windows artifacts
+nul
+
+# Production env
+.env.production
+
+# Claude Code
+.claude/

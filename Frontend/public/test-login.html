@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Login - No React</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #ff9a56;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Test Login (Pure HTML/JS)</h1>
+    
+    <div>
+        <input type="email" id="username" placeholder="Email" value="test@example.com">
+        <input type="password" id="password" placeholder="Password" value="password123">
+        <button id="loginBtn" onclick="testLogin()">Login</button>
+        <button onclick="createTestUser()">Create Test User</button>
+    </div>
+    
+    <div id="result"></div>
+
+    <script>
+        console.log('🚀 Test page loaded');
+        
+        let isLoading = false;
+        
+        function showResult(message, isError = false) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = message;
+            resultDiv.className = isError ? 'error' : 'success';
+            console.log(isError ? '❌' : '✅', message);
+        }
+        
+        async function createTestUser() {
+            if (isLoading) return;
+            
+            console.log('👤 Creating test user...');
+            isLoading = true;
+            document.getElementById('loginBtn').disabled = true;
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'test@example.com',
+                        email: 'test@example.com',
+                        password: 'password123',
+                        company: 'Test Company',
+                        role: 'candidate'
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('📥 Signup response:', data);
+                
+                if (response.ok) {
+                    showResult('✅ Test user created successfully!');
+                } else {
+                    showResult('❌ Signup failed: ' + (data.detail || 'Unknown error'), true);
+                }
+            } catch (error) {
+                console.error('❌ Signup error:', error);
+                showResult('❌ Network error: ' + error.message, true);
+            } finally {
+                isLoading = false;
+                document.getElementById('loginBtn').disabled = false;
+            }
+        }
+        
+        async function testLogin() {
+            if (isLoading) return;
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            console.log('🔐 Starting login test...');
+            console.log('📊 Username:', username);
+            console.log('📊 Password:', password ? '***' : 'empty');
+            
+            if (!username || !password) {
+                showResult('❌ Please fill in all fields', true);
+                return;
+            }
+            
+            isLoading = true;
+            document.getElementById('loginBtn').disabled = true;
+            document.getElementById('loginBtn').innerHTML = 'Logging in...';
+            
+            try {
+                console.log('🌐 Making login request...');
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                console.log('📡 Response status:', response.status);
+                const data = await response.json();
+                console.log('📥 Login response:', data);
+                
+                if (response.ok && data.access_token) {
+                    showResult('✅ Login successful! Token: ' + data.access_token.substring(0, 20) + '...');
+                    localStorage.setItem('token', data.access_token);
+                } else {
+                    showResult('❌ Login failed: ' + (data.detail || 'Invalid credentials'), true);
+                }
+            } catch (error) {
+                console.error('❌ Login error:', error);
+                showResult('❌ Network error: ' + error.message, true);
+            } finally {
+                isLoading = false;
+                document.getElementById('loginBtn').disabled = false;
+                document.getElementById('loginBtn').innerHTML = 'Login';
+            }
+        }
+        
+        // Global error handler
+        window.addEventListener('error', function(event) {
+            console.error('🚨 Global error:', event.error);
+            console.error('🚨 Message:', event.message);
+            console.error('🚨 Filename:', event.filename);
+            console.error('🚨 Line:', event.lineno);
+        });
+        
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('🚨 Unhandled promise rejection:', event.reason);
+        });
+        
+        console.log('✅ All event listeners added');
+    </script>
+</body>
+</html>

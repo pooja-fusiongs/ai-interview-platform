@@ -1,0 +1,6 @@
+0000000000000000000000000000000000000000 c76d1c1b28b85b82cce93bcf50ba6dadd8931797 pooja-fusiongs <pooja@fusiongs.com> 1770112156 +0530	WIP on main: 2de7f07 Add recruiter-driven interview flow with Gemini LLM integration
+c76d1c1b28b85b82cce93bcf50ba6dadd8931797 1c2d0f1f2cc2bb6f277c8daa924522421f657cb5 pooja-fusiongs <pooja@fusiongs.com> 1770113270 +0530	WIP on main: e9b8605 Fix ATS sync import and Vite proxy configuration
+1c2d0f1f2cc2bb6f277c8daa924522421f657cb5 384772c0b231c58083ccdc841644c92478b945b9 pooja-fusiongs <pooja@fusiongs.com> 1770123888 +0530	WIP on main: e9b8605 Fix ATS sync import and Vite proxy configuration
+384772c0b231c58083ccdc841644c92478b945b9 2efd1025a22399882ad006875655d2ee3641142f pooja-fusiongs <pooja@fusiongs.com> 1770211189 +0530	WIP on main: 5284eb6 feat: Implement core recruitment platform features including candidate management, video interviews, ATS integration, GDPR compliance, fraud detection, and performance feedback.
+2efd1025a22399882ad006875655d2ee3641142f 7c3ff100cf6eebc2ee12f9ea28aa95864f18f166 pooja-fusiongs <pooja@fusiongs.com> 1770265396 +0530	On main: candidate
+7c3ff100cf6eebc2ee12f9ea28aa95864f18f166 2b935416f25991f4eeab5c4f18f66d6d64c76278 pooja-fusiongs <pooja@fusiongs.com> 1770891221 +0530	WIP on main: c44da9b feat: Add Recharts PieChart & BarChart to Dashboard with dynamic data
