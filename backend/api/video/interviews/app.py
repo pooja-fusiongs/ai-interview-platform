@@ -7,7 +7,7 @@ Zoom service for meeting creation/deletion and checks for associated
 fraud analysis records.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import List
@@ -34,6 +34,7 @@ from schemas import (
     VideoInterviewResponse,
     VideoInterviewUpdate,
     VideoInterviewListResponse,
+    VideoInterviewEndRequest,
 )
 from api.auth.jwt_handler import get_current_active_user, require_any_role
 from services.zoom_service import create_zoom_meeting, delete_zoom_meeting
@@ -284,7 +285,7 @@ def schedule_video_interview(
             interviewer_id=interviewer_id,
             scheduled_at=body.scheduled_at,
             duration_minutes=body.duration_minutes,
-            status=VideoInterviewStatus.SCHEDULED,
+            status=VideoInterviewStatus.SCHEDULED.value,
         )
 
         if zoom_data:
@@ -566,7 +567,7 @@ def cancel_video_interview(
     if vi.zoom_meeting_id:
         delete_zoom_meeting(vi.zoom_meeting_id)
 
-    vi.status = VideoInterviewStatus.CANCELLED
+    vi.status = VideoInterviewStatus.CANCELLED.value
     db.commit()
 
     return {"message": "Video interview cancelled", "id": video_id}
@@ -590,7 +591,7 @@ def start_video_interview(
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
-    vi.status = VideoInterviewStatus.IN_PROGRESS
+    vi.status = VideoInterviewStatus.IN_PROGRESS.value
     vi.started_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(vi)
@@ -607,6 +608,7 @@ def start_video_interview(
 )
 def end_video_interview(
     video_id: int,
+    body: VideoInterviewEndRequest = VideoInterviewEndRequest(),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -617,7 +619,19 @@ def end_video_interview(
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
-    vi.status = VideoInterviewStatus.COMPLETED
+    max_participants = body.max_participants if body else None
+    print(f"[end_interview] video_id={video_id}, max_participants={max_participants}")
+
+    # If only 1 participant (or 0), candidate never joined — mark as no-show
+    if max_participants is not None and max_participants < 2:
+        print(f"[end_interview] No-show detected: max_participants={max_participants}, no recording")
+        vi.status = VideoInterviewStatus.NO_SHOW.value
+        vi.ended_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(vi)
+        return _build_response(vi, db)
+
+    vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
 
     # Generate transcript — try REAL transcription first, fall back to mock
@@ -916,7 +930,7 @@ def create_demo_video_interview(
         interviewer_id=current_user.id,
         scheduled_at=scheduled_time,
         duration_minutes=30,
-        status=VideoInterviewStatus.SCHEDULED,
+        status=VideoInterviewStatus.SCHEDULED.value,
         zoom_meeting_url=f"https://zoom.us/j/demo{random.randint(1000000, 9999999)}",
         zoom_passcode=str(random.randint(100000, 999999)),
     )
@@ -1020,6 +1034,8 @@ def submit_ai_interview_answers(
     """Submit answers from AI interview and generate score."""
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus, JobApplication
     from services.groq_service import score_transcript_with_groq
+    from services.gemini_service import score_transcript_with_gemini
+    import config
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -1063,7 +1079,7 @@ def submit_ai_interview_answers(
     vi.transcript = transcript_text
     vi.transcript_generated_at = datetime.now(timezone.utc)
     vi.transcript_source = "recording"  # AI interview answers come from live session
-    vi.status = VideoInterviewStatus.COMPLETED
+    vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
 
     # Prepare questions for scoring
@@ -1076,9 +1092,21 @@ def submit_ai_interview_answers(
         for q in questions
     ]
 
-    # Score with Groq
+    # Score with Groq (primary), Gemini (fallback)
     score_result = None
-    llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
+    llm_result = None
+    try:
+        if config.GROQ_API_KEY:
+            llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
+    except Exception as e:
+        print(f"[WARN] Groq scoring failed: {e}")
+
+    if not llm_result:
+        try:
+            if config.GEMINI_API_KEY:
+                llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+        except Exception as e:
+            print(f"[WARN] Gemini scoring also failed: {e}")
 
     if llm_result:
         score_result = {
@@ -1108,8 +1136,7 @@ def submit_ai_interview_answers(
             db.flush()
 
         session.transcript_text = transcript_text
-        raw_score = float(llm_result.get("overall_score", 0))
-        session.overall_score = raw_score / 10.0 if raw_score > 10 else raw_score
+        session.overall_score = float(llm_result.get("overall_score", 0))
         rec_str = llm_result.get("recommendation", "reject")
         session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
         session.strengths = llm_result.get("strengths", "")
@@ -1167,6 +1194,7 @@ def upload_transcript_and_score(
     """Upload transcript text and generate score using AI."""
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus
     from services.groq_service import score_transcript_with_groq
+    from services.gemini_service import score_transcript_with_gemini
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -1294,21 +1322,34 @@ def upload_transcript_and_score(
             for q in approved_questions
         ]
 
-        # Check if GROQ_API_KEY is configured
+        # Score with Groq (primary), Gemini (fallback)
         import config
-        if not config.GROQ_API_KEY:
-            scoring_error = "GROQ_API_KEY not configured. Please add it to .env and restart the backend server."
-            print(f"❌ {scoring_error}")
-        else:
-            # Score with Groq
-            print(f"🤖 Calling Groq API to score transcript with {len(questions_for_scoring)} questions...")
+
+        # Try Groq first (free, fast)
+        if config.GROQ_API_KEY:
             try:
+                print(f"[AI] Scoring transcript with Groq API (primary)...")
                 llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
-                print(f"🤖 Groq result: {'Success' if llm_result else 'Failed - returned None'}")
+                if llm_result:
+                    print(f"[OK] Groq scoring succeeded")
             except Exception as e:
-                scoring_error = f"Groq API error: {str(e)}"
-                print(f"❌ {scoring_error}")
+                print(f"[WARN] Groq scoring failed: {e}")
                 llm_result = None
+
+        # Fallback to Gemini
+        if not llm_result and config.GEMINI_API_KEY:
+            try:
+                print(f"[AI] Trying Gemini (fallback)...")
+                llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+                if llm_result:
+                    print(f"[OK] Gemini scoring succeeded")
+            except Exception as e:
+                print(f"[WARN] Gemini scoring also failed: {e}")
+                llm_result = None
+
+        if not llm_result:
+            scoring_error = "Both Groq and Gemini scoring failed. Check API keys in .env."
+            print(f"[WARN] {scoring_error}")
 
         # Always create or find the interview session (even if scoring fails)
         # Check via vi.session_id first (created by end_interview)
@@ -1347,9 +1388,7 @@ def upload_transcript_and_score(
         session.transcript_text = transcript_text
 
         if llm_result:
-            raw_score = float(llm_result.get("overall_score", 0))
-            # Cap to 0-10 range (LLM sometimes returns 0-100 scale)
-            session.overall_score = raw_score / 10.0 if raw_score > 10 else raw_score
+            session.overall_score = float(llm_result.get("overall_score", 0))
             rec_str = llm_result.get("recommendation", "reject")
             session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
             session.strengths = llm_result.get("strengths", "")
@@ -1410,16 +1449,12 @@ def upload_transcript_and_score(
                 else:
                     answer.answer_text = extracted or "Answer not extracted from transcript"
 
-                # Cap scores to 0-10 range (LLM sometimes returns 0-100)
-                def cap_score(val, max_val=10.0):
-                    s = float(val or 0)
-                    return s / 10.0 if s > max_val else s
-
-                answer.score = cap_score(pq.get("score", 0))
-                answer.relevance_score = cap_score(pq.get("relevance_score", 0))
-                answer.completeness_score = cap_score(pq.get("completeness_score", 0))
-                answer.accuracy_score = cap_score(pq.get("accuracy_score", 0))
-                answer.clarity_score = cap_score(pq.get("clarity_score", 0))
+                # Store scores on 0-100 scale (internal standard)
+                answer.score = float(pq.get("score", 0))
+                answer.relevance_score = float(pq.get("relevance_score", 0))
+                answer.completeness_score = float(pq.get("completeness_score", 0))
+                answer.accuracy_score = float(pq.get("accuracy_score", 0))
+                answer.clarity_score = float(pq.get("clarity_score", 0))
                 answer.feedback = pq.get("feedback", "")
         else:
             # Scoring failed but still save session with transcript

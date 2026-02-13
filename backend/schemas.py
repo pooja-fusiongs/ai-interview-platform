@@ -630,6 +630,9 @@ class VideoInterviewResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class VideoInterviewEndRequest(BaseModel):
+    max_participants: Optional[int] = None
+
 class VideoInterviewUpdate(BaseModel):
     status: Optional[str] = None
     scheduled_at: Optional[datetime] = None

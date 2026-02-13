@@ -571,7 +571,7 @@ const AIInterviewRoom: React.FC = () => {
                     <Box sx={{
                       width: 90, height: 90,
                       borderRadius: '50%',
-                      background: scoreResult.overall_score >= 75 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+                      background: scoreResult.overall_score >= 75 ? '#020291' :
                                  scoreResult.overall_score >= 50 ? 'linear-gradient(135deg, primary.main0%, #020291 100%)' :
                                  'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                       display: 'flex',
@@ -900,7 +900,7 @@ const AIInterviewRoom: React.FC = () => {
                   disabled={completing}
                   sx={{
                     background: currentIndex === questions.length - 1 ?
-                      'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+                      '#020291' :
                       'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
                     padding: '14px 24px',
                     borderRadius: '12px',

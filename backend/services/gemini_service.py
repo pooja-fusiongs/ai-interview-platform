@@ -8,6 +8,7 @@ import json
 import re
 from typing import List, Dict, Any, Optional
 import config
+from services.llm_utils import extract_json as _extract_json
 
 # Global client instance
 _gemini_client = None
@@ -20,39 +21,19 @@ def _get_client():
         _gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
     return _gemini_client
 
-def _generate_content(prompt: str) -> str:
+def _generate_content(prompt: str, temperature: float = 0.3) -> str:
     """Generate content using Gemini API with gemini-2.0-flash model."""
+    from google.genai import types
     client = _get_client()
     response = client.models.generate_content(
         model='gemini-2.0-flash',
-        contents=prompt
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=4096,
+        ),
     )
     return response.text
-
-
-def _extract_json(text: str) -> Any:
-    """Extract JSON from LLM response text, handling markdown code blocks."""
-    # Try direct parse
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    # Try extracting from ```json ... ``` blocks
-    match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', text)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
-    # Try finding array or object
-    for pattern in [r'(\[[\s\S]*\])', r'(\{[\s\S]*\})']:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                continue
-    return None
 
 
 def generate_questions_with_gemini(
@@ -67,10 +48,10 @@ def generate_questions_with_gemini(
     Returns list of dicts with: question_text, sample_answer, question_type, difficulty, skill_focus
     """
     if not config.GEMINI_API_KEY:
-        print("❌ [generate_questions] GEMINI_API_KEY is not set!")
+        print("[WARN] [generate_questions] GEMINI_API_KEY is not set!")
         return None  # Caller should fall back to rule-based
 
-    print(f"✅ [generate_questions] GEMINI_API_KEY found: {config.GEMINI_API_KEY[:15]}...")
+    print(f"[OK] [generate_questions] GEMINI_API_KEY found")
 
     skills_str = ", ".join(skills_required) if skills_required else "general software development"
     experience_level = "senior" if experience_years and experience_years >= 5 else "junior/mid"
@@ -92,13 +73,19 @@ Generate {total_questions} questions with a good mix:
 - 20% conceptual questions about core concepts
 - 20% behavioral questions about teamwork and problem-solving
 
-For each question, provide a detailed sample answer (3-5 sentences) that a strong candidate would give.
+CRITICAL: For each question, write the ACTUAL factual answer (3-5 sentences), NOT a rubric or description of what a good answer should contain.
+
+BAD example (rubric - DO NOT do this):
+"A good answer should explain the core concepts of Python, provide practical examples, and demonstrate understanding."
+
+GOOD example (real answer - DO THIS):
+"Python is a high-level, interpreted programming language known for its readability and versatility. It supports multiple paradigms including OOP and functional programming. In web development, frameworks like Django and Flask are commonly used to build REST APIs and full-stack applications. Python's extensive standard library and package ecosystem (pip) make it ideal for rapid prototyping and production systems."
 
 Respond ONLY with a JSON array in this exact format:
 [
   {{
     "question_text": "The interview question",
-    "sample_answer": "A detailed expected answer",
+    "sample_answer": "The actual factual answer a strong candidate would give (3-5 sentences)",
     "question_type": "technical|scenario|conceptual|behavioral",
     "difficulty": "basic|intermediate|advanced",
     "skill_focus": "the primary skill being tested or null"
@@ -216,24 +203,29 @@ def _manual_parse_transcript(
                 existing["extracted_answer"] = best_answer
             result.append(existing)
         else:
-            # Generate dummy answer if not found
-            if not best_answer:
-                sample = q.get("sample_answer", "")
-                if sample:
-                    best_answer = f"{sample[:200]}..." if len(sample) > 200 else f" {sample}"
-                else:
-                    best_answer = "The candidate addressed this question during the interview, providing their perspective and relevant experience on the topic."
-
-            result.append({
-                "question_id": q_id,
-                "extracted_answer": best_answer,
-                "score": 55,
-                "relevance_score": 55,
-                "completeness_score": 50,
-                "accuracy_score": 55,
-                "clarity_score": 55,
-                "feedback": "Response evaluated from interview discussion"
-            })
+            if best_answer:
+                result.append({
+                    "question_id": q_id,
+                    "extracted_answer": best_answer,
+                    "score": 55,
+                    "relevance_score": 55,
+                    "completeness_score": 50,
+                    "accuracy_score": 55,
+                    "clarity_score": 55,
+                    "feedback": "Response evaluated from interview discussion"
+                })
+            else:
+                # No answer found - score as 0, no dummy text
+                result.append({
+                    "question_id": q_id,
+                    "extracted_answer": "Question not answered in this interview",
+                    "score": 0.0,
+                    "relevance_score": 0.0,
+                    "completeness_score": 0.0,
+                    "accuracy_score": 0.0,
+                    "clarity_score": 0.0,
+                    "feedback": "No answer found in transcript for this question"
+                })
 
     return result if result else existing_results
 
@@ -247,44 +239,28 @@ def _fallback_scoring(
     Uses rule-based scoring with transcript parsing.
     """
     print(f"\n{'='*60}")
-    print(f"🔄 [fallback_scoring] Using rule-based scoring...")
+    print(f"[FALLBACK] Using rule-based scoring...")
     print(f"   - Questions: {len(questions_with_answers)}")
     print(f"   - Transcript length: {len(transcript_text)} chars")
     
     # Parse transcript to extract Q&A pairs
     per_question = _manual_parse_transcript(transcript_text, questions_with_answers, [])
     
-    # Calculate scores based on answer length and presence
+    # Calculate scores based on answer content
     total_score = 0
     for i, pq in enumerate(per_question):
         answer = pq.get("extracted_answer", "")
         q_id = pq.get("question_id")
 
-        # Find the original question to get sample_answer for dummy text
-        original_q = next((q for q in questions_with_answers if q.get("question_id") == q_id), None)
-
-        if "not found" in answer.lower():
-            # Generate a dummy answer based on question context
-            if original_q and original_q.get("sample_answer"):
-                sample = original_q.get("sample_answer", "")
-                # Create a shorter version of sample answer as dummy response
-                dummy_answer = f" {sample[:200]}..." if len(sample) > 200 else f"{sample}"
-                pq["extracted_answer"] = dummy_answer
-                pq["score"] = 55
-                pq["relevance_score"] = 55
-                pq["completeness_score"] = 50
-                pq["accuracy_score"] = 55
-                pq["clarity_score"] = 60
-                pq["feedback"] = "Response evaluated from interview discussion"
-            else:
-                # No sample answer available, use generic response
-                pq["extracted_answer"] = "The candidate addressed this question during the interview, providing their perspective and relevant experience on the topic."
-                pq["score"] = 50
-                pq["relevance_score"] = 50
-                pq["completeness_score"] = 50
-                pq["accuracy_score"] = 50
-                pq["clarity_score"] = 50
-                pq["feedback"] = "Response evaluated from interview transcript"
+        if not answer or "not found" in answer.lower() or "not asked" in answer.lower():
+            # Question was not answered - score as 0, no dummy text
+            pq["extracted_answer"] = "Question not answered in this interview"
+            pq["score"] = 0.0
+            pq["relevance_score"] = 0.0
+            pq["completeness_score"] = 0.0
+            pq["accuracy_score"] = 0.0
+            pq["clarity_score"] = 0.0
+            pq["feedback"] = "No answer found in transcript for this question (rule-based scoring)"
         else:
             # Score based on answer length (simple heuristic)
             word_count = len(answer.split())
@@ -308,18 +284,18 @@ def _fallback_scoring(
             pq["accuracy_score"] = base_score
             pq["clarity_score"] = base_score + 5
             pq["feedback"] = feedback + " (rule-based scoring)"
-        
+
         total_score += pq["score"]
-    
+
     # Calculate overall score
-    overall_score = total_score / len(per_question) if per_question else 5.0
-    
-    # Determine recommendation
-    if overall_score >= 75:
-        recommendation = "next_round"
+    overall_score = total_score / len(per_question) if per_question else 0.0
+
+    # Determine recommendation using config thresholds
+    if overall_score >= config.SCORE_SELECT_THRESHOLD:
+        recommendation = "select"
         strengths = "Candidate provided detailed answers to most questions"
         weaknesses = "Some answers could be more comprehensive"
-    elif overall_score >= 50:
+    elif overall_score >= config.SCORE_NEXT_ROUND_THRESHOLD:
         recommendation = "next_round"
         strengths = "Candidate answered most questions adequately"
         weaknesses = "Several answers lacked depth and detail"
@@ -336,7 +312,7 @@ def _fallback_scoring(
         "weaknesses": weaknesses + " (Note: AI scoring unavailable, using rule-based scoring)"
     }
     
-    print(f"✅ [fallback_scoring] Scoring completed")
+    print(f"[OK] [fallback_scoring] Scoring completed")
     print(f"   Overall Score: {result['overall_score']}")
     print(f"   Recommendation: {result['recommendation']}")
     print(f"{'='*60}\n")
@@ -360,16 +336,15 @@ def score_transcript_with_gemini(
         - overall_score, recommendation, strengths, weaknesses
     """
     print(f"\n{'='*60}")
-    print(f"🔍 [score_transcript] Starting transcript scoring...")
+    print(f"[AI] [score_transcript] Starting transcript scoring...")
     print(f"   - Questions to score: {len(questions_with_answers)}")
     print(f"   - Transcript length: {len(transcript_text)} chars")
 
     if not config.GEMINI_API_KEY:
-        print("❌ [score_transcript] GEMINI_API_KEY is NOT SET!")
-        print(f"   config.GEMINI_API_KEY value: '{config.GEMINI_API_KEY}'")
+        print("[WARN] [score_transcript] GEMINI_API_KEY is NOT SET!")
         return None
 
-    print(f"✅ [score_transcript] GEMINI_API_KEY found: {config.GEMINI_API_KEY[:20]}...")
+    print(f"[OK] [score_transcript] GEMINI_API_KEY found")
 
     questions_str = ""
     for i, qa in enumerate(questions_with_answers, 1):
@@ -419,7 +394,7 @@ SCORING (0-100 scale):
 - completeness_score: How complete is the answer? (0-100)
 - accuracy_score: How accurate compared to expected answer? (0-100)
 - clarity_score: How clear and coherent? (0-100)
-- score: Overall weighted average (0-100)
+- score: Overall weighted average = relevance*{config.WEIGHT_RELEVANCE} + completeness*{config.WEIGHT_COMPLETENESS} + accuracy*{config.WEIGHT_ACCURACY} + clarity*{config.WEIGHT_CLARITY}
 - feedback: Brief specific feedback for this answer
 
 OUTPUT FORMAT - Respond ONLY with this JSON:
@@ -457,18 +432,18 @@ RECOMMENDATION:
 REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do NOT repeat the same text."""
 
     try:
-        print(f"🤖 [score_transcript] Calling Gemini API...")
-        print(f"🤖 [score_transcript] Using gemini-2.0-flash model...")
+        print(f"[AI] [score_transcript] Calling Gemini API...")
+        print(f"[AI] [score_transcript] Using gemini-2.0-flash model...")
         response_text = _generate_content(prompt)
-        print(f"🤖 [score_transcript] Got response, extracting JSON...")
+        print(f"[AI] [score_transcript] Got response, extracting JSON...")
         result = _extract_json(response_text)
 
         if not result or not isinstance(result, dict):
-            print(f"❌ [score_transcript] Invalid format returned")
+            print(f"[WARN] [score_transcript] Invalid format returned")
             print(f"   Response text (first 500 chars): {response_text[:500] if response_text else 'EMPTY'}")
             return None
 
-        print(f"✅ [score_transcript] JSON extracted successfully!")
+        print(f"[OK] [score_transcript] JSON extracted successfully!")
 
         # Validate required fields
         if "per_question" not in result or "overall_score" not in result:
@@ -495,7 +470,7 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
                 answer_key = cleaned[:80].lower() if cleaned else ""
                 if answer_key and answer_key in seen_answers:
                     duplicate_count += 1
-                    print(f"⚠️ Duplicate answer for Q{q_id}, same as Q{seen_answers[answer_key]}")
+                    print(f"[WARN] Duplicate answer for Q{q_id}, same as Q{seen_answers[answer_key]}")
                     pq["extracted_answer"] = f"[Duplicate - see Q{seen_answers[answer_key]}] {cleaned[:100]}..."
                 else:
                     pq["extracted_answer"] = cleaned if cleaned else extracted
@@ -506,7 +481,7 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
 
         # If too many duplicates, try manual parsing from transcript
         if duplicate_count >= len(per_question) // 2:
-            print(f"⚠️ {duplicate_count} duplicates found, attempting manual transcript parsing...")
+            print(f"[WARN] {duplicate_count} duplicates found, attempting manual transcript parsing...")
             per_question = _manual_parse_transcript(transcript_text, questions_with_answers, per_question)
             result["per_question"] = per_question
 
@@ -517,7 +492,7 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
             rec = "select" if score >= 75 else "next_round" if score >= 50 else "reject"
             result["recommendation"] = rec
 
-        print(f"\n✅✅✅ [score_transcript] SCORING COMPLETED SUCCESSFULLY! ✅✅✅")
+        print(f"\n[OK] [score_transcript] SCORING COMPLETED SUCCESSFULLY!")
         print(f"   Overall Score: {result.get('overall_score', 'N/A')}")
         print(f"   Recommendation: {result.get('recommendation', 'N/A')}")
         print(f"   Questions scored: {len(result.get('per_question', []))}")
@@ -527,7 +502,7 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
 
     except Exception as e:
         import traceback
-        print(f"\n❌❌❌ [score_transcript] EXCEPTION OCCURRED ❌❌❌")
+        print(f"\n[ERROR] [score_transcript] EXCEPTION OCCURRED")
         print(f"   Error type: {type(e).__name__}")
         print(f"   Error message: {str(e)}")
         
@@ -536,7 +511,7 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
         is_quota_error = '429' in error_msg or 'quota' in error_msg or 'resource_exhausted' in error_msg
         
         if is_quota_error:
-            print(f"   ⚠️ QUOTA EXCEEDED - Using fallback scoring")
+            print(f"   [WARN] QUOTA EXCEEDED - Using fallback scoring")
             print(f"   Full traceback:")
             traceback.print_exc()
             print(f"{'='*60}\n")

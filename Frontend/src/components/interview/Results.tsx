@@ -210,7 +210,7 @@ const Results = () => {
   if (loading) {
     return (
       <Navigation>
-        <Box sx={{ padding: { xs: '12px', sm: '16px', md: '24px' }, background: '#f8fafc' }}>
+        <Box sx={{ padding: { xs: '12px', sm: '16px', md: '24px' }, background: '#f8fafc', '& .MuiSkeleton-root': { bgcolor: '#EEF0FF' } }}>
           {loadingDetail ? (
             /* ─── Detail view skeleton ─── */
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -220,7 +220,7 @@ const Results = () => {
               {/* Overview card skeleton */}
               <Card sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
                 {/* Card header */}
-                <Box sx={{ padding: { xs: '14px 16px', md: '20px 24px' }, borderBottom: '1px solid #f1f5f9', background: 'rgba(245,158,11,0.05)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Box sx={{ padding: { xs: '14px 16px', md: '20px 24px' }, borderBottom: '1px solid #f1f5f9', background: '#EEF0FF', display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <Skeleton variant="rounded" width={40} height={40} sx={{ borderRadius: '10px' }} />
                   <Box sx={{ flex: 1 }}>
                     <Skeleton variant="text" width={150} height={22} />
@@ -1094,8 +1094,7 @@ const Results = () => {
               textTransform: 'none', fontWeight: 600, fontSize: '14px',
               borderRadius: '10px', padding: '8px 24px',
               background: 'linear-gradient(135deg, #020291, #020291)',
-              boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
-              '&:hover': { background: 'linear-gradient(135deg, #020291, #b45309)' },
+              '&:hover': { background: '#020291' },
             }}
           >
             Apply Filters

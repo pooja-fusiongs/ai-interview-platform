@@ -589,9 +589,9 @@ const ATSConnectionForm: React.FC<ATSConnectionFormProps> = ({ open, onClose, on
               padding: '10px 24px',
               background: saving || !apiKey ? '#e5e7eb' : 'linear-gradient(135deg, primary.main0%, #020291 100%)',
               color: saving || !apiKey ? '#9ca3af' : '#fff',
-              boxShadow: saving || !apiKey ? 'none' : '0 4px 14px rgba(245, 158, 11, 0.35)',
+              boxShadow: saving || !apiKey ? 'none' : '#020291',
               '&:hover': {
-                background: saving || !apiKey ? '#e5e7eb' : 'linear-gradient(135deg, #020291 0%, #b45309 100%)',
+                background: saving || !apiKey ? '#e5e7eb' : '#020291',
               },
               '&.Mui-disabled': {
                 background: '#e5e7eb',

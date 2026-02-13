@@ -327,9 +327,22 @@ def submit_transcript_and_score(
         for q in approved_questions
     ]
 
-    # Score with Gemini
-    from services.gemini_service import score_transcript_with_gemini
-    llm_result = score_transcript_with_gemini(body.transcript_text, questions_for_scoring)
+    # Score with Groq (primary - free, fast), Gemini (fallback)
+    llm_result = None
+    try:
+        from services.groq_service import score_transcript_with_groq
+        import config
+        if config.GROQ_API_KEY:
+            llm_result = score_transcript_with_groq(body.transcript_text, questions_for_scoring)
+    except Exception as e:
+        print(f"[WARN] Groq scoring failed: {e}")
+
+    if not llm_result:
+        try:
+            from services.gemini_service import score_transcript_with_gemini
+            llm_result = score_transcript_with_gemini(body.transcript_text, questions_for_scoring)
+        except Exception as e:
+            print(f"[WARN] Gemini scoring also failed: {e}")
 
     if llm_result:
         # Save per-question scores

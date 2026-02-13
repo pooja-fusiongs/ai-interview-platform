@@ -1553,8 +1553,8 @@ const Candidates = () => {
                 order: { xs: 1, sm: 2 },
                 boxShadow: '0 4px 15px rgba(2, 2, 145, 0.3)',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)',
-                  boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4)'
+                  background: '#020291',
+                  boxShadow: '#020291'
                 },
                 '&:disabled': {
                   background: '#cbd5e1',

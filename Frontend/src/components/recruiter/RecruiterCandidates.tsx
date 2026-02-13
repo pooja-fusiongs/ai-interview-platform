@@ -561,7 +561,7 @@ const RecruiterCandidates = () => {
                       fontWeight: 600,
                       fontSize: '14px',
                       '&:hover': {
-                        background: currentPage === pageNum ? 'linear-gradient(135deg, #020291, #b45309)' : 'rgba(2, 2, 145, 0.2)',
+                        background: currentPage === pageNum ? '#020291' : 'rgba(2, 2, 145, 0.2)',
                       }
                     }}
                   >
@@ -774,8 +774,7 @@ const RecruiterCandidates = () => {
               sx={{
                 background: 'linear-gradient(135deg, #020291, #020291)', color: 'white',
                 borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: "40px",
-                '&:hover': { background: 'linear-gradient(135deg, #020291, #b45309)' },
-                '&:disabled': { opacity: 0.6 }
+                '&:disabled': { opacity: 0.6 ,color:"white"}
               }}>
               {submitting ? 'Adding...' : 'Add Candidate'}
             </Button>

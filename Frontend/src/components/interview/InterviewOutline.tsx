@@ -268,11 +268,6 @@ const InterviewOutline: React.FC = () => {
     const handleRegenerate = async () => {
         if (!questionSet) return;
 
-        const confirmed = window.confirm(
-            'Are you sure you want to regenerate all questions? This will delete the current questions and generate new ones.'
-        );
-        if (!confirmed) return;
-
         setRegenerating(true);
         try {
             const result = await questionGenerationService.regenerateQuestions({
@@ -418,37 +413,43 @@ const InterviewOutline: React.FC = () => {
     return (
         <Navigation>
             <Box sx={{
-                display: 'flex', backgroundColor: 'white', minHeight: '100vh', m: { xs: '8px', sm: '20px' }, borderRadius: "10px", boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                backgroundColor: 'white', minHeight: '100vh', m: { xs: '8px', sm: '20px' }, borderRadius: "10px", boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', overflow: 'hidden',
             }}>
                 {/* Main Content */}
-                <Box sx={{ flex: 1, p: { xs: 2, sm: 3 }, pr: { xs: 2, lg: 1 } }}>
+                <Box sx={{ p: { xs: 2, sm: 3 }, width: '100%', boxSizing: 'border-box' }}>
                     {/* Clean Header */}
-                    <Box sx={{ mb: 3 }}>
+                    <Box sx={{ mb: { xs: 2, sm: 3 } }}>
 
-                        <Box sx={{ display: "flex", flexDirection: { xs: 'column', sm: 'row' }, justifyContent: "space-between", gap: { xs: 1.5, sm: 0 } }}>
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography variant="h1" sx={{ color: 'black', fontSize: { xs: '0.95rem', sm: '1.1rem' }, wordBreak: 'break-word' }}>
+                        {/* Title + Buttons Row */}
+                        <Box sx={{ display: "flex", flexDirection: { xs: 'column', md: 'row' }, justifyContent: "space-between", gap: { xs: 1, md: 2 }, alignItems: { md: 'center' } }}>
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Typography variant="h1" sx={{ color: 'black', fontSize: { xs: '0.9rem', sm: '1.1rem' }, fontWeight: 700, wordBreak: 'break-word' }}>
                                     {questionSet?.job_title} • {questionSet?.candidate_name}
                                 </Typography>
+                                <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.3, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
+                                    {questionSet?.candidate_email}
+                                </Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, flexShrink: 0, flexWrap: 'wrap' }}>
+                            <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap' }}>
                                 {/* Approve All Button */}
                                 {getPendingCount() > 0 && (
                                     <Button
                                         onClick={handleApproveAll}
                                         disabled={approvingAll}
+                                        size="small"
                                         sx={{
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: 0.5,
-                                            p: { xs: '2px 10px', sm: '2px 16px' },
-                                            fontSize: { xs: '13px', sm: '14px' },
+                                            p: '2px 10px',
+                                            fontSize: '13px',
                                             backgroundColor: '#10b981',
                                             color: 'white',
                                             border: '1px solid #10b981',
                                             borderRadius: 1,
                                             textTransform: 'none',
                                             fontWeight: 600,
+                                            minWidth: 'auto',
                                             '&:hover': {
                                                 backgroundColor: '#059669',
                                                 border: '1px solid #059669',
@@ -462,13 +463,13 @@ const InterviewOutline: React.FC = () => {
                                     >
                                         {approvingAll ? (
                                             <>
-                                                <CircularProgress size={16} sx={{ color: 'white' }} />
-                                                <Typography>Approving...</Typography>
+                                                <CircularProgress size={14} sx={{ color: 'white' }} />
+                                                Approving...
                                             </>
                                         ) : (
                                             <>
-                                                <CheckCircleIcon fontSize="small" />
-                                                <Typography>Approve All ({getPendingCount()})</Typography>
+                                                <CheckCircleIcon sx={{ fontSize: '1rem' }} />
+                                                Approve All ({getPendingCount()})
                                             </>
                                         )}
                                     </Button>
@@ -477,18 +478,20 @@ const InterviewOutline: React.FC = () => {
                                 <Button
                                     onClick={handleRegenerate}
                                     disabled={regenerating}
+                                    size="small"
                                     sx={{
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: 0.5,
-                                        p: { xs: '2px 10px', sm: '2px 16px' },
-                                        fontSize: { xs: '13px', sm: '14px' },
+                                        p: '2px 10px',
+                                        fontSize: '13px',
                                         backgroundColor: 'white',
                                         color: '#374151',
                                         border: '1px solid #d1d5db',
                                         borderRadius: 1,
                                         textTransform: 'none',
                                         fontWeight: 600,
+                                        minWidth: 'auto',
                                         '&:hover': {
                                             backgroundColor: '#f9fafb',
                                             border: '1px solid #9ca3af',
@@ -502,13 +505,13 @@ const InterviewOutline: React.FC = () => {
                                 >
                                     {regenerating ? (
                                         <>
-                                            <CircularProgress size={16} sx={{ color: '#374151' }} />
-                                            <Typography>Regenerating...</Typography>
+                                            <CircularProgress size={14} sx={{ color: '#374151' }} />
+                                            Regenerating...
                                         </>
                                     ) : (
                                         <>
-                                            <AutorenewIcon fontSize="small" />
-                                            <Typography>Regenerate</Typography>
+                                            <AutorenewIcon sx={{ fontSize: '1rem' }} />
+                                            Regenerate
                                         </>
                                     )}
                                 </Button>
@@ -518,9 +521,10 @@ const InterviewOutline: React.FC = () => {
                                     sx={{
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: 1,
+                                        gap: 0.5,
                                         width: 'fit-content',
                                         p: "2px 10px",
+                                        fontSize: '13px',
                                         border: '1px solid #020291',
                                         color: '#020291',
                                         cursor: 'pointer',
@@ -530,34 +534,29 @@ const InterviewOutline: React.FC = () => {
                                         },
                                     }}
                                 >
-                                    <ArrowBackIcon fontSize="small" />
-                                    <Typography>
-                                        {fromPage === 'manage-candidates' ? 'Back to Candidates' : 'Back'}
+                                    <ArrowBackIcon sx={{ fontSize: '1rem' }} />
+                                    <Typography sx={{ fontSize: '13px', fontWeight: 600 }}>
+                                        Back
                                     </Typography>
                                 </Box>
                             </Box>
                         </Box>
-                        <Box sx={{ mb: 2 }}>
-
-
-                            <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>
-                                {questionSet?.candidate_email}
-                            </Typography>
-
-                        </Box>
 
                         {/* Skills/Topics Tags */}
                         {questionSet?.main_topics && questionSet.main_topics.length > 0 && (
-                            <Box sx={{ mb:"10px" }}>
-                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Box sx={{ mt: 1.5, mb: 1 }}>
+                                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
                                     {(showAllTopics ? questionSet.main_topics : questionSet.main_topics.slice(0, 3)).map((topic, index) => (
                                         <Chip
                                             key={index}
                                             label={topic}
+                                            size="small"
                                             sx={{
                                                 backgroundColor: '#f3f4f6',
                                                 color: '#374151',
                                                 fontWeight: 500,
+                                                fontSize: '0.75rem',
+                                                height: 26,
                                                 border: '1px solid #e5e7eb',
                                                 '&:hover': {
                                                     backgroundColor: '#e5e7eb'
@@ -573,7 +572,7 @@ const InterviewOutline: React.FC = () => {
                                             sx={{
                                                 color: '#6b7280',
                                                 textTransform: 'none',
-                                                fontSize: '0.875rem',
+                                                fontSize: '0.8rem',
                                                 minWidth: 'auto',
                                                 p: 0.5
                                             }}
@@ -585,108 +584,101 @@ const InterviewOutline: React.FC = () => {
                             </Box>
                         )}
 
-                        {/* Skills Analytics - New Addition */}
+                        {/* Created time + Stats row */}
                         {questionSet?.main_topics && questionSet.main_topics.length > 0 && (
-                            <Box sx={{ mb: 3 }}>
-                                <Typography variant="body2" sx={{ color: '#374151', fontWeight: 600,mb:"10px" }}>
-                                               Created:- {questionSet?.generated_at ? (() => {
-                                                    const now = new Date();
-                                                    const generatedDate = new Date(questionSet.generated_at);
-                                                    const diffInMs = now.getTime() - generatedDate.getTime();
-                                                    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
-                                                    const diffInDays = Math.floor(diffInHours / 24);
-                                                    
-                                                    if (diffInDays > 0) {
-                                                        return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
-                                                    } else if (diffInHours > 0) {
-                                                        return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
-                                                    } else {
-                                                        return 'Just now';
-                                                    }
-                                                })() : 'N/A'}
-                                            </Typography>
-                                <Box sx={{ display: 'flex',  flexWrap: 'wrap' }}>
-                                    {/* Skill Match Accuracy with Circular Progress */}
-                                    <Box sx={{ 
-                                        display: 'flex', 
+                            <Box sx={{ mb: { xs: 1.5, sm: 3 } }}>
+                                <Typography variant="body2" sx={{ color: '#374151', fontWeight: 600, mb: 1, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
+                                    Created:- {questionSet?.generated_at ? (() => {
+                                        const now = new Date();
+                                        const generatedDate = new Date(questionSet.generated_at);
+                                        const diffInMs = now.getTime() - generatedDate.getTime();
+                                        const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+                                        const diffInDays = Math.floor(diffInHours / 24);
+
+                                        if (diffInDays > 0) {
+                                            return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+                                        } else if (diffInHours > 0) {
+                                            return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+                                        } else {
+                                            return 'Just now';
+                                        }
+                                    })() : 'N/A'}
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 0, sm: 0 } }}>
+                                    {/* Skill Match Accuracy */}
+                                    <Box sx={{
+                                        display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
-                                        gap: 1,
-                                        minWidth: 120,
-                                        pr:"20px"
+                                        gap: 0.5,
+                                        minWidth: { xs: 100, sm: 120 },
+                                        pr: { xs: '12px', sm: '20px' }
                                     }}>
-                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
+                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: { xs: '0.7rem', sm: '0.75rem' }, textAlign: 'center' }}>
                                             Skill Match Accuracy
                                         </Typography>
-                                        <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {/* Background Circle */}
+                                        <Box sx={{
+                                            width: { xs: 48, sm: 60 },
+                                            height: { xs: 48, sm: 60 },
+                                            borderRadius: '50%',
+                                            background: `conic-gradient(#f97316 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}>
                                             <Box sx={{
-                                                width: 60,
-                                                height: 60,
+                                                width: { xs: 34, sm: 44 },
+                                                height: { xs: 34, sm: 44 },
                                                 borderRadius: '50%',
-                                                background: `conic-gradient(#f97316 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
+                                                backgroundColor: '#fff',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center'
                                             }}>
-                                                <Box sx={{
-                                                    width: 44,
-                                                    height: 44,
-                                                    borderRadius: '50%',
-                                                    backgroundColor: '#fff',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center'
-                                                }}>
-                                                    <Typography variant="h6" sx={{ color: '#374151', fontWeight: 700, fontSize: '1rem' }}>
-                                                        {Math.round((getApprovedCount() / (questionSet?.questions.length || 1)) * 100)}%
-                                                    </Typography>
-                                                </Box>
+                                                <Typography sx={{ color: '#374151', fontWeight: 700, fontSize: { xs: '0.8rem', sm: '1rem' } }}>
+                                                    {Math.round((getApprovedCount() / (questionSet?.questions.length || 1)) * 100)}%
+                                                </Typography>
                                             </Box>
                                         </Box>
                                     </Box>
 
-                                    {/* Completed Questions with Circular Progress */}
-                                    <Box sx={{ 
-                                        display: 'flex', 
+                                    {/* Completed Questions */}
+                                    <Box sx={{
+                                        display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
-                                        gap: 1,
-                                        borderLeft:"1px solid #80808038",
-                                        pl:"20px",
-                                        minWidth: 120
+                                        gap: 0.5,
+                                        borderLeft: "1px solid #80808038",
+                                        pl: { xs: '12px', sm: '20px' },
+                                        minWidth: { xs: 100, sm: 120 }
                                     }}>
-                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
+                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: { xs: '0.7rem', sm: '0.75rem' }, textAlign: 'center' }}>
                                             Completed Questions
                                         </Typography>
-                                        <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {/* Background Circle */}
+                                        <Box sx={{
+                                            width: { xs: 48, sm: 60 },
+                                            height: { xs: 48, sm: 60 },
+                                            borderRadius: '50%',
+                                            background: `conic-gradient(#10b981 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}>
                                             <Box sx={{
-                                                width: 60,
-                                                height: 60,
+                                                width: { xs: 34, sm: 44 },
+                                                height: { xs: 34, sm: 44 },
                                                 borderRadius: '50%',
-                                                background: `conic-gradient(#10b981 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
+                                                backgroundColor: '#fff',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center'
                                             }}>
-                                                <Box sx={{
-                                                    width: 44,
-                                                    height: 44,
-                                                    borderRadius: '50%',
-                                                    backgroundColor: '#fff',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center'
-                                                }}>
-                                                    <Typography variant="h6" sx={{ color: '#374151', fontWeight: 700, fontSize: '1rem' }}>
-                                                        {getApprovedCount()}
-                                                    </Typography>
-                                                </Box>
+                                                <Typography sx={{ color: '#374151', fontWeight: 700, fontSize: { xs: '0.8rem', sm: '1rem' } }}>
+                                                    {getApprovedCount()}
+                                                </Typography>
                                             </Box>
                                         </Box>
                                     </Box>
-                                    
                                 </Box>
                             </Box>
                         )}
@@ -764,14 +756,16 @@ const InterviewOutline: React.FC = () => {
                                             Q{qIndex}
                                         </Typography>
 
-                                        {/* Question Text (truncated) */}
+                                        {/* Question Text - truncated when collapsed, full when expanded */}
                                         <Typography sx={{
                                             flex: 1,
                                             fontSize: { xs: '0.85rem', sm: '0.9rem' },
                                             color: '#374151',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
+                                            ...(!isExpanded && {
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                            }),
                                         }}>
                                             {question.question}
                                         </Typography>
@@ -855,11 +849,6 @@ const InterviewOutline: React.FC = () => {
                                                 </Box>
                                             )}
 
-                                            {/* Full Question Text */}
-                                            <Typography sx={{ color: '#1f2937', lineHeight: 1.7, mb: 2, fontSize: { xs: '0.9rem', sm: '1rem' } }}>
-                                                {question.question}
-                                            </Typography>
-
                                             {/* Tags */}
                                             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
                                                 {question.skills_tested.length > 0 && (
@@ -914,7 +903,7 @@ const InterviewOutline: React.FC = () => {
                                                         </Box>
                                                     </Box>
                                                 ) : (
-                                                    <Typography variant="body2" sx={{ color: question.is_golden ? '#065f46' : '#4b5563', lineHeight: 1.6 }}>
+                                                    <Typography variant="body2" sx={{ color: question.is_golden ? '#065f46' : '#4b5563', lineHeight: 1.6, wordBreak: 'break-word' }}>
                                                         {question.sample_answer}
                                                     </Typography>
                                                 )}

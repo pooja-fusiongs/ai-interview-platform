@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
-from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion
+from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion, InterviewAnswer
 from schemas import (
     QuestionGenerateRequest,
     InterviewQuestionResponse,
@@ -154,7 +154,7 @@ def regenerate_questions(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    # Delete existing question versions first (FK dependency)
+    # Delete all FK dependencies before deleting questions
     existing_questions = db.query(InterviewQuestion).filter(
         InterviewQuestion.job_id == request.job_id,
         InterviewQuestion.candidate_id == request.candidate_id
@@ -162,6 +162,12 @@ def regenerate_questions(
 
     question_ids = [q.id for q in existing_questions]
     if question_ids:
+        # Delete answers referencing these questions
+        db.query(InterviewAnswer).filter(
+            InterviewAnswer.question_id.in_(question_ids)
+        ).delete(synchronize_session=False)
+
+        # Delete question versions
         db.query(InterviewQuestionVersion).filter(
             InterviewQuestionVersion.question_id.in_(question_ids)
         ).delete(synchronize_session=False)

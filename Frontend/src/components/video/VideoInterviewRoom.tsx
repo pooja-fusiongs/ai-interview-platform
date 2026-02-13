@@ -30,6 +30,7 @@ const VideoInterviewRoom: React.FC = () => {
   const [showConsentDialog, setShowConsentDialog] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingRecording, setUploadingRecording] = useState(false);
+  const [, setParticipantCount] = useState(0);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -38,6 +39,7 @@ const VideoInterviewRoom: React.FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const maxParticipantsRef = useRef(0);
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -189,11 +191,28 @@ const VideoInterviewRoom: React.FC = () => {
 
         api.addEventListener('videoConferenceJoined', () => {
           setCallJoined(true);
+          setParticipantCount(1);
+          maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
           toast.success('Connected to video call!');
         });
 
+        api.addEventListener('participantJoined', () => {
+          setParticipantCount(prev => {
+            const newCount = prev + 1;
+            maxParticipantsRef.current = Math.max(maxParticipantsRef.current, newCount);
+            // Start recording when candidate joins (first remote participant)
+            if (newCount === 2 && !mediaRecorderRef.current) {
+              startRecording();
+            }
+            return newCount;
+          });
+        });
+
+        api.addEventListener('participantLeft', () => {
+          setParticipantCount(prev => Math.max(1, prev - 1));
+        });
+
         api.addEventListener('readyToClose', () => {
-          console.log('📴 Jitsi call ended by user');
           handleEnd();
         });
 
@@ -249,9 +268,6 @@ const VideoInterviewRoom: React.FC = () => {
       setIsActive(true);
       setElapsed(0);
       toast.success('Interview started! Connecting to video call...');
-
-      // Start audio recording (uses mic only, no camera conflict with Jitsi)
-      startRecording();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to start interview');
     }
@@ -439,8 +455,21 @@ const VideoInterviewRoom: React.FC = () => {
     try {
       setEnding(true);
 
-      // Stop and upload recording first
-      await stopAndUploadRecording();
+      // Only upload recording if candidate actually joined (2+ participants)
+      if (maxParticipantsRef.current >= 2) {
+        await stopAndUploadRecording();
+      } else {
+        // No-show: stop recording without uploading
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+        if (recordingStreamRef.current) {
+          recordingStreamRef.current.getTracks().forEach(track => track.stop());
+          recordingStreamRef.current = null;
+        }
+        setIsRecording(false);
+        recordedChunksRef.current = [];
+      }
 
       // Clean up all video call elements
       cleanupVideoCall();
@@ -449,10 +478,17 @@ const VideoInterviewRoom: React.FC = () => {
       setIsActive(false);
       setCallJoined(false);
 
-      // Tell backend the interview is completed
-      const result = await videoInterviewService.endInterview(Number(videoId));
+      // Tell backend the interview is completed (send max participant count)
+      const result = await videoInterviewService.endInterview(Number(videoId), {
+        max_participants: maxParticipantsRef.current
+      });
       setInterview(result);
-      toast.success('Interview completed!');
+
+      if (result.status === 'no_show') {
+        toast.error('Interview marked as No Show — candidate did not join');
+      } else {
+        toast.success('Interview completed!');
+      }
 
       // Redirect recruiter to detail page to view recording
       if (user?.role !== 'candidate') {
@@ -627,7 +663,7 @@ const VideoInterviewRoom: React.FC = () => {
                 <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 3 }}>
                   <Box sx={{
                     width: 80, height: 80, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    background: '#020291',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     margin: '0 auto 16px',
                     boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)'
@@ -661,7 +697,7 @@ const VideoInterviewRoom: React.FC = () => {
                           fontSize: '15px',
                           boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
                           '&:hover': {
-                            background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)'
+                            background: '#020291'
                           }
                         }}
                       >
@@ -760,11 +796,9 @@ const VideoInterviewRoom: React.FC = () => {
                     startIcon={<Videocam />}
                     onClick={handleStart}
                     sx={{
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      background: '#020291',
                       padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
                       fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
-                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
-                      '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
                     }}
                   >
                     Start Meeting
@@ -813,7 +847,7 @@ const VideoInterviewRoom: React.FC = () => {
                 {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#020291', boxShadow: '0 0 8px #020291' }} />}
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, background: '#f8fafc', borderRadius: '12px' }}>
-                <Avatar sx={{ width: 44, height: 44, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                <Avatar sx={{ width: 44, height: 44, background: '#020291' }}>
                   {interview?.interviewer_name?.charAt(0).toUpperCase() || 'I'}
                 </Avatar>
                 <Box sx={{ flex: 1 }}>
@@ -984,7 +1018,7 @@ const VideoInterviewRoom: React.FC = () => {
               variant="contained"
               onClick={handleConsentAccept}
               sx={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: '#020291',
                 textTransform: 'none', fontWeight: 600,
                 borderRadius: '10px', px: 3,
                 boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',

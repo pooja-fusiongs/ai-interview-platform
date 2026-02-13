@@ -796,7 +796,7 @@ const VideoInterviewScheduler: React.FC = () => {
                   background: isFormValid
                     ? 'linear-gradient(135deg, primary.main0%, #020291 100%)'
                     : '#e5e7eb',
-                  boxShadow: isFormValid ? '0 4px 14px rgba(245, 158, 11, 0.35)' : 'none',
+                  boxShadow: isFormValid ? '#020291' : 'none',
                   fontSize: '15px',
                   fontWeight: 600,
                   textTransform: 'none',
@@ -804,9 +804,9 @@ const VideoInterviewScheduler: React.FC = () => {
                   transition: 'all 0.2s ease',
                   '&:hover': {
                     background: isFormValid
-                      ? 'linear-gradient(135deg, #020291 0%, #b45309 100%)'
+                      ? '#020291'
                       : '#e5e7eb',
-                    boxShadow: isFormValid ? '0 6px 20px rgba(245, 158, 11, 0.4)' : 'none',
+                    boxShadow: isFormValid ? '#020291' : 'none',
                     transform: isFormValid ? 'translateY(-1px)' : 'none',
                   },
                   '&:active': {

@@ -90,6 +90,20 @@ try:
 except Exception as e:
     print(f"⚠️ Auto-migration skipped: {e}")
 
+# Migrate video_interviews.status from ENUM to VARCHAR (to support new statuses like no_show)
+try:
+    from sqlalchemy import text as _text
+    with engine.begin() as conn:
+        conn.execute(_text(
+            "ALTER TABLE video_interviews ALTER COLUMN status TYPE VARCHAR USING status::text"
+        ))
+        print("✅ Migrated video_interviews.status to VARCHAR")
+except Exception as e:
+    if "already" in str(e).lower() or "type" in str(e).lower():
+        pass  # Column is already VARCHAR
+    else:
+        print(f"⚠️ video_interviews.status migration skipped: {e}")
+
 app = FastAPI(
     title="AI Interview Platform API - Database Only", 
     version="1.0.0",
@@ -1310,14 +1324,24 @@ def generate_questions_for_candidate(
         db.commit()
         db.refresh(application)
         
-    # Check existing session
+    # Check existing session AND actual questions
     existing_session = db.query(QuestionGenerationSession).filter(
         QuestionGenerationSession.job_id == request.job_id,
         QuestionGenerationSession.candidate_id == application.id
     ).first()
-    
-    if existing_session and existing_session.status == "generated":
-        return {"success": True, "message": "Questions already generated", "session_id": existing_session.id}
+
+    existing_questions_count = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == request.job_id,
+        InterviewQuestion.candidate_id == application.id
+    ).count()
+
+    if existing_session and existing_session.status == "generated" and existing_questions_count > 0:
+        return {"success": True, "message": "Questions already generated", "session_id": existing_session.id, "total_questions": existing_questions_count}
+
+    # If session exists but no questions, delete stale session and regenerate
+    if existing_session and existing_questions_count == 0:
+        db.delete(existing_session)
+        db.commit()
 
     # Generate Questions
     try:
@@ -1495,8 +1519,9 @@ def generate_score_for_candidate(
     total_score = 0
     scored_items = 0
     
-    # Score with Groq AI
+    # Score with Groq AI (primary - free, fast), Gemini (fallback)
     from services.groq_service import score_transcript_with_groq
+    from services.gemini_service import score_transcript_with_gemini
     import config
 
     # Prepare questions for scoring
@@ -1511,14 +1536,24 @@ def generate_score_for_candidate(
 
     llm_result = None
 
+    # Try Groq first (free, fast)
     if config.GROQ_API_KEY:
         try:
-            print(f"🤖 Scoring transcript with Groq API...")
+            print(f"[AI] Scoring transcript with Groq API (primary)...")
             llm_result = score_transcript_with_groq(transcript, questions_for_scoring)
         except Exception as e:
-            print(f"⚠️ Groq scoring failed: {e}")
-    else:
-        print(f"⚠️ GROQ_API_KEY not configured, falling back to mock scoring")
+            print(f"[WARN] Groq scoring failed: {e}")
+
+    # Fallback to Gemini
+    if not llm_result and config.GEMINI_API_KEY:
+        try:
+            print(f"[AI] Groq unavailable, trying Gemini (fallback)...")
+            llm_result = score_transcript_with_gemini(transcript, questions_for_scoring)
+        except Exception as e:
+            print(f"[WARN] Gemini scoring also failed: {e}")
+
+    if not llm_result:
+        print(f"[WARN] Both AI scorers failed, using rule-based fallback")
     
     # Use AI results if available
     if llm_result:

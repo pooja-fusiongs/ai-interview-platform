@@ -1,6 +1,6 @@
 """
-AI Question Generation Service - Preview Mode Implementation
-Provides mock/rule-based question generation that can be easily switched to live AI
+AI Question Generation Service
+Supports live LLM-based question generation (Groq/Gemini) with preview mode fallback.
 """
 
 import json
@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from models import Job, JobApplication, CandidateResume, InterviewQuestion, QuestionGenerationSession
 from models import QuestionGenerationMode, QuestionDifficulty, QuestionType, ExperienceLevel
+import config
 
 class AIQuestionGenerator:
     """
@@ -115,45 +116,44 @@ class AIQuestionGenerator:
             raise e
     
     def _generate_preview_questions(
-        self, 
-        job: Job, 
-        candidate: JobApplication, 
-        resume: CandidateResume, 
+        self,
+        job: Job,
+        candidate: JobApplication,
+        resume: CandidateResume,
         total_questions: int
     ) -> List[Dict[str, Any]]:
         """
-        Generate questions using rule-based/mock logic for preview mode
+        Generate questions using rule-based templates.
+        Then tries ONE batch Groq call to get real answers for all questions at once.
         """
         # Parse job skills and resume skills
         job_skills = self._parse_skills(job.skills_required or "")
         resume_skills = self._parse_skills(resume.skills if resume else "")
-        
+
         # Determine experience level and difficulty
         experience_years = resume.experience_years if resume else candidate.experience_years or 0
         is_senior = experience_years >= 5
-        
+
         # Get question templates based on experience level
         templates = self._get_question_templates(is_senior)
-        
-        # Generate questions
+
+        # Generate questions with static answers first (fast)
         questions = []
-        skills_to_test = list(set(job_skills + resume_skills))[:8]  # Focus on top 8 skills
-        
-        # Ensure we have enough skills to test
+        skills_to_test = list(set(job_skills + resume_skills))[:8]
+
         if len(skills_to_test) < 8:
             skills_to_test.extend(self._get_default_skills(job.department))
-        
+
         # Generate skill-based questions (80% of total)
         skill_questions = int(total_questions * 0.8)
         for i in range(skill_questions):
             skill = skills_to_test[i % len(skills_to_test)]
             template = random.choice(templates["technical"])
-            
             question = self._create_question_from_template(
                 template, skill, is_senior, job.title, job.department
             )
             questions.append(question)
-        
+
         # Generate behavioral questions (20% of total)
         behavioral_questions = total_questions - skill_questions
         for i in range(behavioral_questions):
@@ -162,7 +162,20 @@ class AIQuestionGenerator:
                 template, None, is_senior, job.title, job.department
             )
             questions.append(question)
-        
+
+        # Try ONE batch Groq call to replace static answers with real ones
+        try:
+            from services.groq_service import generate_batch_sample_answers_with_groq
+            question_texts = [q["question_text"] for q in questions]
+            real_answers = generate_batch_sample_answers_with_groq(question_texts)
+            if real_answers and len(real_answers) == len(questions):
+                for i, answer in enumerate(real_answers):
+                    if answer:
+                        questions[i]["sample_answer"] = answer
+                print(f"[QuestionGenerator] Batch Groq answers applied to {len(questions)} preview questions")
+        except Exception as e:
+            print(f"[QuestionGenerator] Batch Groq answers failed, keeping static: {e}")
+
         return questions
     
     def _generate_live_questions(
@@ -173,28 +186,47 @@ class AIQuestionGenerator:
         total_questions: int
     ) -> List[Dict[str, Any]]:
         """
-        Generate questions using Google Gemini LLM.
-        Falls back to preview mode if Gemini is unavailable.
+        Generate questions using LLM APIs.
+        Fallback chain: Groq (free, fast) -> Gemini -> preview mode (last resort).
         """
-        from services.gemini_service import generate_questions_with_gemini
-
         job_skills = self._parse_skills(job.skills_required or "")
         resume_text = resume.parsed_text if resume else ""
         experience_years = resume.experience_years if resume else (candidate.experience_years if candidate else 0)
 
-        gemini_questions = generate_questions_with_gemini(
-            job_description=job.description or "",
-            skills_required=job_skills,
-            resume_text=resume_text,
-            experience_years=experience_years or 0,
-            total_questions=total_questions
-        )
+        # Try Groq first (free, fast, no quota limits)
+        try:
+            from services.groq_service import generate_questions_with_groq
+            groq_questions = generate_questions_with_groq(
+                job_description=job.description or "",
+                skills_required=job_skills,
+                resume_text=resume_text,
+                experience_years=experience_years or 0,
+                total_questions=total_questions
+            )
+            if groq_questions:
+                print("[QuestionGenerator] Questions generated via Groq")
+                return groq_questions
+        except Exception as e:
+            print(f"[QuestionGenerator] Groq failed: {e}")
 
-        if gemini_questions:
-            return gemini_questions
+        # Fallback to Gemini
+        try:
+            from services.gemini_service import generate_questions_with_gemini
+            gemini_questions = generate_questions_with_gemini(
+                job_description=job.description or "",
+                skills_required=job_skills,
+                resume_text=resume_text,
+                experience_years=experience_years or 0,
+                total_questions=total_questions
+            )
+            if gemini_questions:
+                print("[QuestionGenerator] Questions generated via Gemini")
+                return gemini_questions
+        except Exception as e:
+            print(f"[QuestionGenerator] Gemini failed: {e}")
 
-        # Fallback to preview mode if Gemini fails
-        print("Gemini unavailable, falling back to preview question generation")
+        # Last resort: preview mode
+        print("[QuestionGenerator] All LLMs unavailable, falling back to preview question generation")
         return self._generate_preview_questions(job, candidate, resume, total_questions)
     
     def _parse_skills(self, skills_text: str) -> List[str]:
@@ -313,25 +345,25 @@ class AIQuestionGenerator:
         }
     
     def _generate_sample_answer(
-        self, 
-        question: str, 
-        skill: str, 
-        q_type: QuestionType, 
+        self,
+        question: str,
+        skill: str,
+        q_type: QuestionType,
         difficulty: QuestionDifficulty
     ) -> str:
-        """Generate sample answer for the question"""
+        """Generate static sample answer (fast, no API calls). Used only as last-resort fallback."""
         if q_type == QuestionType.BEHAVIORAL:
             return "A strong answer should include: specific situation, actions taken, measurable results, and lessons learned. Use the STAR method (Situation, Task, Action, Result)."
-        
+
         elif q_type == QuestionType.CONCEPTUAL:
             return f"A good answer should explain the core concepts of {skill or 'the technology'}, provide practical examples, and demonstrate understanding of when and why to use it."
-        
+
         elif q_type == QuestionType.TECHNICAL:
             if difficulty == QuestionDifficulty.BASIC:
                 return f"Answer should include basic implementation steps, key considerations, and simple code examples using {skill or 'relevant technology'}."
             else:
                 return f"Answer should cover architecture decisions, scalability considerations, performance optimization, error handling, and best practices for {skill or 'the solution'}."
-        
+
         else:  # SCENARIO
             return "Answer should include problem analysis, solution design, implementation approach, potential challenges, and alternative solutions with trade-offs."
     
@@ -401,8 +433,8 @@ class AIQuestionGenerator:
         candidate_user.interview_questions = json.dumps(nested_questions)
         db.commit()
 
-# Global instance
-question_generator = AIQuestionGenerator()
+# Global instance - reads mode from config (defaults to "live")
+question_generator = AIQuestionGenerator(mode=config.QUESTION_GENERATION_MODE)
 
 def get_question_generator() -> AIQuestionGenerator:
     """Get the global question generator instance"""

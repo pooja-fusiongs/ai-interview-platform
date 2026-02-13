@@ -33,6 +33,7 @@ const statusConfig: Record<string, { color: string; bg: string; icon: React.Reac
   in_progress: { color: '#020291', bg: '#EEF0FF', icon: <PlayArrow sx={{ fontSize: 18 }} /> },
   completed: { color: '#10b981', bg: '#ecfdf5', icon: <CheckCircle sx={{ fontSize: 18 }} /> },
   cancelled: { color: '#ef4444', bg: '#fef2f2', icon: <Cancel sx={{ fontSize: 18 }} /> },
+  no_show: { color: '#f59e0b', bg: '#fffbeb', icon: <Cancel sx={{ fontSize: 18 }} /> },
 };
 
 const VideoInterviewDetail: React.FC = () => {
@@ -123,7 +124,7 @@ const VideoInterviewDetail: React.FC = () => {
           justifyContent: 'center',
           alignItems: 'center',
           minHeight: '100vh',
-          background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)'
+          background: '#f8f9fb'
         }}>
           <Box sx={{ textAlign: 'center' }}>
             <CircularProgress sx={{ color: '#020291', mb: 2 }} />
@@ -141,7 +142,7 @@ const VideoInterviewDetail: React.FC = () => {
     <Navigation>
       <Box sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)',
+        background: '#f8f9fb',
         padding: { xs: '12px', sm: '16px', md: '24px' },
         overflow: 'hidden',
         boxSizing: 'border-box',
@@ -171,7 +172,7 @@ const VideoInterviewDetail: React.FC = () => {
           </Box>
           <Chip
             icon={statusStyle.icon}
-            label={status.replace('_', ' ').toUpperCase()}
+            label={status === 'no_show' ? 'Candidate Absent' : status.replace('_', ' ').toUpperCase()}
             sx={{
               background: statusStyle.bg,
               color: statusStyle.color,
@@ -203,7 +204,7 @@ const VideoInterviewDetail: React.FC = () => {
                 maxWidth: '100%'
               }}>
                 <Box sx={{
-                  background: '#EEF0FF',
+                  background: '#5560FF',
                   padding: { xs: '16px', sm: '20px', md: '24px' },
                   color: 'white',
                   overflow: 'hidden'
@@ -358,7 +359,7 @@ const VideoInterviewDetail: React.FC = () => {
                       sx={{
                         mt: 3,
                         width: '100%',
-                        background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
+                        backgroundColor: '#020291',
                         padding: '14px',
                         borderRadius: '10px',
                         fontWeight: 600,
@@ -366,8 +367,8 @@ const VideoInterviewDetail: React.FC = () => {
                         textTransform: 'none',
                         boxShadow: '0 4px 14px rgba(2, 2, 145, 0.3)',
                         '&:hover': {
-                          background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)',
-                          boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4)'
+                          backgroundColor: '#01016d',
+                          boxShadow: '0 6px 20px rgba(2, 2, 145, 0.4)'
                         }
                       }}
                     >
@@ -464,9 +465,9 @@ const VideoInterviewDetail: React.FC = () => {
                           borderRadius: '10px',
                           fontWeight: 600,
                           textTransform: 'none',
-                          background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
+                          backgroundColor: '#020291',
                           '&:hover': {
-                            background: 'linear-gradient(135deg, #020291 0%, #b45309 100%)'
+                            backgroundColor: '#01016d'
                           }
                         }}
                       >
@@ -527,7 +528,7 @@ const VideoInterviewDetail: React.FC = () => {
                   <Box sx={{
                     borderRadius: '12px',
                     overflow: 'hidden',
-                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                    backgroundColor: '#1e293b',
                     border: '1px solid #e2e8f0',
                     padding: { xs: '16px', sm: '24px' },
                     display: 'flex',
@@ -537,7 +538,7 @@ const VideoInterviewDetail: React.FC = () => {
                   }}>
                     <Box sx={{
                       width: 56, height: 56, borderRadius: '50%',
-                      background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
+                      backgroundColor: '#020291',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       <Videocam sx={{ color: 'white', fontSize: 28 }} />
@@ -638,7 +639,7 @@ const VideoInterviewDetail: React.FC = () => {
                   <Avatar sx={{
                     width: 56,
                     height: 56,
-                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                    backgroundColor: '#3b82f6',
                     fontSize: '20px',
                     fontWeight: 600
                   }}>
@@ -662,7 +663,7 @@ const VideoInterviewDetail: React.FC = () => {
                   <Avatar sx={{
                     width: 48,
                     height: 48,
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    backgroundColor: '#10b981',
                     fontSize: '18px',
                     fontWeight: 600
                   }}>
@@ -719,7 +720,7 @@ const VideoInterviewDetail: React.FC = () => {
                         variant="outlined"
                         startIcon={<PlayArrow />}
                         onClick={() => navigate(`/video-room/${videoId}`)}
-                        disabled={!!scoreResult || !!transcript || status === 'completed'}
+                        disabled={!!scoreResult || !!transcript || status === 'completed' || status === 'no_show'}
                         sx={{
                           justifyContent: 'flex-start',
                           padding: '12px 16px',
@@ -741,7 +742,7 @@ const VideoInterviewDetail: React.FC = () => {
                           }
                         }}
                       >
-                        {scoreResult || transcript ? 'Interview Completed' : 'Open Video Room'}
+                        {status === 'no_show' ? 'Candidate Absent' : scoreResult || transcript ? 'Interview Completed' : 'Open Video Room'}
                       </Button>
                     </span>
                   </Tooltip>

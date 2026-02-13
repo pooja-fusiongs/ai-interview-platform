@@ -486,6 +486,7 @@ class VideoInterviewStatus(str, enum.Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+    NO_SHOW = "no_show"
 
 class VideoInterview(Base):
     __tablename__ = "video_interviews"
@@ -501,7 +502,7 @@ class VideoInterview(Base):
     zoom_host_url = Column(String, nullable=True)
     zoom_passcode = Column(String, nullable=True)
 
-    status = Column(Enum(VideoInterviewStatus), default=VideoInterviewStatus.SCHEDULED)
+    status = Column(String, default=VideoInterviewStatus.SCHEDULED.value)
     scheduled_at = Column(DateTime(timezone=True), nullable=False)
     duration_minutes = Column(Integer, default=60)
     started_at = Column(DateTime(timezone=True), nullable=True)

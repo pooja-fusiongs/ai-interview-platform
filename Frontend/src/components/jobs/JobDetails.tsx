@@ -806,7 +806,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                     textTransform: 'none', fontWeight: 600, fontSize: '13px',
                     borderRadius: '8px', padding: '6px 20px',
                     background: 'linear-gradient(135deg, #020291, #020291)',
-                    '&:hover': { background: 'linear-gradient(135deg, #020291, #b45309)' }
+                    '&:hover': { background: '#020291' }
                   }}
                 >
                   {savingDesc ? 'Saving...' : 'Save'}

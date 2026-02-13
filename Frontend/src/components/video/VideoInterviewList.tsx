@@ -11,11 +11,19 @@ import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { useAuth } from '../../contexts/AuthContext';
 
-const statusColorMap: Record<string, 'primary' | 'warning' | 'success' | 'error'> = {
-  scheduled: 'primary',
-  in_progress: 'warning',
-  completed: 'success',
-  cancelled: 'error',
+const getStatusColor = (status: string): 'primary' | 'warning' | 'success' | 'error' | 'default' => {
+  const s = status.toLowerCase();
+  if (s === 'scheduled') return 'primary';
+  if (s === 'in_progress') return 'warning';
+  if (s === 'completed') return 'success';
+  if (s === 'cancelled' || s === 'no_show') return 'error';
+  return 'default';
+};
+
+const getStatusLabel = (status: string): string => {
+  const s = status.toLowerCase();
+  if (s === 'no_show') return 'Candidate Absent';
+  return s.replace('_', ' ');
 };
 
 const VideoInterviewList: React.FC = () => {
@@ -344,8 +352,8 @@ const VideoInterviewList: React.FC = () => {
                         </Typography>
                       </Box>
                       <Chip
-                        label={row.status}
-                        color={statusColorMap[row.status] || 'default'}
+                        label={getStatusLabel(row.status)}
+                        color={getStatusColor(row.status)}
                         size="small"
                         sx={{ ml: 1 }}
                       />
@@ -402,7 +410,7 @@ const VideoInterviewList: React.FC = () => {
                             size="small"
                             color="success"
                             onClick={() => navigate(`/video-room/${row.id}`)}
-                            disabled={row.status === 'cancelled' || row.status === 'completed'}
+                            disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
                             sx={{ backgroundColor: '#f0fdf4', '&:hover': { backgroundColor: '#dcfce7' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
                           >
                             <PlayArrow fontSize="small" />
@@ -416,7 +424,7 @@ const VideoInterviewList: React.FC = () => {
                               size="small"
                               color="error"
                               onClick={() => handleCancel(row.id)}
-                              disabled={row.status === 'cancelled' || row.status === 'completed'}
+                              disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
                               sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
                             >
                               <Cancel fontSize="small" />
@@ -513,7 +521,7 @@ const VideoInterviewList: React.FC = () => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Chip label={row.status} color={statusColorMap[row.status] || 'default'} size="small" />
+                          <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" />
                         </TableCell>
                         <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.duration_minutes} min</TableCell>
@@ -527,7 +535,7 @@ const VideoInterviewList: React.FC = () => {
                               <IconButton
                                 color="success"
                                 onClick={() => navigate(`/video-room/${row.id}`)}
-                                disabled={row.status === 'cancelled' || row.status === 'completed'}
+                                disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
                               >
                                 <PlayArrow />
                               </IconButton>
@@ -539,7 +547,7 @@ const VideoInterviewList: React.FC = () => {
                                 <IconButton
                                   color="error"
                                   onClick={() => handleCancel(row.id)}
-                                  disabled={row.status === 'cancelled' || row.status === 'completed'}
+                                  disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
                                 >
                                   <Cancel />
                                 </IconButton>

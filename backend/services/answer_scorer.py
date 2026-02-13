@@ -10,6 +10,8 @@ import json
 import math
 from collections import Counter
 from typing import Dict, List
+import config
+from services.llm_utils import extract_json as _extract_json
 
 
 # ─── Groq AI Scoring ─────────────────────────────────────────────────────────
@@ -35,7 +37,6 @@ def score_answer_with_ai(
 
     try:
         from groq import Groq
-        import config
 
         if not config.GROQ_API_KEY:
             print("[AI Scorer] GROQ_API_KEY not set, using rule-based scoring")
@@ -60,7 +61,7 @@ SCORING INSTRUCTIONS:
 - completeness_score: How thoroughly does the answer cover the key concepts from the expected answer? (0-100)
 - accuracy_score: How technically correct and aligned with the expected answer is the response? (0-100)
 - clarity_score: How well-structured, coherent, and professionally communicated is the answer? (0-100)
-- score: Weighted overall = relevance*0.30 + completeness*0.25 + accuracy*0.30 + clarity*0.15
+- score: Weighted overall = relevance*{config.WEIGHT_RELEVANCE} + completeness*{config.WEIGHT_COMPLETENESS} + accuracy*{config.WEIGHT_ACCURACY} + clarity*{config.WEIGHT_CLARITY}
 - feedback: Write 2-3 sentences of specific, actionable feedback. Mention what the candidate did well and what they missed. Be constructive, not generic.
 
 IMPORTANT RULES:
@@ -139,7 +140,6 @@ def score_all_answers_with_ai(
 
     try:
         from groq import Groq
-        import config
 
         if not config.GROQ_API_KEY:
             print("[WARN][AI Batch Scorer] GROQ_API_KEY not set, using rule-based scoring")
@@ -167,7 +167,7 @@ For EACH answer, score these dimensions (0.0 to 100.0):
 - completeness_score: How thoroughly are key concepts covered? (0-100)
 - accuracy_score: How technically correct is the response? (0-100)
 - clarity_score: How well-structured and coherent? (0-100)
-- score: Weighted = relevance*0.30 + completeness*0.25 + accuracy*0.30 + clarity*0.15
+- score: Weighted = relevance*{config.WEIGHT_RELEVANCE} + completeness*{config.WEIGHT_COMPLETENESS} + accuracy*{config.WEIGHT_ACCURACY} + clarity*{config.WEIGHT_CLARITY}
 - feedback: 2-3 sentences of specific, actionable feedback per answer
 
 IMPORTANT RULES:
@@ -283,30 +283,6 @@ def _fallback_batch_score(answers_data: List[Dict[str, str]]) -> Dict[str, objec
     }
 
 
-# ─── JSON extraction helper ──────────────────────────────────────────────────
-
-def _extract_json(text: str):
-    """Extract JSON from LLM response text, handling markdown code blocks."""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', text)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
-    for pattern in [r'(\{[\s\S]*\})', r'(\[[\s\S]*\])']:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                continue
-    return None
-
-
 # ─── Rule-based Scoring (Fallback) ───────────────────────────────────────────
 
 def _tokenize(text: str) -> list[str]:
@@ -405,10 +381,10 @@ def score_answer(
     clarity_score = round(clarity * 100, 1)
 
     overall = (
-        relevance_score * 0.30
-        + completeness_score * 0.25
-        + accuracy_score * 0.30
-        + clarity_score * 0.15
+        relevance_score * config.WEIGHT_RELEVANCE
+        + completeness_score * config.WEIGHT_COMPLETENESS
+        + accuracy_score * config.WEIGHT_ACCURACY
+        + clarity_score * config.WEIGHT_CLARITY
     )
     overall = round(min(overall, 100.0), 1)
 
