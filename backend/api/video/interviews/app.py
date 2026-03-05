@@ -598,6 +598,61 @@ def start_video_interview(
     return _build_response(vi, db)
 
 
+@router.post("/api/video/join")
+async def join_video_interview(
+    video_id: int = Body(..., embed=True),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark interview as started, trigger AI agent, and return LiveKit token.
+    """
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # 1. Mark as started if not already
+    if vi.status != VideoInterviewStatus.IN_PROGRESS.value:
+        vi.status = VideoInterviewStatus.IN_PROGRESS.value
+        vi.started_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(vi)
+    
+    # 2. Trigger AI agent
+    try:
+        from routers.livekit_router import generate_livekit_token, TokenRequest, dispatch_agent, DispatchAgentRequest
+        
+        room_name = f"interview_{video_id}"
+        
+        # Dispatch agent
+        await dispatch_agent(DispatchAgentRequest(room_name=room_name))
+        
+        # 3. Generate token for the user
+        token_data = await generate_livekit_token(TokenRequest(
+            room_name=room_name,
+            participant_name=current_user.full_name or current_user.username,
+            participant_identity=str(current_user.id),
+            role="interviewer" if current_user.role in [UserRole.RECRUITER, UserRole.ADMIN] else "candidate"
+        ))
+        
+        return {
+            "success": True,
+            "token": token_data.token,
+            "livekit_url": token_data.livekit_url,
+            "room_name": room_name
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in join_video_interview (agent/token): {e}")
+        # Fallback for just starting the interview
+        return {
+            "success": True,
+            "message": "Interview started, but agent dispatch/token failed",
+            "video_id": video_id,
+            "error": str(e)
+        }
+
+
 # ---------------------------------------------------------------------------
 # POST /api/video/interviews/{video_id}/end  -- Mark as ended
 # ---------------------------------------------------------------------------

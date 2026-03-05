@@ -1,224 +1,588 @@
-## AI Interview Platform (Demo)
+# AI Interview Platform
 
-AI Interview Platform is a **demo, end‑to‑end AI‑assisted interview system** that helps organizations screen and evaluate candidates more efficiently.  
-This repository contains both the **frontend** and **backend** needed to run the platform locally.
+> Enterprise-grade AI-powered recruitment platform with video interviews, fraud detection, GDPR compliance, and ATS integration
 
----
+## 📋 Table of Contents
 
-## Project Overview
-
-**AI Interview Platform (Demo)** streamlines the hiring process by combining job management, candidate profiles, AI‑generated interview questions, and automated scoring in a single workflow.
-
-- **Manual interviews are slow and hard to scale.** Recruiters and hiring managers spend a lot of time on repetitive screening calls.
-- **This platform uses AI to conduct and analyze interviews**, helping recruiters focus on final decisions instead of early‑stage filtering.
-
-> **Note**: This is a **demo project**, intended for evaluation, prototyping, and extension. It is not hardened for production as‑is.
-
----
-
-## Problem Statement & Solution
-
-- **Problem**: Companies do not have enough time or bandwidth for fully manual interviews and first‑round screenings.
-- **Solution**: The AI Interview Platform automates large parts of the interview lifecycle:
-  - AI conducts structured interviews with candidates.
-  - Recruiters and experts review AI‑generated insights.
-  - Automated scoring helps drive faster and more objective hiring decisions.
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [API Documentation](#api-documentation)
+- [Database Schema](#database-schema)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
 
 ---
 
-## Key Features
+## 🎯 Overview
 
-- **Job creation by recruiter**  
-  Recruiters can create and manage job postings, including role details, skills, and experience requirements.
+AI Interview Platform is a comprehensive recruitment solution that combines artificial intelligence, video interviewing, and advanced analytics to streamline the hiring process. The platform supports multiple user roles (Recruiters, Domain Experts, Admins, and Candidates) with role-based access control and features like automated question generation, real-time fraud detection, and GDPR-compliant data management.
 
-- **Candidate resume upload**  
-  Candidates (or recruiters on their behalf) can upload resumes, which are stored and processed by the backend.
+### Platform Capabilities
 
-- **AI‑based question & answer generation**  
-  The system can generate interview questions tailored to the job role and candidate profile, and support AI‑assisted answer evaluation.
-
-- **Expert review and approval**  
-  Domain experts can review AI‑generated questions and scoring, approve or adjust them, and provide final evaluations.
-
-- **Video interview with AI analysis**  
-  Supports an AI‑driven interview experience where candidate responses (e.g., spoken or typed) are analyzed for relevance and quality.
-
-- **Automated scoring and decision making**  
-  Candidate performance is scored automatically to assist with shortlisting and hiring decisions.
+- **AI-Powered Question Generation**: Automatically generate interview questions based on job requirements and candidate profiles
+- **Video Interview System**: Conduct live video interviews with recording, transcription, and analysis
+- **Fraud Detection**: Real-time detection of suspicious behavior during video interviews
+- **Automated Scoring**: AI-based evaluation of candidate responses with detailed feedback
+- **ATS Integration**: Seamless integration with Greenhouse, Lever, and BambooHR
+- **GDPR Compliance**: Complete data privacy controls including consent management, data export, and deletion
+- **Post-Hire Feedback**: Track candidate performance after hiring to refine scoring algorithms
 
 ---
 
-## Tech Stack
+## ✨ Key Features
 
-- **Frontend**  
-  - React 18 + TypeScript  
-  - Vite for development/build tooling  
-  - React Router, Axios, and modern UI libraries (e.g., MUI, icon libraries)
+### 🤖 AI & Machine Learning
+- **Gemini AI Integration**: Advanced question generation and transcript scoring
+- **Groq API**: Fast, quota-free alternative for transcript analysis
+- **Resume Parsing**: Automatic extraction of skills, experience, and qualifications
+- **Candidate Matching**: AI-powered job-candidate matching algorithm
 
-- **Backend**  
-  - FastAPI (Python) for REST APIs  
-  - SQLAlchemy ORM for data access  
-  - JWT‑based authentication & role management  
-  - Uvicorn ASGI server
+### 🎥 Video Interview System
+- **Daily.co Integration**: High-quality video conferencing
+- **LiveKit Support**: Real-time communication infrastructure (newly added)
+- **Recording & Transcription**: Automatic interview recording and transcript generation
+- **Fraud Detection**: 
+  - Voice consistency analysis
+  - Lip-sync detection
+  - Body movement tracking
+  - Real-time flag monitoring
 
-- **Database**  
-  - SQLite for local development  
-  - PostgreSQL support for more robust environments
+### 👥 User Management
+- **Multi-Role System**: Recruiter, Domain Expert, Admin, Candidate
+- **Profile Management**: Comprehensive user profiles with skills, experience, education
+- **Activity Tracking**: Real-time online status and activity monitoring
+- **Authentication**: JWT-based secure authentication with role-based access control
 
-- **AI / NLP**  
-  - AI‑powered question generation and candidate scoring via backend services (extensible to any LLM / NLP provider through the `services` layer).
+### 📊 Recruitment Workflow
+- **Job Management**: Create, update, and manage job postings
+- **Application Tracking**: Monitor candidate applications and status
+- **Question Generation**: AI-generated interview questions with expert review
+- **Interview Sessions**: Conduct and manage interview sessions
+- **Scoring & Evaluation**: Automated scoring with detailed feedback
+- **Post-Hire Feedback**: Track hired candidate performance
 
----
+### 🔒 GDPR & Privacy
+- **Consent Management**: Track and manage user consents
+- **Data Export**: Allow users to export their personal data
+- **Right to Erasure**: Process deletion requests
+- **Data Retention Policies**: Automated data retention and cleanup
+- **Audit Logging**: Complete audit trail of data access and modifications
+- **PII Encryption**: Encrypt sensitive personal information
 
-## Project Folder Structure
-
-At the root of the repository:
-
-- **`Frontend/`** – React + TypeScript single‑page application (Vite)  
-  - `src/` – Application code (components, contexts, services, utils, etc.)  
-  - `public/` – Static assets  
-  - `package.json` – Frontend dependencies and scripts
-
-- **`backend/`** – FastAPI backend  
-  - `main_final.py` – Main application entry point  
-  - `api/` – API modules (auth, candidates, interview, jobs, etc.)  
-  - `models.py`, `schemas.py`, `crud.py` – Data models, Pydantic schemas, and DB operations  
-  - `services/` – Business logic and AI‑related services  
-  - `uploads/` – Uploaded files (e.g., resumes)  
-  - `requirements.txt` – Backend Python dependencies
-
-- **`Test/`** – Helper scripts and markdown instructions used for testing and verification.
-
-> If you introduce any **shared / common** utilities in the future (e.g., shared type definitions or OpenAPI contracts), they can be placed in a dedicated `shared/` directory at the root.
-
----
-
-## Environment Setup (Very Important)
-
-This project uses environment variables for sensitive configuration (database URLs, JWT secrets, API URLs, etc.).
-
-- **`.env` files are intentionally *not* committed** to source control for security reasons.
-- For convenience, **sample environment files (`.env.example`) are provided** so you can create your own `.env` files.
-
-### 1. Backend Environment
-
-1. **Copy the example file**:
-   - From the backend root:
-     ```bash
-     cd backend
-     cp .env.example .env
-     ```
-2. **Open `.env` and configure values**:
-   - Database connection (`DATABASE_URL`)
-   - JWT settings (`SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`)
-   - File upload paths and limits (e.g., `UPLOAD_DIR`, `MAX_FILE_SIZE`)
-3. **Do not commit `.env`**:
-   - Ensure `.env` remains in `.gitignore`.
-
-### 2. Frontend Environment
-
-1. **Copy the example file**:
-   - From the frontend root:
-     ```bash
-     cd Frontend
-     cp .env.example .env
-     ```
-2. **Set the API base URL** (see *API Configuration* below), e.g.:
-   ```bash
-   VITE_API_BASE_URL=http://localhost:8000
-   ```
-3. **Restart the frontend dev server** after any change to `.env`.
+### 🔗 Integrations
+- **ATS Systems**: Greenhouse, Lever, BambooHR
+- **Video Platforms**: Daily.co, Zoom, LiveKit
+- **Email**: SendGrid for notifications
+- **Cloud Storage**: Resume and recording storage
 
 ---
 
-## How to Run the Project Locally
+## 🛠 Tech Stack
 
-### 1. Backend Setup
+### Backend
+- **Framework**: FastAPI (Python 3.9+)
+- **Database**: PostgreSQL (production) / SQLite (development)
+- **ORM**: SQLAlchemy
+- **Authentication**: JWT (python-jose)
+- **AI/ML**: 
+  - Google Gemini AI
+  - Groq API
+  - scikit-learn
+- **Video**: 
+  - Daily.co API
+  - LiveKit
+  - Zoom SDK
+- **Document Processing**: PyPDF2, python-docx
+- **Encryption**: cryptography library
 
-From the repository root:
+### Frontend
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **UI Library**: Material-UI (MUI)
+- **Routing**: React Router v6
+- **State Management**: React Context API
+- **HTTP Client**: Axios
+- **Charts**: Recharts
+- **Icons**: Lucide React, Font Awesome
+- **Video**: 
+  - LiveKit Components React
+  - LiveKit Client
+- **Notifications**: react-hot-toast
 
-1. **Navigate to backend**:
-   ```bash
-   cd backend
-   ```
-2. **(Optional but recommended) Create and activate a virtual environment**:
-   ```bash
-   python -m venv venv
-   # Windows
-   venv\Scripts\activate
-   # macOS / Linux
-   # source venv/bin/activate
-   ```
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. **Create the backend `.env` from `.env.example`** (see section above), then ensure `DATABASE_URL` and JWT settings are valid.
-5. **Start the backend server**:
-   ```bash
-   python main_final.py
-   ```
-6. The backend should now be running at:
-   - **`http://localhost:8000`**
-   - API docs available at `http://localhost:8000/docs`.
-
-> The backend is designed to run **independently** of the frontend and can be tested directly via Swagger UI, Postman, or CLI scripts.
-
-### 2. Frontend Setup
-
-From the repository root:
-
-1. **Navigate to frontend**:
-   ```bash
-   cd Frontend
-   ```
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-3. **Create the frontend `.env` from `.env.example`** and **set the API base URL**, for example:
-   ```bash
-   VITE_API_BASE_URL=http://localhost:8000
-   ```
-4. **Start the frontend dev server**:
-   ```bash
-   npm run dev
-   ```
-5. Open the application in your browser:
-   - Typically at **`http://localhost:5173`** (Vite default; check your console output).
+### DevOps & Infrastructure
+- **Hosting**: Render (backend), Vercel/Netlify (frontend)
+- **Database**: Render PostgreSQL
+- **Environment**: dotenv for configuration
+- **CORS**: Configured for multiple origins
 
 ---
 
-## API Configuration
+## 🏗 Architecture
 
-- **API Base URL**  
-  - Default local backend: `http://localhost:8000`
-  - The frontend reads this value from the environment, e.g.:
-    - `VITE_API_BASE_URL` (for Vite + React)
+### System Architecture
 
-- **Backend runs independently**  
-  - You can call backend APIs directly (without the frontend) for testing.
-  - Health check: `GET /api/health`  
-  - Auth, job, candidate, resume, and interview endpoints are exposed under the `/api/...` namespace.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Frontend (React)                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │Dashboard │  │Jobs      │  │Candidates│  │Interviews│   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ REST API
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend (FastAPI)                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │Auth      │  │Jobs      │  │Candidates│  │Interviews│   │
+│  │Router    │  │Router    │  │Router    │  │Router    │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │GDPR      │  │ATS       │  │Video     │  │Fraud     │   │
+│  │Router    │  │Router    │  │Router    │  │Detection │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   External Services                          │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │Gemini AI │  │Groq API  │  │Daily.co  │  │LiveKit   │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
+│  │SendGrid  │  │ATS APIs  │  │PostgreSQL│                  │
+│  └──────────┘  └──────────┘  └──────────┘                  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-When deploying or changing environments (staging, production), update the frontend `.env` with the correct `VITE_API_BASE_URL` pointing to the deployed backend.
+### Database Schema Overview
+
+**Core Tables**:
+- `users` - User accounts with roles and profiles
+- `jobs` - Job postings
+- `job_applications` - Candidate applications
+- `candidate_resumes` - Parsed resume data
+
+**Interview Tables**:
+- `interview_questions` - Generated questions
+- `interview_sessions` - Interview sessions
+- `interview_answers` - Candidate answers
+- `question_generation_sessions` - Question generation tracking
+
+**Video Interview Tables**:
+- `video_interviews` - Video interview sessions
+- `fraud_analyses` - Fraud detection results
+
+**GDPR Tables**:
+- `consent_records` - User consent tracking
+- `deletion_requests` - Data deletion requests
+- `data_export_requests` - Data export requests
+- `audit_logs` - Audit trail
+- `data_retention_policies` - Retention policies
+
+**ATS Tables**:
+- `ats_connections` - ATS integrations
+- `ats_sync_logs` - Sync history
+- `ats_job_mappings` - Job mappings
+- `ats_candidate_mappings` - Candidate mappings
+
+**Feedback Tables**:
+- `post_hire_feedback` - Post-hire performance feedback
+- `quality_metrics` - Quality metrics and analytics
 
 ---
 
-## Project Status
+## 🚀 Installation
 
-- **Candidate module implemented**  
-  - Candidate data model, APIs, resume upload, and matching logic are available in the backend.
+### Prerequisites
 
-- **Candidate profile UI in progress**  
-  - Candidate profile pages and editing workflows are partially implemented in the frontend and may change.
+- Python 3.9+
+- Node.js 16+
+- PostgreSQL 13+ (for production)
+- Git
+
+### Backend Setup
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd ai-interview-platform
+
+# Navigate to backend
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows
+venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file (see Configuration section)
+cp .env.example .env
+
+# Run database migrations
+python -c "from database import Base, engine; Base.metadata.create_all(bind=engine)"
+
+# Start backend server
+uvicorn main_final:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend Setup
+
+```bash
+# Navigate to frontend
+cd Frontend
+
+# Install dependencies
+npm install
+
+# Create .env file
+cp .env.example .env.local
+
+# Start development server
+npm run dev
+```
 
 ---
 
-## Note
+## ⚙️ Configuration
 
-- **This is a demo project** intended to showcase an AI‑driven interview workflow.  
-- **Client‑specific configuration, branding, and integrations** (e.g., custom ATS, SSO, vendor‑specific AI providers) can be added on top of this base as needed.
+### Backend Environment Variables (.env)
 
-For questions or onboarding new contributors, this `README.md` should be the starting point for understanding how to **clone, configure, and run** the AI Interview Platform (Demo).
+```env
+# Database
+DATABASE_URL=postgresql://user:password@host:port/database
 
+# Authentication
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# AI Services
+GEMINI_API_KEY=your-gemini-api-key
+GROQ_API_KEY=your-groq-api-key
+OPENAI_API_KEY=your-openai-api-key  # Optional
+
+# Video Services
+DAILY_API_KEY=your-daily-api-key
+LIVEKIT_API_KEY=your-livekit-api-key
+LIVEKIT_API_SECRET=your-livekit-secret
+LIVEKIT_URL=wss://your-livekit-url
+
+# Zoom (Optional)
+ZOOM_ACCOUNT_ID=your-zoom-account-id
+ZOOM_CLIENT_ID=your-zoom-client-id
+ZOOM_CLIENT_SECRET=your-zoom-client-secret
+
+# Email
+SENDGRID_API_KEY=your-sendgrid-api-key
+SENDER_EMAIL=your-sender-email
+
+# Encryption
+PII_ENCRYPTION_KEY=your-encryption-key
+
+# GDPR
+DATA_RETENTION_DEFAULT_DAYS=365
+DATA_EXPORT_EXPIRY_HOURS=48
+```
+
+### Frontend Environment Variables (.env.local)
+
+```env
+# API Configuration
+VITE_API_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8000/api
+
+# LiveKit
+VITE_LIVEKIT_URL=wss://your-livekit-url
+```
+
+---
+
+## 📚 API Documentation
+
+### Authentication Endpoints
+
+```
+POST   /api/auth/signup          - Register new user
+POST   /api/auth/login           - User login
+GET    /api/auth/me              - Get current user
+GET    /api/auth/profile         - Get user profile
+PUT    /api/auth/profile         - Update user profile
+POST   /api/auth/change-password - Change password
+POST   /api/auth/activity        - Update activity status
+POST   /api/auth/logout          - User logout
+```
+
+### Job Endpoints
+
+```
+GET    /api/jobs                 - List all jobs
+POST   /api/createJob            - Create new job
+GET    /api/jobs/{id}            - Get job details
+PUT    /api/jobs/{id}            - Update job
+GET    /api/jobs/search          - Search jobs
+GET    /api/jobs/stats           - Get job statistics
+POST   /api/job/apply            - Apply for job
+POST   /api/job/apply-with-resume - Apply with resume upload
+```
+
+### Candidate Endpoints
+
+```
+GET    /api/candidates           - List all candidates
+GET    /api/candidates/{id}/interviews - Get candidate interviews
+POST   /api/candidates/{id}/generate-questions - Generate questions
+POST   /api/candidates/{id}/upload-transcript - Upload transcript
+POST   /api/candidates/{id}/generate-score - Generate score
+POST   /api/candidates/{id}/activity - Update activity
+GET    /api/candidates/online-status - Get online status
+```
+
+### Interview Endpoints
+
+```
+POST   /api/interview/generate-questions - Generate questions
+GET    /api/interview/questions/{sessionId} - Get questions
+POST   /api/interview/submit-answer - Submit answer
+POST   /api/interview/complete - Complete interview
+GET    /api/interview/results/{sessionId} - Get results
+```
+
+### Video Interview Endpoints
+
+```
+POST   /api/video/schedule       - Schedule video interview
+GET    /api/video/interviews     - List video interviews
+GET    /api/video/interviews/{id} - Get interview details
+POST   /api/video/join           - Join video room
+POST   /api/video/upload-transcript - Upload transcript
+POST   /api/video/end            - End interview
+DELETE /api/video/interviews/{id} - Delete interview
+```
+
+### GDPR Endpoints
+
+```
+GET    /api/gdpr/consent         - Get consent records
+POST   /api/gdpr/consent         - Grant consent
+PUT    /api/gdpr/consent/{id}    - Revoke consent
+POST   /api/gdpr/export          - Request data export
+GET    /api/gdpr/export/{id}     - Download export
+POST   /api/gdpr/deletion        - Request deletion
+GET    /api/gdpr/audit           - Get audit logs
+GET    /api/gdpr/retention       - Get retention policies
+```
+
+### ATS Endpoints
+
+```
+POST   /api/ats/connect          - Connect ATS
+GET    /api/ats/connections      - List connections
+POST   /api/ats/sync             - Trigger sync
+GET    /api/ats/sync/logs        - Get sync logs
+GET    /api/ats/mappings         - Get job mappings
+```
+
+### Fraud Detection Endpoints
+
+```
+GET    /api/fraud/dashboard      - Fraud dashboard
+GET    /api/fraud/analysis/{id}  - Get fraud analysis
+POST   /api/fraud/analyze        - Analyze interview
+GET    /api/fraud/flags          - Get flagged interviews
+```
+
+---
+
+## 🗄 Database Schema
+
+### User Roles
+- `RECRUITER` - Can create jobs, manage candidates
+- `DOMAIN_EXPERT` - Can review questions, conduct interviews
+- `ADMIN` - Full system access
+- `CANDIDATE` - Can apply for jobs, take interviews
+
+### Key Relationships
+
+```
+User (1) ──── (N) Job
+User (1) ──── (N) JobApplication
+Job (1) ──── (N) JobApplication
+JobApplication (1) ──── (1) CandidateResume
+JobApplication (1) ──── (N) InterviewQuestion
+JobApplication (1) ──── (N) InterviewSession
+InterviewSession (1) ──── (N) InterviewAnswer
+InterviewSession (1) ──── (1) VideoInterview
+VideoInterview (1) ──── (1) FraudAnalysis
+```
+
+---
+
+## 🌐 Deployment
+
+### Backend Deployment (Render)
+
+1. Create new Web Service on Render
+2. Connect GitHub repository
+3. Configure build command: `pip install -r requirements.txt`
+4. Configure start command: `uvicorn main_final:app --host 0.0.0.0 --port $PORT`
+5. Add environment variables from .env
+6. Deploy
+
+### Frontend Deployment (Vercel)
+
+1. Connect GitHub repository to Vercel
+2. Configure build settings:
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+3. Add environment variables
+4. Deploy
+
+### Database Setup (Render PostgreSQL)
+
+1. Create PostgreSQL database on Render
+2. Copy connection string
+3. Update `DATABASE_URL` in backend environment variables
+4. Database tables will be created automatically on first run
+
+---
+
+## 📝 Usage Examples
+
+### Creating a Job
+
+```typescript
+const jobData = {
+  title: "Senior Software Engineer",
+  description: "We are looking for...",
+  company: "Tech Corp",
+  location: "Remote",
+  job_type: "Full-time",
+  experience_level: "Senior",
+  skills_required: ["Python", "React", "PostgreSQL"],
+  number_of_openings: 2
+};
+
+const response = await axios.post('/api/createJob', jobData);
+```
+
+### Generating Interview Questions
+
+```typescript
+const response = await axios.post(
+  `/api/candidates/${candidateId}/generate-questions`,
+  {
+    job_id: jobId,
+    total_questions: 10,
+    generation_mode: "balanced"
+  }
+);
+```
+
+### Scheduling Video Interview
+
+```typescript
+const response = await axios.post('/api/video/schedule', {
+  job_id: jobId,
+  candidate_id: candidateId,
+  scheduled_at: "2024-03-15T10:00:00Z",
+  duration_minutes: 60
+});
+```
+
+---
+
+## 🔐 Security Features
+
+- **JWT Authentication**: Secure token-based authentication
+- **Password Hashing**: bcrypt for password security
+- **PII Encryption**: Sensitive data encrypted at rest
+- **CORS Protection**: Configured allowed origins
+- **SQL Injection Prevention**: SQLAlchemy ORM
+- **XSS Protection**: Input sanitization
+- **GDPR Compliance**: Complete data privacy controls
+
+---
+
+## 🧪 Testing
+
+### Backend Tests
+
+```bash
+cd backend
+pytest tests/
+```
+
+### Frontend Tests
+
+```bash
+cd Frontend
+npm run test
+```
+
+---
+
+## 📊 Monitoring & Analytics
+
+- **User Activity Tracking**: Real-time online status
+- **Interview Analytics**: Completion rates, scores
+- **Quality Metrics**: Post-hire performance tracking
+- **Fraud Detection**: Suspicious behavior monitoring
+- **Audit Logs**: Complete activity trail
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
+
+---
+
+## 📄 License
+
+This project is proprietary software. All rights reserved.
+
+---
+
+## 👥 Team
+
+- **Development Team**: FusionGS
+- **Contact**: pooja@fusiongs.com
+
+---
+
+## 🆘 Support
+
+For support, email pooja@fusiongs.com or create an issue in the repository.
+
+---
+
+## 🗺 Roadmap
+
+- [ ] LiveKit AI Interview Integration
+- [ ] Advanced Analytics Dashboard
+- [ ] Mobile App (React Native)
+- [ ] Multi-language Support
+- [ ] Advanced Fraud Detection (AI-powered)
+- [ ] Integration with more ATS systems
+- [ ] Candidate Portal Enhancements
+- [ ] Real-time Collaboration Features
+
+---
+
+**Built with ❤️ by FusionGS**

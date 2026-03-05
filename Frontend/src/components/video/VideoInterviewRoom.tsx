@@ -15,6 +15,9 @@ import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import '@livekit/components-styles';
+import { VideoTilesGrid } from './VideoTilesGrid';
 
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
@@ -31,11 +34,12 @@ const VideoInterviewRoom: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingRecording, setUploadingRecording] = useState(false);
   const [, setParticipantCount] = useState(0);
+  const [lkToken, setLkToken] = useState<string | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
-  const jitsiApiRef = useRef<any>(null);
+  // const jitsiApiRef = useRef<any>(null); // Removed Jitsi ref
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
@@ -101,145 +105,25 @@ const VideoInterviewRoom: React.FC = () => {
     };
   }, [isActive]);
 
-  // Initialize video call when interview becomes active
+  // Fetch LiveKit token and dispatch agent when interview is active
   useEffect(() => {
-    if (isActive && videoContainerRef.current && interview?.zoom_meeting_url) {
-      initializeVideo();
-    }
-  }, [isActive, interview]);
-
-  const loadJitsiScript = (): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if ((window as any).JitsiMeetExternalAPI) {
-        resolve();
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://meet.jit.si/external_api.js';
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Jitsi API'));
-      document.head.appendChild(script);
-    });
-  };
-
-  const initializeVideo = async () => {
-    if (!videoContainerRef.current) {
-      console.error('Video container not available');
-      return;
-    }
-
-    const meetingUrl = interview?.zoom_meeting_url;
-    if (!meetingUrl) {
-      console.error('No meeting URL available');
-      toast.error('Meeting URL not available');
-      return;
-    }
-
-    // Use Jitsi IFrame API for proper embedding (bypasses lobby/moderator screen)
-    if (meetingUrl.includes('meet.jit.si')) {
-      try {
-        await loadJitsiScript();
-
-        // Extract room name from URL (remove config hash params)
-        const roomName = meetingUrl.split('meet.jit.si/')[1]?.split('#')[0]?.split('?')[0];
-        if (!roomName) {
-          toast.error('Invalid meeting URL');
-          return;
+    const fetchToken = async () => {
+      if (isActive && interview && !lkToken) {
+        try {
+          const roomName = `interview_${videoId}`;
+          const data = await videoInterviewService.joinInterview(Number(videoId));
+          setLkToken(data.token);
+          console.log('🎥 LiveKit token fetched and Agent dispatched for room:', roomName);
+        } catch (err: any) {
+          toast.error('Failed to get video token. Please refresh.');
+          console.error('LiveKit token error:', err);
         }
-
-        videoContainerRef.current.innerHTML = '';
-
-        const api = new (window as any).JitsiMeetExternalAPI('meet.jit.si', {
-          roomName: roomName,
-          parentNode: videoContainerRef.current,
-          width: '100%',
-          height: '100%',
-          configOverwrite: {
-            prejoinPageEnabled: false,
-            disableDeepLinking: true,
-            enableLobby: false,
-            startWithAudioMuted: false,
-            startWithVideoMuted: false,
-            enableWelcomePage: false,
-            enableClosePage: false,
-            disableModeratedRooms: true,
-            // Additional security bypass settings
-            requireDisplayName: false,
-            enableInsecureRoomNameWarning: false,
-            enableNoisyMicDetection: false,
-            // Disable lobby completely
-            lobby: {
-              autoKnock: false,
-              enableChat: false,
-            },
-            // Allow everyone to join without approval
-            disableLobbyPassword: true,
-            enableLobbyChat: false,
-          },
-          interfaceConfigOverwrite: {
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_WATERMARK_FOR_GUESTS: false,
-            DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-            HIDE_INVITE_MORE_HEADER: true,
-            DISABLE_PRESENCE_STATUS: true,
-          },
-          userInfo: {
-            displayName: user?.name || 'Participant'
-          }
-        });
-
-        api.addEventListener('videoConferenceJoined', () => {
-          setCallJoined(true);
-          setParticipantCount(1);
-          maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
-          toast.success('Connected to video call!');
-        });
-
-        api.addEventListener('participantJoined', () => {
-          setParticipantCount(prev => {
-            const newCount = prev + 1;
-            maxParticipantsRef.current = Math.max(maxParticipantsRef.current, newCount);
-            // Start recording when candidate joins (first remote participant)
-            if (newCount === 2 && !mediaRecorderRef.current) {
-              startRecording();
-            }
-            return newCount;
-          });
-        });
-
-        api.addEventListener('participantLeft', () => {
-          setParticipantCount(prev => Math.max(1, prev - 1));
-        });
-
-        api.addEventListener('readyToClose', () => {
-          handleEnd();
-        });
-
-        jitsiApiRef.current = api;
-        console.log('🎥 Jitsi IFrame API initialized for room:', roomName);
-        return;
-      } catch (err) {
-        console.error('Failed to load Jitsi API, falling back to iframe:', err);
       }
-    }
-
-    // Fallback: plain iframe (for non-Jitsi URLs or if API fails)
-    console.log('🎥 Initializing video via iframe:', meetingUrl);
-    const iframe = document.createElement('iframe');
-    iframe.src = meetingUrl;
-    iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = '0';
-    iframe.style.borderRadius = '20px';
-    iframe.onload = () => {
-      setCallJoined(true);
-      toast.success('Connected to video call!');
     };
-    videoContainerRef.current.innerHTML = '';
-    videoContainerRef.current.appendChild(iframe);
-  };
+    fetchToken();
+  }, [isActive, interview, videoId, user, lkToken]);
+
+  // Removed Jitsi initialization functions as we're moving to declarative LiveKit components
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -436,16 +320,10 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const cleanupVideoCall = () => {
-    if (jitsiApiRef.current) {
-      try { jitsiApiRef.current.dispose(); } catch (e) { /* ignore */ }
-      jitsiApiRef.current = null;
-    }
+    setLkToken(null);
     if (videoContainerRef.current) {
       videoContainerRef.current.innerHTML = '';
     }
-    document.querySelectorAll('iframe[allow*="camera"], iframe[src*="jit.si"]').forEach(el => {
-      el.remove();
-    });
   };
 
   const handleEnd = async () => {
@@ -604,18 +482,13 @@ const VideoInterviewRoom: React.FC = () => {
                     }}
                   />
                 )}
-                <Tooltip title="Copy meeting link for candidate">
-                  <IconButton onClick={handleCopyMeetingLink} sx={{ color: '#64748b' }}>
-                    <LinkIcon />
-                  </IconButton>
-                </Tooltip>
               </>
             )}
             <Box sx={{
               background: '#EEF0FF',
-              color:"#020291",
+              color: "#020291",
               borderRadius: '10px',
-              border:"1px solid #020291",
+              border: "1px solid #020291",
               padding: { xs: '8px 12px', sm: '10px 20px' },
               display: 'flex',
               alignItems: 'center',
@@ -623,7 +496,7 @@ const VideoInterviewRoom: React.FC = () => {
               boxShadow: '0 2px 8px rgba(2, 2, 145, 0.3)'
             }}>
               <AccessTime sx={{ color: '#020291', fontSize: { xs: 16, sm: 20 } }} />
-              <Typography sx={{  fontFamily: 'monospace', fontWeight: 700, fontSize: { xs: '16px', sm: '20px' },color:"#020291" }}>
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: { xs: '16px', sm: '20px' }, color: "#020291" }}>
                 {formatTime(elapsed)}
               </Typography>
             </Box>
@@ -650,15 +523,43 @@ const VideoInterviewRoom: React.FC = () => {
               boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
             }}>
               {isActive ? (
-                // Jitsi Video Call
+                // LiveKit Video Call with Tiles
                 <Box
-                  ref={videoContainerRef}
                   sx={{
                     width: '100%',
                     height: '100%',
                     minHeight: '500px',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderRadius: '20px',
+                    background: '#1e293b',
                   }}
-                />
+                >
+                  {lkToken ? (
+                    <LiveKitRoom
+                      video={true}
+                      audio={true}
+                      token={lkToken}
+                      serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
+                      connect={true}
+                      onConnected={() => {
+                        setCallJoined(true);
+                        setParticipantCount(1);
+                        maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
+                        toast.success('Connected to video call!');
+                      }}
+                      style={{ height: '100%', width: '100%', background: '#1e293b' }}
+                    >
+                      <VideoTilesGrid />
+                      <RoomAudioRenderer />
+                    </LiveKitRoom>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <CircularProgress sx={{ color: '#020291' }} />
+                      <Typography sx={{ color: 'white' }}>Establishing secure connection...</Typography>
+                    </Box>
+                  )}
+                </Box>
               ) : isCompleted ? (
                 <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 3 }}>
                   <Box sx={{
@@ -738,17 +639,17 @@ const VideoInterviewRoom: React.FC = () => {
                       <Typography sx={{ color: '#94a3b8', fontSize: '12px', mb: 2 }}>
                         Live HD video call with candidate
                       </Typography>
-                      <Chip label="Zoom-like Quality" size="small"  sx={{
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    color: '#C7D2FE',
-    border: '1px solid rgba(255,255,255,0.15)',
-    fontSize: '11.5px',
-    height: 22,
-    borderRadius: '999px',
-    '& .MuiChip-label': {
-      px: 1,
-    },
-  }} />
+                      <Chip label="Zoom-like Quality" size="small" sx={{
+                        backgroundColor: 'rgba(255,255,255,0.06)',
+                        color: '#C7D2FE',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        fontSize: '11.5px',
+                        height: 22,
+                        borderRadius: '999px',
+                        '& .MuiChip-label': {
+                          px: 1,
+                        },
+                      }} />
                     </Box>
 
                     {/* AI Interview Card */}
@@ -861,41 +762,6 @@ const VideoInterviewRoom: React.FC = () => {
                 {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />}
               </Box>
             </Paper>
-
-            {/* Meeting Link */}
-            {isActive && interview?.zoom_meeting_url && (
-              <Paper sx={{
-                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                borderRadius: '16px', padding: '20px', border: '1px solid #bfdbfe'
-              }}>
-                <Typography sx={{ color: '#1e40af', fontWeight: 700, fontSize: '14px', mb: 1 }}>
-                  📎 Share Meeting Link
-                </Typography>
-                <Typography sx={{ color: '#3b82f6', fontSize: '12px', mb: 1 }}>
-                  Send this link to the candidate:
-                </Typography>
-                <Box sx={{
-                  background: 'white', borderRadius: '8px', p: 1.5, mb: 2,
-                  border: '1px solid #93c5fd', wordBreak: 'break-all'
-                }}>
-                  <Typography sx={{ color: '#1e40af', fontSize: '10px', fontFamily: 'monospace', fontWeight: 600 }}>
-                    {interview.zoom_meeting_url}
-                  </Typography>
-                </Box>
-                <Button
-                  fullWidth variant="outlined"
-                  startIcon={<ContentCopy />}
-                  onClick={handleCopyMeetingLink}
-                  sx={{
-                    borderColor: '#3b82f6', color: '#3b82f6',
-                    textTransform: 'none', fontWeight: 600,
-                    '&:hover': { background: '#3b82f6', color: 'white' }
-                  }}
-                >
-                  Copy Meeting Link
-                </Button>
-              </Paper>
-            )}
 
             {/* Interview Info */}
             <Paper sx={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>

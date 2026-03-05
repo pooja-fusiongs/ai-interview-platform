@@ -8,6 +8,7 @@ import {
   ArrowBack, AccessTime, NavigateNext, Check, SmartToy,
   FiberManualRecord, Mic, MicOff, Videocam, VideocamOff, Timer
 } from '@mui/icons-material';
+import { LiveKitRoom, VideoConference, RoomAudioRenderer, ControlBar } from '@livekit/components-react';
 import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
@@ -47,9 +48,10 @@ const AIInterviewRoom: React.FC = () => {
   const [callJoined, setCallJoined] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [lkToken, setLkToken] = useState<string | null>(null);
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
-  const jitsiApiRef = useRef<any>(null);
+  // const jitsiApiRef = useRef<any>(null); // Removed Jitsi ref
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const questionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -58,10 +60,11 @@ const AIInterviewRoom: React.FC = () => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (questionTimerRef.current) clearInterval(questionTimerRef.current);
-      if (jitsiApiRef.current) {
-        try { jitsiApiRef.current.dispose(); } catch (e) { /* ignore */ }
+      /* if (jitsiApiRef.current) {
+        try { jitsiApiRef.current.dispose(); } catch (e) { }
         jitsiApiRef.current = null;
-      }
+      } */
+      setLkToken(null);
       if (videoContainerRef.current) {
         videoContainerRef.current.innerHTML = '';
       }
@@ -139,122 +142,27 @@ const AIInterviewRoom: React.FC = () => {
     };
   }, [isActive, callJoined, currentIndex, completing]);
 
-  // Initialize video call when interview becomes active
+  // Fetch LiveKit token when interview is active
   useEffect(() => {
-    if (isActive && videoContainerRef.current && interview?.zoom_meeting_url) {
-      initializeVideo();
-    }
-  }, [isActive, interview]);
-
-  const loadJitsiScript = (): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if ((window as any).JitsiMeetExternalAPI) {
-        resolve();
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://meet.jit.si/external_api.js';
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Jitsi API'));
-      document.head.appendChild(script);
-    });
-  };
-
-  const initializeVideo = async () => {
-    if (!videoContainerRef.current) {
-      console.error('Video container not available');
-      return;
-    }
-
-    const meetingUrl = interview?.zoom_meeting_url;
-    if (!meetingUrl) {
-      console.error('No meeting URL available');
-      toast.error('Meeting URL not available');
-      return;
-    }
-
-    // Use Jitsi IFrame API for proper embedding (bypasses lobby/moderator screen)
-    if (meetingUrl.includes('meet.jit.si')) {
-      try {
-        await loadJitsiScript();
-
-        const roomName = meetingUrl.split('meet.jit.si/')[1]?.split('#')[0]?.split('?')[0];
-        if (!roomName) {
-          toast.error('Invalid meeting URL');
-          return;
+    const fetchToken = async () => {
+      if (isActive && interview && !lkToken) {
+        try {
+          const roomName = `interview_${videoId}`;
+          const data = await videoInterviewService.joinInterview(Number(videoId));
+          setLkToken(data.token);
+          console.log('🎥 LiveKit token fetched and Agent dispatched for AI room:', roomName);
+        } catch (err: any) {
+          toast.error('Failed to get video token. Please refresh.');
+          console.error('LiveKit token error:', err);
         }
-
-        videoContainerRef.current.innerHTML = '';
-
-        const api = new (window as any).JitsiMeetExternalAPI('meet.jit.si', {
-          roomName: roomName,
-          parentNode: videoContainerRef.current,
-          width: '100%',
-          height: '100%',
-          configOverwrite: {
-            prejoinPageEnabled: false,
-            disableDeepLinking: true,
-            enableLobby: false,
-            startWithAudioMuted: false,
-            startWithVideoMuted: false,
-            enableWelcomePage: false,
-            enableClosePage: false,
-            disableModeratedRooms: true,
-            // Additional security bypass settings
-            requireDisplayName: false,
-            enableInsecureRoomNameWarning: false,
-            enableNoisyMicDetection: false,
-            // Disable lobby completely
-            lobby: {
-              autoKnock: false,
-              enableChat: false,
-            },
-            // Allow everyone to join without approval
-            disableLobbyPassword: true,
-            enableLobbyChat: false,
-          },
-          interfaceConfigOverwrite: {
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_WATERMARK_FOR_GUESTS: false,
-            DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-            HIDE_INVITE_MORE_HEADER: true,
-            DISABLE_PRESENCE_STATUS: true,
-          },
-          userInfo: {
-            displayName: user?.name || 'Candidate'
-          }
-        });
-
-        api.addEventListener('videoConferenceJoined', () => {
-          setCallJoined(true);
-          toast.success('Connected! AI Interview starting...');
-        });
-
-        jitsiApiRef.current = api;
-        console.log('🎥 Jitsi IFrame API initialized for AI Interview room:', roomName);
-        return;
-      } catch (err) {
-        console.error('Failed to load Jitsi API, falling back to iframe:', err);
       }
-    }
-
-    // Fallback: plain iframe
-    console.log('🎥 Initializing video via iframe:', meetingUrl);
-    const iframe = document.createElement('iframe');
-    iframe.src = meetingUrl;
-    iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = '0';
-    iframe.style.borderRadius = '16px';
-    iframe.onload = () => {
-      setCallJoined(true);
-      toast.success('Connected! AI Interview starting...');
     };
-    videoContainerRef.current.innerHTML = '';
-    videoContainerRef.current.appendChild(iframe);
-  };
+    fetchToken();
+  }, [isActive, interview, videoId, user, lkToken]);
+
+  // Removed Jitsi initialization as we're moving to declarative LiveKit components
+
+  // Removed Jitsi initialization functions
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -332,7 +240,7 @@ const AIInterviewRoom: React.FC = () => {
     }
 
     // Prepare all answers
-    const finalAnswers: Answer[] = questions.map((q, ) => {
+    const finalAnswers: Answer[] = questions.map((q,) => {
       const existing = answers.find(a => a.question_id === q.id);
       return {
         question_id: q.id,
@@ -344,10 +252,11 @@ const AIInterviewRoom: React.FC = () => {
       setCompleting(true);
 
       // Clean up video call
-      if (jitsiApiRef.current) {
-        try { jitsiApiRef.current.dispose(); } catch (e) { /* ignore */ }
+      /* if (jitsiApiRef.current) {
+        try { jitsiApiRef.current.dispose(); } catch (e) { }
         jitsiApiRef.current = null;
-      }
+      } */
+      setLkToken(null);
       if (videoContainerRef.current) {
         videoContainerRef.current.innerHTML = '';
       }
@@ -372,16 +281,10 @@ const AIInterviewRoom: React.FC = () => {
   };
 
   const toggleMic = () => {
-    if (jitsiApiRef.current) {
-      jitsiApiRef.current.executeCommand('toggleAudio');
-    }
     setMicOn(!micOn);
   };
 
   const toggleCam = () => {
-    if (jitsiApiRef.current) {
-      jitsiApiRef.current.executeCommand('toggleVideo');
-    }
     setCamOn(!camOn);
   };
 
@@ -572,8 +475,8 @@ const AIInterviewRoom: React.FC = () => {
                       width: 90, height: 90,
                       borderRadius: '50%',
                       background: scoreResult.overall_score >= 75 ? '#020291' :
-                                 scoreResult.overall_score >= 50 ? 'linear-gradient(135deg, primary.main0%, #020291 100%)' :
-                                 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                        scoreResult.overall_score >= 50 ? 'linear-gradient(135deg, primary.main0%, #020291 100%)' :
+                          'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -595,7 +498,7 @@ const AIInterviewRoom: React.FC = () => {
                         fontSize: '13px',
                         padding: '6px 14px',
                         background: scoreResult.recommendation === 'select' ? '#10b981' :
-                                   scoreResult.recommendation === 'next_round' ? '#020291' : '#ef4444',
+                          scoreResult.recommendation === 'next_round' ? '#020291' : '#ef4444',
                         color: 'white'
                       }}
                     />
@@ -641,27 +544,37 @@ const AIInterviewRoom: React.FC = () => {
                 justifyContent: 'center',
                 boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
               }}>
-                <Box
-                  ref={videoContainerRef}
-                  sx={{
-                    width: '100%',
-                    height: '100%',
-                    minHeight: '400px',
-                  }}
-                />
-                {!callJoined && (
-                  <Box sx={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'rgba(0,0,0,0.7)'
-                  }}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <CircularProgress sx={{ color: '#8b5cf6', mb: 2 }} />
-                      <Typography sx={{ color: 'white' }}>Connecting to video...</Typography>
+                {lkToken ? (
+                  <LiveKitRoom
+                    video={camOn}
+                    audio={micOn}
+                    token={lkToken}
+                    serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
+                    connect={true}
+                    onConnected={() => {
+                      setCallJoined(true);
+                      toast.success('Connected! AI Interview starting...');
+                    }}
+                    onDisconnected={() => handleSubmitAll()}
+                    style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+                  >
+                    <VideoConference />
+                    <RoomAudioRenderer />
+                    <Box sx={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+                      <ControlBar 
+                        controls={{
+                          microphone: true,
+                          camera: true,
+                          screenShare: false,
+                          leave: true
+                        }}
+                      />
                     </Box>
+                  </LiveKitRoom>
+                ) : (
+                  <Box sx={{ textAlign: 'center' }}>
+                    <CircularProgress sx={{ color: '#8b5cf6', mb: 2 }} />
+                    <Typography sx={{ color: 'white' }}>Connecting to secure video session...</Typography>
                   </Box>
                 )}
               </Paper>
@@ -669,44 +582,8 @@ const AIInterviewRoom: React.FC = () => {
 
             {/* Video Controls */}
             {isActive && !isCompleted && (
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 2,
-                background: 'white',
-                borderRadius: '12px',
-                padding: '12px 20px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
-              }}>
-                <IconButton
-                  onClick={toggleMic}
-                  disabled={!callJoined}
-                  sx={{
-                    width: 48, height: 48,
-                    background: micOn ? '#f1f5f9' : '#fef2f2',
-                    border: micOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
-                    '&:hover': { background: micOn ? '#e2e8f0' : '#fee2e2' },
-                    '&:disabled': { opacity: 0.5 }
-                  }}
-                >
-                  {micOn ? <Mic sx={{ color: '#1e293b' }} /> : <MicOff sx={{ color: '#ef4444' }} />}
-                </IconButton>
-
-                <IconButton
-                  onClick={toggleCam}
-                  disabled={!callJoined}
-                  sx={{
-                    width: 48, height: 48,
-                    background: camOn ? '#f1f5f9' : '#fef2f2',
-                    border: camOn ? '1px solid #e2e8f0' : '1px solid #fecaca',
-                    '&:hover': { background: camOn ? '#e2e8f0' : '#fee2e2' },
-                    '&:disabled': { opacity: 0.5 }
-                  }}
-                >
-                  {camOn ? <Videocam sx={{ color: '#1e293b' }} /> : <VideocamOff sx={{ color: '#ef4444' }} />}
-                </IconButton>
-              </Box>
+              /* Removed manual controls as they are now handled by AgentControlBar inside LiveKitRoom */
+              null
             )}
           </Box>
 
@@ -794,7 +671,7 @@ const AIInterviewRoom: React.FC = () => {
                           height: 8,
                           borderRadius: '50%',
                           background: idx === currentIndex ? '#8b5cf6' :
-                                     idx < currentIndex ? '#10b981' : '#e2e8f0',
+                            idx < currentIndex ? '#10b981' : '#e2e8f0',
                           transition: 'all 0.2s'
                         }}
                       />
@@ -847,8 +724,8 @@ const AIInterviewRoom: React.FC = () => {
                             size="small"
                             sx={{
                               background: currentQuestion.difficulty === 'advanced' ? 'rgba(239,68,68,0.3)' :
-                                         currentQuestion.difficulty === 'intermediate' ? 'rgba(245,158,11,0.3)' :
-                                         'rgba(16,185,129,0.3)',
+                                currentQuestion.difficulty === 'intermediate' ? 'rgba(245,158,11,0.3)' :
+                                  'rgba(16,185,129,0.3)',
                               color: 'white',
                               fontSize: '10px',
                               height: 20

@@ -234,6 +234,19 @@ try:
 except Exception as e:
     print(f"⚠️ Could not load Video Interview endpoints: {e}")
 
+# Import and mount LiveKit endpoints
+try:
+    from routers.livekit_router import router as livekit_router
+    print(f"🔍 LiveKit router imported: {livekit_router}")
+    print(f"🔍 LiveKit router prefix: {livekit_router.prefix}")
+    print(f"🔍 LiveKit router routes: {len(livekit_router.routes)}")
+    app.include_router(livekit_router, prefix="/api/livekit")
+    print("✅ LiveKit endpoints included")
+except Exception as e:
+    import traceback
+    print(f"⚠️ Could not load LiveKit endpoints: {e}")
+    traceback.print_exc()
+
 # Import and mount Post-Hire Feedback endpoints
 try:
     from api.feedback.submissions.app import router as feedback_submissions_router

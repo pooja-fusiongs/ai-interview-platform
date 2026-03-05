@@ -86,6 +86,17 @@ export const videoInterviewService = {
     });
     return response.data;
   },
+  getLiveKitToken: async (roomName: string, participantName: string) => {
+    const response = await apiClient.post('/api/livekit/token', {
+      room_name: roomName,
+      participant_name: participantName
+    });
+    return response.data;
+  },
+  joinInterview: async (videoId: number) => {
+    const response = await apiClient.post('/api/video/join', { video_id: videoId });
+    return response.data;
+  },
 };
 
 export default videoInterviewService;
