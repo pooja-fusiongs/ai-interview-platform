@@ -269,10 +269,10 @@ const VideoInterviewScheduler: React.FC = () => {
       });
 
       if (result.questions_approved === false) {
-        // Interview created but questions need approval
+        // Interview created but questions need approval - redirect to interview-outline page
         setError('Interview scheduled! Please approve the interview questions first, then the interview will be ready.');
         setTimeout(() => {
-          navigate(`/recruiter-candidates?jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}&interviewId=${result.id}`);
+          navigate(`/interview-outline/${result.question_session_id}?from=schedule-interview&jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}&interviewId=${result.id}`);
         }, 2500);
       } else {
         setSuccess(result);

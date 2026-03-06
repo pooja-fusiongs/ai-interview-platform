@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Paper, Button, Divider, CircularProgress, Alert,
-  Avatar, Chip, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
+  Box, Typography, Paper, Button, CircularProgress,
+  Chip, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions
 } from '@mui/material';
 import {
-  Videocam, ArrowBack, AccessTime,
-  Description, Security, CallEnd,
-  Check, SmartToy, Person, Link as LinkIcon, ContentCopy,
+  ArrowBack, AccessTime,
+  CallEnd,
+  Check, SmartToy,
   FiberManualRecord
 } from '@mui/icons-material';
-import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { VideoTilesGrid } from './VideoTilesGrid';
+import { getMediaDevices, requestMediaPermissions, getDeviceErrorMessage, createAudioOnlyConstraints } from '../../utils/mediaDeviceUtils';
 
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
@@ -35,6 +35,8 @@ const VideoInterviewRoom: React.FC = () => {
   const [uploadingRecording, setUploadingRecording] = useState(false);
   const [, setParticipantCount] = useState(0);
   const [lkToken, setLkToken] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -50,6 +52,9 @@ const VideoInterviewRoom: React.FC = () => {
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
+        
+        // Fetch questions for this interview
+        fetchQuestions();
         if (data.status === 'in_progress') {
           if (user?.role === 'candidate') {
             // Candidate joining an in-progress interview: show consent dialog first
@@ -84,6 +89,53 @@ const VideoInterviewRoom: React.FC = () => {
       cleanupVideoCall();
     };
   }, [videoId]);
+
+  const fetchQuestions = async () => {
+    try {
+      setLoadingQuestions(true);
+      const response = await videoInterviewService.getAIInterviewQuestions(Number(videoId));
+      setQuestions(response.questions || []);
+    } catch (err: any) {
+      console.warn('Failed to fetch questions:', err);
+      // Don't show error toast, questions might not be generated yet
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
+  // Pre-request camera/mic permissions on mount to trigger browser prompt
+  useEffect(() => {
+    const requestPermissions = async () => {
+      try {
+        console.log('🎥 Pre-requesting camera/mic permissions...');
+        
+        const deviceInfo = await getMediaDevices();
+        
+        console.log('📱 Available devices:', {
+          videoInputs: deviceInfo.videoDevices.length,
+          audioInputs: deviceInfo.audioDevices.length
+        });
+        
+        if (!deviceInfo.hasVideo && !deviceInfo.hasAudio) {
+          toast.error('No camera or microphone found. Please connect devices and refresh.');
+          return;
+        }
+        
+        const stream = await requestMediaPermissions();
+        console.log('✅ Permissions granted');
+        // Immediately stop all tracks to release the devices
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`🛑 Stopped ${track.kind} track`);
+        });
+      } catch (err: any) {
+        console.warn('⚠️ Permissions not granted on mount:', err);
+        const errorMsg = getDeviceErrorMessage(err);
+        toast.error(errorMsg);
+      }
+    };
+    requestPermissions();
+  }, []);
 
   // Timer effect
   useEffect(() => {
@@ -138,9 +190,20 @@ const VideoInterviewRoom: React.FC = () => {
       console.log('🎬 Showing consent dialog for candidate');
       setShowConsentDialog(true);
     } else {
-      console.log('🎬 Starting directly for role:', user?.role);
-      // Recruiter/Admin — start directly without consent popup
-      startInterviewDirectly();
+      console.log('🎬 Recruiter joining as observer (no interview start)');
+      // Recruiter/Admin — join as observer WITHOUT starting the interview
+      joinAsObserver();
+    }
+  };
+
+  const joinAsObserver = async () => {
+    try {
+      // Recruiter joins as observer - does NOT start the interview
+      // Just fetch token and join the room
+      setIsActive(true);
+      toast.success('Joining as observer...');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to join as observer');
     }
   };
 
@@ -175,8 +238,11 @@ const VideoInterviewRoom: React.FC = () => {
       setIsActive(true);
       toast.success('Joining interview...');
 
-      // Start audio recording (mic only, no camera conflict with Jitsi)
-      startRecording();
+      // Note: We'll start recording AFTER the video room connects to avoid device conflicts
+      // but we set a flag or call it with a slight delay
+      setTimeout(() => {
+        startRecording();
+      }, 2000);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to join interview');
     }
@@ -188,55 +254,28 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const startRecording = async () => {
-    try {
-      let stream: MediaStream;
+    // If already recording, don't start again
+    if (isRecording || mediaRecorderRef.current) return;
 
-      // Try video + audio first (best for anti-cheating evidence)
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        console.log('🎥🎤 Camera + microphone detected, recording video+audio');
-      } catch (videoErr: any) {
-        // Video failed — try audio only
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          console.log('🎤 Microphone only detected, recording audio');
-          toast('No camera — recording audio only.', { icon: '🎤', duration: 4000 });
-        } catch (micErr: any) {
-          // No mic/camera — create silent audio stream for testing
-          console.warn('No mic/camera found, using silent audio stream for recording test');
-          const audioCtx = new AudioContext();
-          const oscillator = audioCtx.createOscillator();
-          oscillator.frequency.value = 0;
-          const dest = audioCtx.createMediaStreamDestination();
-          oscillator.connect(dest);
-          oscillator.start();
-          stream = dest.stream;
-          toast('No mic/camera — using silent recording for testing.', { icon: '🔇', duration: 4000 });
-        }
-      }
+    try {
+      console.log('🎤 Starting AUDIO-ONLY backup recording...');
+
+      // Request AUDIO ONLY to avoid device conflict with LiveKit camera
+      const stream = await navigator.mediaDevices.getUserMedia(createAudioOnlyConstraints());
 
       recordingStreamRef.current = stream;
       recordedChunksRef.current = [];
 
-      // Pick best format based on stream tracks
-      const hasVideo = stream.getVideoTracks().length > 0;
-      let mimeType: string;
-
-      if (hasVideo) {
-        // Video+audio: prefer VP8/VP9 codecs
-        mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-          ? 'video/webm;codecs=vp9,opus'
-          : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-            ? 'video/webm;codecs=vp8,opus'
-            : 'video/webm';
-      } else {
-        // Audio only
-        mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : MediaRecorder.isTypeSupported('audio/webm')
-            ? 'audio/webm'
-            : 'video/webm';
+      // Prefer audio/webm;codecs=opus, fallback to audio/webm
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'audio/mp4'; // Last resort fallback
+        }
       }
+
+      console.log(`🎤 Using MIME type: ${mimeType}`);
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
@@ -246,22 +285,18 @@ const VideoInterviewRoom: React.FC = () => {
         }
       };
 
-      mediaRecorder.onstop = () => {
-        console.log('🎥 Recording stopped, chunks:', recordedChunksRef.current.length);
+      mediaRecorder.onerror = (event: any) => {
+        console.error('❌ MediaRecorder error:', event.error);
       };
 
       mediaRecorder.start(1000); // Collect data every second
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
-      toast.success(hasVideo ? 'Video + Audio recording started!' : 'Audio recording started!');
-      console.log(`🎥 Recording started (${hasVideo ? 'video+audio' : 'audio-only'}) with mimeType:`, mimeType);
+      console.log('✅ Audio-only backup recording started successfully');
     } catch (err: any) {
-      console.error('Failed to start recording:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        toast.error('Camera/microphone permission denied. Please allow access and try again.');
-      } else {
-        toast.error('Recording could not start. Please check browser permissions.');
-      }
+      console.error('❌ Failed to start audio recording:', err);
+      const errorMsg = getDeviceErrorMessage(err);
+      toast.error(errorMsg + ' Interview will continue without backup recording.');
     }
   };
 
@@ -288,8 +323,10 @@ const VideoInterviewRoom: React.FC = () => {
           return;
         }
 
-        const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'video/webm' });
-        console.log(`🎥 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+        const blob = new Blob(recordedChunksRef.current, {
+          type: recordedChunksRef.current[0]?.type || 'audio/webm'
+        });
+        console.log(`🎤 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB, type: ${blob.type}`);
 
         // Upload to backend (silently for candidates)
         const isCandidate = user?.role === 'candidate';
@@ -398,137 +435,224 @@ const VideoInterviewRoom: React.FC = () => {
 
   if (loading) {
     return (
-      <Navigation>
-        <Box sx={{
-          display: 'flex', justifyContent: 'center', alignItems: 'center',
-          minHeight: '100vh', background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)'
-        }}>
-          <Box sx={{ textAlign: 'center' }}>
-            <CircularProgress sx={{ color: '#020291', mb: 2 }} />
-            <Typography sx={{ color: '#64748b' }}>Loading interview room...</Typography>
-          </Box>
+      <Box sx={{
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+        minHeight: '100vh', background: '#0f172a'
+      }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <CircularProgress sx={{ color: '#60a5fa', mb: 2 }} />
+          <Typography sx={{ color: '#94a3b8' }}>Loading interview room...</Typography>
         </Box>
-      </Navigation>
+      </Box>
     );
   }
 
   const isCompleted = interview?.status === 'completed';
 
   return (
-    <Navigation>
-      <Box sx={{
-        minHeight: '100vh',
-        background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)',
+    <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+      {/* LEFT SIDE - Questions Panel */}
+      <Box sx={{ 
+        width: { xs: '100%', md: '40%' }, 
+        backgroundColor: '#1e293b', 
+        borderRight: '1px solid #334155',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        overflow: 'hidden'
       }}>
-        {/* Top Bar */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: { xs: '12px 16px', sm: '16px 24px' },
-          background: 'white',
-          borderBottom: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          flexWrap: 'wrap',
-          gap: { xs: 2, sm: 0 }
+        {/* Header */}
+        <Box sx={{ 
+          padding: '24px', 
+          borderBottom: '1px solid #334155',
+          backgroundColor: '#1e293b'
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <IconButton
               onClick={() => navigate('/video-interviews')}
               sx={{
-                color: '#64748b',
-                background: '#f1f5f9',
-                '&:hover': { background: '#e2e8f0' }
+                color: '#94a3b8',
+                background: 'rgba(51, 65, 85, 0.5)',
+                '&:hover': { background: 'rgba(71, 85, 105, 0.5)' }
               }}
             >
               <ArrowBack />
             </IconButton>
-            <Box>
-              <Typography sx={{ color: '#1e293b', fontWeight: 700, fontSize: { xs: '14px', sm: '18px' } }}>
-                {interview?.job_title || 'Video Interview'}
+            <Box sx={{ flex: 1 }}>
+              <Typography sx={{ fontSize: '24px', fontWeight: 'bold', color: 'white', mb: 0.5 }}>
+                Interview Questions
               </Typography>
-              <Typography sx={{ color: '#64748b', fontSize: { xs: '11px', sm: '13px' } }}>
-                {interview?.candidate_name || 'Candidate'} • Interview #{videoId}
+              <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                {interview?.job_title || 'Loading...'}
               </Typography>
             </Box>
           </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
+          
+          {/* Status Badges */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             {isActive && (
-              <>
-                <Chip
-                  icon={<Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'blink 1s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
-                  label={callJoined ? "LIVE" : "CONNECTING..."}
-                  sx={{
-                    background: '#fef2f2',
-                    color: '#ef4444',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    border: '1px solid #fecaca',
-                  }}
-                />
-                {isRecording && (
-                  <Chip
-                    icon={<FiberManualRecord sx={{ fontSize: 14, color: '#ef4444', animation: 'blink 1s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
-                    label="REC"
-                    sx={{
-                      background: '#fef2f2',
-                      color: '#ef4444',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      border: '1px solid #fecaca',
-                    }}
-                  />
-                )}
-              </>
+              <Chip
+                icon={<Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'blink 1s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
+                label={callJoined ? "LIVE" : "CONNECTING"}
+                size="small"
+                sx={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#f87171',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                }}
+              />
+            )}
+            {isRecording && (
+              <Chip
+                icon={<FiberManualRecord sx={{ fontSize: 12 }} />}
+                label="REC"
+                size="small"
+                sx={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#f87171',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                }}
+              />
             )}
             <Box sx={{
-              background: '#EEF0FF',
-              color: "#020291",
-              borderRadius: '10px',
-              border: "1px solid #020291",
-              padding: { xs: '8px 12px', sm: '10px 20px' },
+              background: 'rgba(59, 130, 246, 0.2)',
+              color: '#60a5fa',
+              borderRadius: '8px',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              padding: '6px 12px',
               display: 'flex',
               alignItems: 'center',
-              gap: 1,
-              boxShadow: '0 2px 8px rgba(2, 2, 145, 0.3)'
+              gap: 1
             }}>
-              <AccessTime sx={{ color: '#020291', fontSize: { xs: 16, sm: 20 } }} />
-              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: { xs: '16px', sm: '20px' }, color: "#020291" }}>
+              <AccessTime sx={{ fontSize: 16 }} />
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '14px' }}>
                 {formatTime(elapsed)}
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
+        {/* Scrollable Questions List */}
+        <Box sx={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+          {loadingQuestions ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <CircularProgress size={32} sx={{ color: '#60a5fa', mb: 2 }} />
+              <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                Loading questions...
+              </Typography>
+            </Box>
+          ) : questions.length > 0 ? (
+            questions.map((q: any, idx: number) => (
+              <Box
+                key={q.id || idx}
+                sx={{
+                  backgroundColor: 'rgba(51, 65, 85, 0.5)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  border: '1px solid rgba(71, 85, 105, 0.5)',
+                  marginBottom: '16px',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    backgroundColor: 'rgba(51, 65, 85, 0.7)',
+                    borderColor: 'rgba(71, 85, 105, 0.7)'
+                  }
+                }}
+              >
+                {/* Question Number & Difficulty Badge */}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Box sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    color: '#60a5fa',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    border: '1px solid rgba(59, 130, 246, 0.3)'
+                  }}>
+                    {idx + 1}
+                  </Box>
+                  {q.difficulty && (
+                    <Chip
+                      label={q.difficulty.toUpperCase()}
+                      size="small"
+                      sx={{
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        ...(q.difficulty.toLowerCase() === 'easy' ? {
+                          backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                          color: '#4ade80',
+                          border: '1px solid rgba(34, 197, 94, 0.3)'
+                        } : q.difficulty.toLowerCase() === 'medium' || q.difficulty.toLowerCase() === 'intermediate' ? {
+                          backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                          color: '#facc15',
+                          border: '1px solid rgba(234, 179, 8, 0.3)'
+                        } : {
+                          backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                          color: '#f87171',
+                          border: '1px solid rgba(239, 68, 68, 0.3)'
+                        })
+                      }}
+                    />
+                  )}
+                </Box>
+                {/* Question Text */}
+                <Typography sx={{ color: '#e2e8f0', fontSize: '16px', lineHeight: 1.6, mb: q.skill_focus ? 1 : 0 }}>
+                  {q.question_text}
+                </Typography>
+                {q.skill_focus && (
+                  <Typography sx={{ color: '#94a3b8', fontSize: '12px', fontStyle: 'italic' }}>
+                    Focus: {q.skill_focus}
+                  </Typography>
+                )}
+              </Box>
+            ))
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <SmartToy sx={{ fontSize: 48, color: '#475569', mb: 2 }} />
+              <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                Questions will be loaded when interview starts
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </Box>
 
-        {/* Main Content */}
-        <Box sx={{ flex: 1, display: 'flex', padding: { xs: '12px', sm: '20px' }, gap: { xs: 2, sm: 3 }, flexDirection: { xs: 'column', lg: 'row' } }}>
-          {/* Video Area */}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* Main Video */}
-            <Paper sx={{
-              flex: 1,
-              background: '#1e293b',
-              borderRadius: { xs: '12px', sm: '20px' },
-              position: 'relative',
-              overflow: 'hidden',
-              minHeight: { xs: '300px', sm: '400px', md: '500px' },
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
-            }}>
+      {/* RIGHT SIDE - Video Panel */}
+      <Box sx={{ 
+        width: { xs: '100%', md: '60%' }, 
+        backgroundColor: '#0f172a',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* Video Container */}
+        <Box sx={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+          <Paper sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: '#1e293b',
+            borderRadius: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
               {isActive ? (
                 // LiveKit Video Call with Tiles
                 <Box
                   sx={{
                     width: '100%',
                     height: '100%',
-                    minHeight: '500px',
                     position: 'relative',
                     overflow: 'hidden',
                     borderRadius: '20px',
@@ -537,8 +661,8 @@ const VideoInterviewRoom: React.FC = () => {
                 >
                   {lkToken ? (
                     <LiveKitRoom
-                      video={true}
-                      audio={true}
+                      video={user?.role === 'candidate'} // Only candidate has video
+                      audio={user?.role === 'candidate'} // Only candidate has audio (recruiter is observer)
                       token={lkToken}
                       serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
                       connect={true}
@@ -546,11 +670,12 @@ const VideoInterviewRoom: React.FC = () => {
                         setCallJoined(true);
                         setParticipantCount(1);
                         maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
-                        toast.success('Connected to video call!');
+                        const role = user?.role === 'candidate' ? 'Connected to interview!' : 'Joined as observer';
+                        toast.success(role);
                       }}
-                      style={{ height: '100%', width: '100%', background: '#1e293b' }}
+                      style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                     >
-                      <VideoTilesGrid />
+                      <VideoTilesGrid onEndCall={handleEnd} />
                       <RoomAudioRenderer />
                     </LiveKitRoom>
                   ) : (
@@ -584,319 +709,163 @@ const VideoInterviewRoom: React.FC = () => {
                       </Typography>
                     </>
                   ) : (
-                    <>
-                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 3 }}>
-                        Go to Interview Details to upload transcript and generate score
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        startIcon={<Description />}
-                        onClick={() => navigate(`/video-detail/${videoId}`)}
-                        sx={{
-                          background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
-                          fontWeight: 600, textTransform: 'none', borderRadius: '10px', padding: '14px 32px',
-                          fontSize: '15px',
-                          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
-                          '&:hover': {
-                            background: '#020291'
-                          }
-                        }}
-                      >
-                        View Details & Upload Transcript
-                      </Button>
-                    </>
+                    <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                      Interview completed. You can close this window.
+                    </Typography>
                   )}
                 </Box>
               ) : (
                 <Box sx={{ textAlign: 'center', p: { xs: 2, sm: 4 } }}>
-                  <Typography sx={{ color: 'white', fontSize: { xs: '18px', sm: '24px' }, fontWeight: 700, mb: 1 }}>
-                    Select Interview Mode
-                  </Typography>
-                  <Typography sx={{ color: '#94a3b8', fontSize: { xs: '12px', sm: '14px' }, mb: { xs: 2, sm: 4 } }}>
-                    Choose how you want to conduct this interview
-                  </Typography>
-
-                  <Box sx={{ display: 'flex', gap: { xs: 2, sm: 3 }, justifyContent: 'center', flexWrap: 'wrap' }}>
-                    {/* Video Interview Card */}
-                    <Box sx={{
-                      width: { xs: 160, sm: 200 }, p: { xs: 2, sm: 3 },
-                      background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
-                      borderRadius: '16px', border: '2px solid #334155',
-                      cursor: 'pointer', transition: 'all 0.3s',
-                      '&:hover': { border: '2px solid #334155', transform: 'translateY(-4px)' }
-                    }}>
-                      <Box sx={{
-                        width: 64, height: 64, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, primary.main0%, #020291 100%)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 16px'
-                      }}>
-                        <Person sx={{ color: 'white', fontSize: 32 }} />
-                      </Box>
-                      <Typography sx={{ color: 'white', fontWeight: 700, fontSize: '16px', mb: 1 }}>
-                        Video Interview
-                      </Typography>
-                      <Typography sx={{ color: '#94a3b8', fontSize: '12px', mb: 2 }}>
-                        Live HD video call with candidate
-                      </Typography>
-                      <Chip label="Zoom-like Quality" size="small" sx={{
-                        backgroundColor: 'rgba(255,255,255,0.06)',
-                        color: '#C7D2FE',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        fontSize: '11.5px',
-                        height: 22,
-                        borderRadius: '999px',
-                        '& .MuiChip-label': {
-                          px: 1,
-                        },
-                      }} />
-                    </Box>
-
-                    {/* AI Interview Card */}
-                    <Box
-                      onClick={() => navigate(`/ai-interview/${videoId}`)}
-                      sx={{
-                        width: { xs: 160, sm: 200 }, p: { xs: 2, sm: 3 },
-                        background: 'linear-gradient(135deg, #2d1b4e 0%, #0f172a 100%)',
-                        borderRadius: '16px', border: '2px solid #334155',
-                        cursor: 'pointer', transition: 'all 0.3s',
-                        '&:hover': { border: '2px solid #8b5cf6', transform: 'translateY(-4px)' }
-                      }}
-                    >
-                      <Box sx={{
-                        width: 64, height: 64, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 16px'
-                      }}>
-                        <SmartToy sx={{ color: 'white', fontSize: 32 }} />
-                      </Box>
-                      <Typography sx={{ color: 'white', fontWeight: 700, fontSize: '16px', mb: 1 }}>
-                        AI Interview
-                      </Typography>
-                      <Typography sx={{ color: '#94a3b8', fontSize: '12px', mb: 2 }}>
-                        AI asks questions, auto-scoring
-                      </Typography>
-                      <Chip label="Click to Start" size="small" sx={{ background: 'rgba(139, 92, 246, 0.2)', color: '#a78bfa', fontSize: '10px' }} />
-                    </Box>
+                  <Box sx={{
+                    width: 120, height: 120, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 24px',
+                    boxShadow: '0 0 40px rgba(139, 92, 246, 0.4)'
+                  }}>
+                    <SmartToy sx={{ color: 'white', fontSize: 60 }} />
                   </Box>
-                </Box>
-              )}
-            </Paper>
-
-            {/* Control Bar */}
-            {!isCompleted && (
-              <Paper sx={{
-                background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '12px 16px', sm: '16px 24px' },
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 1, sm: 2 },
-                boxShadow: '0 4px 20px rgba(0,0,0,0.08)', flexWrap: 'wrap'
-              }}>
-                {!isActive ? (
+                  <Typography sx={{ color: 'white', fontSize: { xs: '20px', sm: '28px' }, fontWeight: 700, mb: 1 }}>
+                    AI Interview Ready
+                  </Typography>
+                  <Typography sx={{ color: '#94a3b8', fontSize: { xs: '13px', sm: '15px' }, mb: 4 }}>
+                    {user?.role === 'candidate' 
+                      ? 'AI will conduct the interview and automatically score responses'
+                      : 'Join as observer to watch the AI interview (mic and camera will be disabled)'}
+                  </Typography>
                   <Button
                     variant="contained"
-                    startIcon={<Videocam />}
+                    size="large"
+                    startIcon={<SmartToy />}
                     onClick={handleStart}
                     sx={{
-                      background: '#020291',
-                      padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
-                      fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
+                      background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                      padding: '16px 48px',
+                      borderRadius: '12px',
+                      fontWeight: 700,
+                      fontSize: '16px',
+                      textTransform: 'none',
+                      boxShadow: '0 8px 24px rgba(139, 92, 246, 0.4)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                        boxShadow: '0 12px 32px rgba(139, 92, 246, 0.5)',
+                      }
                     }}
                   >
-                    Start Meeting
+                    {user?.role === 'candidate' ? 'Start AI Interview' : 'Join as Observer'}
                   </Button>
-                ) : (
-                  <Button
-                    variant="contained"
-                    startIcon={<CallEnd />}
-                    onClick={handleEnd}
-                    disabled={ending}
-                    sx={{
-                      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                      padding: { xs: '10px 20px', sm: '14px 36px' }, borderRadius: '28px',
-                      fontWeight: 600, fontSize: { xs: '13px', sm: '15px' }, textTransform: 'none',
-                      boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
-                      '&:hover': { background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' },
-                      '&:disabled': { background: '#94a3b8' }
-                    }}
-                  >
-                    {ending ? 'Ending...' : 'End Meeting'}
-                  </Button>
-                )}
-              </Paper>
-            )}
-          </Box>
+                </Box>
+              )}
+          </Paper>
+        </Box>
 
-          {/* Sidebar */}
-          <Box sx={{ width: { xs: '100%', lg: 340 }, display: 'flex', flexDirection: 'column', gap: { xs: 2, sm: 3 } }}>
-            {/* Participants */}
-            <Paper sx={{ background: 'white', borderRadius: { xs: '12px', sm: '16px' }, padding: { xs: '16px', sm: '20px' }, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-              <Typography sx={{ color: '#64748b', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', mb: 2 }}>
-                Participants
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, p: 2, background: '#f8fafc', borderRadius: '12px' }}>
-                <Avatar sx={{ width: 44, height: 44, background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)' }}>
-                  {interview?.candidate_name?.charAt(0).toUpperCase() || 'C'}
-                </Avatar>
-                <Box sx={{ flex: 1 }}>
-                  <Typography sx={{ color: '#1e293b', fontWeight: 600, fontSize: '14px' }}>
-                    {interview?.candidate_name || 'Candidate'}
-                  </Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
-                    Candidate{(user?.role === 'candidate' || user?.name?.toLowerCase() === interview?.candidate_name?.toLowerCase()) ? ' (You)' : ''}
-                  </Typography>
-                </Box>
-                {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#020291', boxShadow: '0 0 8px #020291' }} />}
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, background: '#f8fafc', borderRadius: '12px' }}>
-                <Avatar sx={{ width: 44, height: 44, background: '#020291' }}>
-                  {interview?.interviewer_name?.charAt(0).toUpperCase() || 'I'}
-                </Avatar>
-                <Box sx={{ flex: 1 }}>
-                  <Typography sx={{ color: '#1e293b', fontWeight: 600, fontSize: '14px' }}>
-                    {interview?.interviewer_name || 'Interviewer'}
-                  </Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
-                    Interviewer{(user?.role !== 'candidate' && user?.name?.toLowerCase() === interview?.interviewer_name?.toLowerCase()) ? ' (You)' : ''}
-                  </Typography>
-                </Box>
-                {callJoined && <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />}
-              </Box>
-            </Paper>
-
-            {/* Interview Info */}
-            <Paper sx={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-              <Typography sx={{ color: '#64748b', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', mb: 2 }}>
-                Interview Details
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ color: '#64748b', fontSize: '14px' }}>Position</Typography>
-                  <Typography sx={{ color: '#1e293b', fontSize: '14px', fontWeight: 600 }}>{interview?.job_title || 'N/A'}</Typography>
-                </Box>
-                <Divider />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ color: '#64748b', fontSize: '14px' }}>Duration</Typography>
-                  <Typography sx={{ color: '#1e293b', fontSize: '14px', fontWeight: 600 }}>{interview?.duration_minutes || 30} min</Typography>
-                </Box>
-                <Divider />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ color: '#64748b', fontSize: '14px' }}>Status</Typography>
-                  <Chip
-                    label={interview?.status?.replace('_', ' ').toUpperCase()}
-                    size="small"
-                    sx={{
-                      fontWeight: 700, fontSize: '11px',
-                      background: interview?.status === 'completed' ? '#ecfdf5' : interview?.status === 'in_progress' ? '#EEF0FF' : '#eff6ff',
-                      color: interview?.status === 'completed' ? '#10b981' : interview?.status === 'in_progress' ? '#020291' : '#3b82f6',
-                    }}
-                  />
-                </Box>
-              </Box>
-            </Paper>
-
-            {/* Quick Actions */}
-            <Paper sx={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-              <Typography sx={{ color: '#64748b', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', mb: 2 }}>
-                Quick Actions
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Button
-                  fullWidth startIcon={<Description />}
-                  onClick={() => navigate(`/video-detail/${videoId}`)}
-                  sx={{
-                    justifyContent: 'flex-start', color: '#475569', textTransform: 'none',
-                    borderRadius: '10px', padding: '12px 16px', border: '1px solid #e2e8f0',
-                    '&:hover': { background: '#f8fafc', borderColor: '#020291', color: '#020291' }
-                  }}
-                >
-                  View Details & Transcript
-                </Button>
-                <Button
-                  fullWidth startIcon={<Security />}
-                  onClick={() => navigate(`/fraud-analysis/${videoId}`)}
-                  sx={{
-                    justifyContent: 'flex-start', color: '#475569', textTransform: 'none',
-                    borderRadius: '10px', padding: '12px 16px', border: '1px solid #e2e8f0',
-                    '&:hover': { background: '#f8fafc', borderColor: '#020291', color: '#020291' }
-                  }}
-                >
-                  Fraud Analysis
-                </Button>
-              </Box>
-            </Paper>
-          </Box>
+        {/* End Meeting Button - Floating Bottom Right */}
+        {isActive && (
+          <Box sx={{ position: 'absolute', bottom: 32, right: 32, zIndex: 10 }}>
+              <Button
+                onClick={handleEnd}
+                disabled={ending}
+                startIcon={ending ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CallEnd />}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  padding: '16px 24px',
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  fontWeight: 600,
+                  borderRadius: '9999px',
+                  textTransform: 'none',
+                  fontSize: '15px',
+                  boxShadow: '0 20px 25px -5px rgba(239, 68, 68, 0.5), 0 10px 10px -5px rgba(239, 68, 68, 0.4)',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    backgroundColor: '#dc2626',
+                    transform: 'scale(1.05)',
+                    boxShadow: '0 25px 30px -5px rgba(239, 68, 68, 0.6)'
+                  },
+                  '&:disabled': {
+                    backgroundColor: '#991b1b',
+                    color: '#fca5a5'
+                  }
+                }}
+              >
+                {ending ? 'Ending...' : 'End Meeting'}
+              </Button>
+            </Box>
+          )}
         </Box>
 
         {/* Uploading Recording Overlay */}
-        {uploadingRecording && (
-          <Box sx={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <Paper sx={{ p: 4, borderRadius: '16px', textAlign: 'center' }}>
-              <CircularProgress sx={{ color: '#020291', mb: 2 }} />
-              <Typography sx={{ fontWeight: 600, color: '#1e293b' }}>Uploading Recording...</Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '13px', mt: 1 }}>Please wait, do not close this page.</Typography>
-            </Paper>
-          </Box>
-        )}
+      {/* Uploading Recording Overlay */}
+      {uploadingRecording && (
+        <Box sx={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Paper sx={{ p: 4, borderRadius: '16px', textAlign: 'center' }}>
+            <CircularProgress sx={{ color: '#020291', mb: 2 }} />
+            <Typography sx={{ fontWeight: 600, color: '#1e293b' }}>Uploading Recording...</Typography>
+            <Typography sx={{ color: '#64748b', fontSize: '13px', mt: 1 }}>Please wait, do not close this page.</Typography>
+          </Paper>
+        </Box>
+      )}
 
-        {/* Recording Consent Dialog */}
-        <Dialog
-          open={showConsentDialog}
-          onClose={() => setShowConsentDialog(false)}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: { borderRadius: '16px', p: 1 }
-          }}
-        >
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700, color: '#1e293b' }}>
-            <FiberManualRecord sx={{ color: '#ef4444', fontSize: 20 }} />
-            Recording Consent
-          </DialogTitle>
-          <DialogContent>
-            <Typography sx={{ color: '#475569', fontSize: '15px', lineHeight: 1.8, mb: 2 }}>
-              This interview session will be <strong>recorded</strong> for review purposes. The recording will include your video and audio.
+      {/* Recording Consent Dialog */}
+      <Dialog
+        open={showConsentDialog}
+        onClose={() => setShowConsentDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '16px', p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700, color: '#1e293b' }}>
+          <FiberManualRecord sx={{ color: '#ef4444', fontSize: 20 }} />
+          Recording Consent
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: '#475569', fontSize: '15px', lineHeight: 1.8, mb: 2 }}>
+            This interview session will be <strong>recorded</strong> for review purposes. The recording will include your video and audio.
+          </Typography>
+          <Box sx={{
+            background: '#f8fafc', borderRadius: '12px', p: 2.5,
+            border: '1px solid #e2e8f0'
+          }}>
+            <Typography sx={{ color: '#64748b', fontSize: '13px', lineHeight: 1.8 }}>
+              By clicking <strong>"I Agree"</strong>, you consent to being recorded during this interview. The recording will be stored securely and only accessible to authorized recruiters.
             </Typography>
-            <Box sx={{
-              background: '#f8fafc', borderRadius: '12px', p: 2.5,
-              border: '1px solid #e2e8f0'
-            }}>
-              <Typography sx={{ color: '#64748b', fontSize: '13px', lineHeight: 1.8 }}>
-                By clicking <strong>"I Agree"</strong>, you consent to being recorded during this interview. The recording will be stored securely and only accessible to authorized recruiters.
-              </Typography>
-            </Box>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
-            <Button
-              onClick={handleConsentDecline}
-              sx={{
-                color: '#64748b', textTransform: 'none', fontWeight: 600,
-                borderRadius: '10px', px: 3,
-                '&:hover': { background: '#f1f5f9' }
-              }}
-            >
-              Decline
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConsentAccept}
-              sx={{
-                background: '#020291',
-                textTransform: 'none', fontWeight: 600,
-                borderRadius: '10px', px: 3,
-                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
-                '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }
-              }}
-            >
-              I Agree — Start Interview
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Box>
-    </Navigation>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button
+            onClick={handleConsentDecline}
+            sx={{
+              color: '#64748b', textTransform: 'none', fontWeight: 600,
+              borderRadius: '10px', px: 3,
+              '&:hover': { background: '#f1f5f9' }
+            }}
+          >
+            Decline
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConsentAccept}
+            sx={{
+              background: '#020291',
+              textTransform: 'none', fontWeight: 600,
+              borderRadius: '10px', px: 3,
+              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+              '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }
+            }}
+          >
+            I Agree — Start Interview
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 

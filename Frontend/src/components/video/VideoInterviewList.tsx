@@ -60,7 +60,10 @@ const VideoInterviewList: React.FC = () => {
   useEffect(() => {
     const fetchInterviews = async () => {
       try {
-        const data = await videoInterviewService.getInterviews();
+        // Use dedicated endpoint for candidates to ensure they see their interviews
+        const data = isCandidate 
+          ? await videoInterviewService.getMyInterviews()
+          : await videoInterviewService.getInterviews();
         setInterviews(data);
       } catch (err: any) {
         setError(err.message || 'Failed to load interviews.');
@@ -69,7 +72,7 @@ const VideoInterviewList: React.FC = () => {
       }
     };
     fetchInterviews();
-  }, []);
+  }, [isCandidate]);
 
   const handleCancel = async (id: number) => {
     try {

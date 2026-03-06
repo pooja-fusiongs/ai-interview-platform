@@ -227,12 +227,18 @@ try:
     from api.video.interviews.app import router as video_interviews_router
     from api.video.zoom.app import router as video_zoom_router
     from api.video.fraud.app import router as video_fraud_router
+    
+    # Video interviews router already has /api/video/interviews prefix in routes
     app.include_router(video_interviews_router, tags=["Video Interviews"])
     app.include_router(video_zoom_router, tags=["Zoom Integration"])
     app.include_router(video_fraud_router, tags=["Fraud Detection"])
+    
     print("✅ Video Interview & Fraud Detection endpoints included")
+    print(f"   Routes registered: {len(video_interviews_router.routes)} video interview routes")
 except Exception as e:
+    import traceback
     print(f"⚠️ Could not load Video Interview endpoints: {e}")
+    traceback.print_exc()
 
 # Import and mount LiveKit endpoints
 try:

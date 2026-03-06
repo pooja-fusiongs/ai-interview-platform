@@ -287,6 +287,9 @@ def schedule_video_interview(
             duration_minutes=body.duration_minutes,
             status=VideoInterviewStatus.SCHEDULED.value,
         )
+        
+        print(f"[schedule_video_interview] Creating interview for candidate User ID: {candidate.id}, email: {candidate.email}, name: {candidate.full_name}")
+        print(f"[schedule_video_interview] JobApplication ID was: {application.id if application else 'N/A'}")
 
         if zoom_data:
             vi.zoom_meeting_id = zoom_data["meeting_id"]
@@ -465,6 +468,8 @@ def get_my_video_interviews(
     db: Session = Depends(get_db),
 ):
     """Get all video interviews for the current candidate."""
+    print(f"[get_my_video_interviews] current_user.id={current_user.id}, email={current_user.email}, role={current_user.role}")
+    
     interviews = (
         db.query(VideoInterview)
         .options(
@@ -476,6 +481,11 @@ def get_my_video_interviews(
         .order_by(VideoInterview.scheduled_at.desc())
         .all()
     )
+    
+    print(f"[get_my_video_interviews] Found {len(interviews)} interviews for candidate {current_user.id}")
+    for vi in interviews:
+        print(f"  - Interview ID: {vi.id}, Job: {vi.job.title if vi.job else 'N/A'}, Status: {vi.status}")
+    
     return [_build_response(vi, db) for vi in interviews]
 
 

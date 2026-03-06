@@ -13,6 +13,7 @@ import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { getMediaDevices, requestMediaPermissions, getDeviceErrorMessage } from '../../utils/mediaDeviceUtils';
 
 interface Question {
   id: number;
@@ -179,18 +180,28 @@ const AIInterviewRoom: React.FC = () => {
 
   const handleStart = async () => {
     try {
-      // Request permissions
+      // Check available devices first
+      const deviceInfo = await getMediaDevices();
+      
+      console.log('📱 Available devices:', {
+        videoInputs: deviceInfo.videoDevices.length,
+        audioInputs: deviceInfo.audioDevices.length
+      });
+      
+      if (!deviceInfo.hasVideo && !deviceInfo.hasAudio) {
+        toast.error('No camera or microphone found. Please connect devices and refresh.');
+        return;
+      }
+      
+      // Request permissions with better error handling
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await requestMediaPermissions();
         stream.getTracks().forEach(track => track.stop());
         console.log('✅ Media permissions granted');
       } catch (err: any) {
-        console.warn('⚠️ Media device warning:', err.name);
-        if (err.name === 'NotFoundError') {
-          toast('No camera/mic found. Video will open anyway.', { icon: '⚠️' });
-        } else {
-          toast('Camera access issue. Video will open anyway.', { icon: '⚠️' });
-        }
+        const errorMsg = getDeviceErrorMessage(err);
+        toast.error(errorMsg);
+        return;
       }
 
       await videoInterviewService.startInterview(Number(videoId));
@@ -546,8 +557,8 @@ const AIInterviewRoom: React.FC = () => {
               }}>
                 {lkToken ? (
                   <LiveKitRoom
-                    video={camOn}
-                    audio={micOn}
+                    video={false} // Start with video disabled to avoid device conflicts
+                    audio={true}
                     token={lkToken}
                     serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
                     connect={true}
