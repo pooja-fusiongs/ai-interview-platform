@@ -33,10 +33,11 @@ const VideoRoomNew: React.FC = () => {
   const initializeVideo = () => {
     if (!videoContainerRef.current) return;
 
-    // Create iframe for Jitsi Meet
+    // Create iframe for Jitsi Meet with custom config to hide toolbar
     const roomName = `interview-room-${videoId}`;
     const iframe = document.createElement('iframe');
-    iframe.src = `https://meet.jit.si/${roomName}`;
+    // Add config to hide Jitsi's toolbar buttons
+    iframe.src = `https://meet.jit.si/${roomName}#config.toolbarButtons=[]`;
     iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
     iframe.style.width = '100%';
     iframe.style.height = '100%';
@@ -46,9 +47,27 @@ const VideoRoomNew: React.FC = () => {
     videoContainerRef.current.appendChild(iframe);
   };
 
-  const handleEndMeeting = () => {
+  const handleEndMeeting = async () => {
     if (window.confirm('Are you sure you want to end this interview?')) {
-      navigate('/video-interviews');
+      try {
+        // Call backend to mark interview as ended
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/video/interviews/${videoId}/end`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            max_participants: 2  // Indicate candidate completed interview
+          })
+        });
+
+        
+      } catch (error) {
+        console.error('Error ending interview:', error);
+        navigate('/video-interviews');
+      }
     }
   };
 

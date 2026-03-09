@@ -39,7 +39,6 @@ from schemas import (
 from api.auth.jwt_handler import get_current_active_user, require_any_role
 from services.zoom_service import create_zoom_meeting, delete_zoom_meeting
 from services.email_service import send_interview_notification
-from services.transcript_generator import generate_transcript_for_video_interview
 from services.groq_service import transcribe_audio_with_groq
 
 router = APIRouter(tags=["Video Interviews"])
@@ -51,109 +50,130 @@ router = APIRouter(tags=["Video Interviews"])
 
 def _build_response(vi: VideoInterview, db: Session = None, questions_approved: bool = True) -> VideoInterviewResponse:
     """Build a VideoInterviewResponse from an ORM object with joined names."""
-    candidate_name = None
-    application = None
+    print(f"[DEBUG] Building response for interview {vi.id}")
+    
+    try:
+        candidate_name = None
+        application = None
 
-    # Try to get name from JobApplication first (more accurate)
-    if db and vi.candidate:
-        application = db.query(JobApplication).filter(
-            JobApplication.job_id == vi.job_id,
-            JobApplication.applicant_email == vi.candidate.email
-        ).first()
-        if application:
-            candidate_name = application.applicant_name
+        # Try to get name from JobApplication first (more accurate)
+        if db and vi.candidate:
+            print(f"[DEBUG] Looking for application for job_id={vi.job_id}, email={vi.candidate.email}")
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email
+            ).first()
+            if application:
+                candidate_name = application.applicant_name
+                print(f"[DEBUG] Found candidate name from application: {candidate_name}")
 
-    # Fallback to User table
-    if not candidate_name and vi.candidate:
-        candidate_name = vi.candidate.full_name or vi.candidate.username
+        # Fallback to User table
+        if not candidate_name and vi.candidate:
+            candidate_name = vi.candidate.full_name or vi.candidate.username
+            print(f"[DEBUG] Using fallback candidate name: {candidate_name}")
 
-    interviewer_name = None
-    if vi.interviewer:
-        interviewer_name = vi.interviewer.full_name or vi.interviewer.username
+        interviewer_name = None
+        if vi.interviewer:
+            interviewer_name = vi.interviewer.full_name or vi.interviewer.username
 
-    job_title = vi.job.title if vi.job else None
-    interview_type = vi.job.interview_type if vi.job else "Both"
+        job_title = vi.job.title if vi.job else None
+        interview_type = vi.job.interview_type if vi.job else "Both"
+        print(f"[DEBUG] Job title: {job_title}, Interview type: {interview_type}")
 
-    # Fetch score data from InterviewSession
-    overall_score = None
-    recommendation = None
-    strengths = None
-    weaknesses = None
-    per_question_scores = None
-    interview_session_id = None
+        # Fetch score data from InterviewSession
+        overall_score = None
+        recommendation = None
+        strengths = None
+        weaknesses = None
+        per_question_scores = None
+        interview_session_id = None
 
-    if db:
-        # Try to find the InterviewSession for this interview
-        candidate_id_for_session = application.id if application else vi.candidate_id
+        if db:
+            print(f"[DEBUG] Looking for interview session data")
+            # Try to find the InterviewSession for this interview
+            candidate_id_for_session = application.id if application else vi.candidate_id
 
-        session = db.query(InterviewSession).filter(
-            InterviewSession.job_id == vi.job_id,
-            InterviewSession.application_id == candidate_id_for_session
-        ).first()
-
-        # Fallback: try with candidate_id directly
-        if not session:
             session = db.query(InterviewSession).filter(
                 InterviewSession.job_id == vi.job_id,
-                InterviewSession.candidate_id == vi.candidate_id
+                InterviewSession.application_id == candidate_id_for_session
             ).first()
 
-        if session and session.overall_score is not None:
-            interview_session_id = session.id  # Store session ID for Results page navigation
-            overall_score = session.overall_score
-            recommendation = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation) if session.recommendation else None
-            strengths = session.strengths
-            weaknesses = session.weaknesses
+            # Fallback: try with candidate_id directly
+            if not session:
+                session = db.query(InterviewSession).filter(
+                    InterviewSession.job_id == vi.job_id,
+                    InterviewSession.candidate_id == vi.candidate_id
+                ).first()
 
-            # Fetch per-question scores
-            answers = db.query(InterviewAnswer).filter(
-                InterviewAnswer.session_id == session.id
-            ).all()
+            if session and session.overall_score is not None:
+                print(f"[DEBUG] Found session data for interview {vi.id}")
+                interview_session_id = session.id  # Store session ID for Results page navigation
+                overall_score = session.overall_score
+                recommendation = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation) if session.recommendation else None
+                strengths = session.strengths
+                weaknesses = session.weaknesses
 
-            if answers:
-                per_question_scores = [
-                    {
-                        "question_id": ans.question_id,
-                        "score": ans.score,
-                        "relevance_score": ans.relevance_score,
-                        "completeness_score": ans.completeness_score,
-                        "accuracy_score": ans.accuracy_score,
-                        "clarity_score": ans.clarity_score,
-                        "feedback": ans.feedback,
-                        "extracted_answer": ans.answer_text
-                    }
-                    for ans in answers
-                ]
+                # Fetch per-question scores
+                answers = db.query(InterviewAnswer).filter(
+                    InterviewAnswer.session_id == session.id
+                ).all()
 
-    return VideoInterviewResponse(
-        id=vi.id,
-        session_id=vi.session_id,
-        job_id=vi.job_id,
-        candidate_id=vi.candidate_id,
-        interviewer_id=vi.interviewer_id,
-        zoom_meeting_url=vi.zoom_meeting_url,
-        zoom_passcode=vi.zoom_passcode,
-        status=vi.status.value if hasattr(vi.status, "value") else vi.status,
-        scheduled_at=vi.scheduled_at,
-        duration_minutes=vi.duration_minutes,
-        started_at=vi.started_at,
-        ended_at=vi.ended_at,
-        recording_consent=vi.recording_consent,
-        recording_url=vi.recording_url,
-        candidate_name=candidate_name,
-        interviewer_name=interviewer_name,
-        job_title=job_title,
-        transcript=vi.transcript,
-        transcript_generated_at=vi.transcript_generated_at,
-        interview_type=interview_type,
-        overall_score=overall_score,
-        recommendation=recommendation,
-        strengths=strengths,
-        weaknesses=weaknesses,
-        per_question_scores=per_question_scores,
-        interview_session_id=interview_session_id,
-        questions_approved=questions_approved,
-    )
+                if answers:
+                    per_question_scores = [
+                        {
+                            "question_id": ans.question_id,
+                            "score": ans.score,
+                            "relevance_score": ans.relevance_score,
+                            "completeness_score": ans.completeness_score,
+                            "accuracy_score": ans.accuracy_score,
+                            "clarity_score": ans.clarity_score,
+                            "feedback": ans.feedback,
+                            "extracted_answer": ans.answer_text
+                        }
+                        for ans in answers
+                    ]
+            else:
+                print(f"[DEBUG] No session data found for interview {vi.id}")
+
+        print(f"[DEBUG] Creating VideoInterviewResponse for interview {vi.id}")
+        response = VideoInterviewResponse(
+            id=vi.id,
+            session_id=vi.session_id,
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            interviewer_id=vi.interviewer_id,
+            zoom_meeting_url=vi.zoom_meeting_url,
+            zoom_passcode=vi.zoom_passcode,
+            status=vi.status.value if hasattr(vi.status, "value") else vi.status,
+            scheduled_at=vi.scheduled_at,
+            duration_minutes=vi.duration_minutes,
+            started_at=vi.started_at,
+            ended_at=vi.ended_at,
+            recording_consent=vi.recording_consent,
+            recording_url=vi.recording_url,
+            candidate_name=candidate_name,
+            interviewer_name=interviewer_name,
+            job_title=job_title,
+            transcript=vi.transcript,
+            transcript_generated_at=vi.transcript_generated_at,
+            interview_type=interview_type,
+            overall_score=overall_score,
+            recommendation=recommendation,
+            strengths=strengths,
+            weaknesses=weaknesses,
+            per_question_scores=per_question_scores,
+            interview_session_id=interview_session_id,
+            questions_approved=questions_approved,
+        )
+        
+        print(f"[DEBUG] Successfully built response for interview {vi.id}")
+        return response
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to build response for interview {vi.id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to build interview response: {str(e)}")
 
 
 def _build_list_item(vi: VideoInterview, db: Session) -> VideoInterviewListResponse:
@@ -391,6 +411,17 @@ def list_video_interviews(
     List video interviews.
     Recruiters/Admins see all; Candidates see only their own.
     """
+    print(f"[DEBUG] list_video_interviews called by: {current_user.email}, role: {current_user.role}")
+    
+    # Test database connection
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        print("[DEBUG] Database connection OK")
+    except Exception as e:
+        print(f"[DEBUG] Database connection failed: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
     try:
         query = db.query(VideoInterview).options(
             joinedload(VideoInterview.candidate),
@@ -399,8 +430,10 @@ def list_video_interviews(
         )
         if current_user.role == UserRole.CANDIDATE:
             query = query.filter(VideoInterview.candidate_id == current_user.id)
+            print(f"[DEBUG] Filtering for candidate_id: {current_user.id}")
 
         interviews = query.order_by(VideoInterview.scheduled_at.desc()).limit(100).all()
+        print(f"[DEBUG] Found {len(interviews)} interviews")
         
         # Optimize: Fetch all fraud analyses in one query
         interview_ids = [vi.id for vi in interviews]
@@ -470,23 +503,49 @@ def get_my_video_interviews(
     """Get all video interviews for the current candidate."""
     print(f"[get_my_video_interviews] current_user.id={current_user.id}, email={current_user.email}, role={current_user.role}")
     
-    interviews = (
-        db.query(VideoInterview)
-        .options(
-            joinedload(VideoInterview.candidate),
-            joinedload(VideoInterview.interviewer),
-            joinedload(VideoInterview.job),
+    # Test database connection
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        print("[DEBUG] Database connection OK")
+    except Exception as e:
+        print(f"[DEBUG] Database connection failed: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        interviews = (
+            db.query(VideoInterview)
+            .options(
+                joinedload(VideoInterview.candidate),
+                joinedload(VideoInterview.interviewer),
+                joinedload(VideoInterview.job),
+            )
+            .filter(VideoInterview.candidate_id == current_user.id)
+            .order_by(VideoInterview.scheduled_at.desc())
+            .all()
         )
-        .filter(VideoInterview.candidate_id == current_user.id)
-        .order_by(VideoInterview.scheduled_at.desc())
-        .all()
-    )
-    
-    print(f"[get_my_video_interviews] Found {len(interviews)} interviews for candidate {current_user.id}")
-    for vi in interviews:
-        print(f"  - Interview ID: {vi.id}, Job: {vi.job.title if vi.job else 'N/A'}, Status: {vi.status}")
-    
-    return [_build_response(vi, db) for vi in interviews]
+        
+        print(f"[get_my_video_interviews] Found {len(interviews)} interviews for candidate {current_user.id}")
+        
+        # Build responses with error handling
+        responses = []
+        for vi in interviews:
+            try:
+                response = _build_response(vi, db)
+                responses.append(response)
+                print(f"  - Interview ID: {vi.id}, Job: {vi.job.title if vi.job else 'N/A'}, Status: {vi.status}")
+            except Exception as e:
+                print(f"[ERROR] Failed to build response for interview {vi.id}: {e}")
+                # Continue with other interviews even if one fails
+                continue
+        
+        return responses
+        
+    except Exception as e:
+        print(f"❌ Error in get_my_video_interviews: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get interviews: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -596,13 +655,29 @@ def start_video_interview(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Mark a video interview as started."""
+    """
+    Mark a video interview as started.
+    - If recruiter joins first: status = WAITING (waiting for candidate)
+    - If candidate joins: status = IN_PROGRESS
+    """
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
-    vi.status = VideoInterviewStatus.IN_PROGRESS.value
-    vi.started_at = datetime.now(timezone.utc)
+    # Check who is starting the interview
+    if current_user.role.value == 'candidate':
+        # Candidate joining - start the interview
+        vi.status = VideoInterviewStatus.IN_PROGRESS.value
+        if not vi.started_at:
+            vi.started_at = datetime.now(timezone.utc)
+        print(f"[start_interview] Candidate joined, status=IN_PROGRESS")
+    else:
+        # Recruiter joining - set to WAITING for candidate
+        if vi.status == VideoInterviewStatus.SCHEDULED.value:
+            vi.status = VideoInterviewStatus.WAITING.value
+            print(f"[start_interview] Recruiter joined, status=WAITING")
+        # If already IN_PROGRESS, keep it as is
+    
     db.commit()
     db.refresh(vi)
     return _build_response(vi, db)
@@ -615,50 +690,103 @@ async def join_video_interview(
     db: Session = Depends(get_db),
 ):
     """
-    Mark interview as started, trigger AI agent, and return LiveKit token.
+    Handle participant joining the interview with proper status flow:
+    - Recruiter joins first: SCHEDULED -> WAITING_FOR_CANDIDATE
+    - Candidate joins: WAITING_FOR_CANDIDATE -> IN_PROGRESS
     """
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
-    # 1. Mark as started if not already
-    if vi.status != VideoInterviewStatus.IN_PROGRESS.value:
-        vi.status = VideoInterviewStatus.IN_PROGRESS.value
-        vi.started_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(vi)
+    # FIXED: Block rejoining completed interviews
+    if vi.status in [VideoInterviewStatus.COMPLETED.value, VideoInterviewStatus.NO_SHOW.value]:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Cannot rejoin interview. Status: {vi.status}"
+        )
+
+    # Define user role flags
+    is_recruiter = current_user.role in [UserRole.RECRUITER, UserRole.ADMIN]
+    is_candidate = current_user.id == vi.candidate_id
     
-    # 2. Trigger AI agent
+    # Store previous status before commit
+    previous_status = vi.status
+    
+    # Status flow logic
+    if vi.status == VideoInterviewStatus.SCHEDULED.value:
+        if is_recruiter:
+            # Recruiter joins first -> waiting for candidate
+            vi.status = VideoInterviewStatus.WAITING.value
+            print(f"✅ Recruiter joined, status: SCHEDULED -> WAITING_FOR_CANDIDATE")
+        elif is_candidate:
+            # Candidate joins directly (recruiter not joined yet)
+            vi.status = VideoInterviewStatus.IN_PROGRESS.value
+            vi.started_at = datetime.now(timezone.utc)
+            vi.candidate_joined_at = datetime.now(timezone.utc)  # Track exact join time
+            print(f"✅ Candidate joined first, status: SCHEDULED -> IN_PROGRESS")
+    
+    elif vi.status == VideoInterviewStatus.WAITING.value:
+        if is_candidate:
+            # Candidate joins while recruiter is waiting
+            vi.status = VideoInterviewStatus.IN_PROGRESS.value
+            vi.started_at = datetime.now(timezone.utc)
+            vi.candidate_joined_at = datetime.now(timezone.utc)  # Track exact join time
+            print(f"✅ Candidate joined, status: WAITING_FOR_CANDIDATE -> IN_PROGRESS")
+    
+    elif vi.status == VideoInterviewStatus.IN_PROGRESS.value:
+        # Already in progress, just let them join
+        print(f"✅ Participant joining ongoing interview")
+    
+    db.commit()
+    db.refresh(vi)
+    
+    # 2. Trigger AI agent - ONLY ONCE per interview using database flag
+    agent_dispatched = False
     try:
         from routers.livekit_router import generate_livekit_token, TokenRequest, dispatch_agent, DispatchAgentRequest
         
         room_name = f"interview_{video_id}"
         
-        # Dispatch agent
-        await dispatch_agent(DispatchAgentRequest(room_name=room_name))
+        # Dispatch agent ONLY if:
+        # 1. Agent hasn't been dispatched yet (check database flag)
+        # 2. Candidate is joining
+        # 3. Interview is in progress
+        if not vi.agent_dispatched and is_candidate and vi.status == VideoInterviewStatus.IN_PROGRESS.value:
+            await dispatch_agent(DispatchAgentRequest(room_name=room_name))
+            vi.agent_dispatched = True
+            db.commit()
+            agent_dispatched = True
+            print(f"✅ AI Agent dispatched to room: {room_name}")
+        elif vi.agent_dispatched:
+            print(f"⏭️ Skipping agent dispatch - already dispatched for this interview")
         
         # 3. Generate token for the user
         token_data = await generate_livekit_token(TokenRequest(
             room_name=room_name,
             participant_name=current_user.full_name or current_user.username,
             participant_identity=str(current_user.id),
-            role="interviewer" if current_user.role in [UserRole.RECRUITER, UserRole.ADMIN] else "candidate"
+            role="interviewer" if is_recruiter else "candidate"
         ))
         
         return {
             "success": True,
             "token": token_data.token,
             "livekit_url": token_data.livekit_url,
-            "room_name": room_name
+            "room_name": room_name,
+            "status": vi.status,
+            "agent_dispatched": agent_dispatched
         }
         
     except Exception as e:
         print(f"❌ Error in join_video_interview (agent/token): {e}")
+        import traceback
+        traceback.print_exc()
         # Fallback for just starting the interview
         return {
             "success": True,
             "message": "Interview started, but agent dispatch/token failed",
             "video_id": video_id,
+            "status": vi.status,
             "error": str(e)
         }
 
@@ -677,7 +805,11 @@ def end_video_interview(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Mark a video interview as completed and generate transcript."""
+    """
+    Mark a video interview as completed.
+    - If recruiter leaves but candidate hasn't joined: Keep status as WAITING
+    - Only mark as NO_SHOW if grace period expired or explicitly set
+    """
     from models import InterviewQuestion, JobApplication, InterviewSessionStatus
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
@@ -685,16 +817,33 @@ def end_video_interview(
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     max_participants = body.max_participants if body else None
-    print(f"[end_interview] video_id={video_id}, max_participants={max_participants}")
+    print(f"[end_interview] video_id={video_id}, max_participants={max_participants}, current_status={vi.status}")
 
-    # If only 1 participant (or 0), candidate never joined — mark as no-show
-    if max_participants is not None and max_participants < 2:
-        print(f"[end_interview] No-show detected: max_participants={max_participants}, no recording")
-        vi.status = VideoInterviewStatus.NO_SHOW.value
-        vi.ended_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(vi)
+    # If status is WAITING_FOR_CANDIDATE, don't change it when recruiter leaves
+    if vi.status == VideoInterviewStatus.WAITING.value:
+        print(f"[end_interview] Status is WAITING_FOR_CANDIDATE, keeping it (recruiter left)")
+        # Don't change status, candidate can still join within grace period
         return _build_response(vi, db)
+
+    # FIXED: Only mark as no_show if candidate never actually joined
+    # Check if candidate_joined_at is set (candidate actually joined)
+    if max_participants is not None and max_participants < 2:
+        # Additional check: Did candidate actually join?
+        if vi.candidate_joined_at:
+            print(f"[end_interview] Candidate DID join (candidate_joined_at={vi.candidate_joined_at}), NOT marking as no-show")
+            # Candidate joined but left early - mark as completed, not no-show
+            vi.status = VideoInterviewStatus.COMPLETED.value
+            vi.ended_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(vi)
+            return _build_response(vi, db)
+        else:
+            print(f"[end_interview] No-show detected: max_participants={max_participants}, candidate_joined_at={vi.candidate_joined_at}")
+            vi.status = VideoInterviewStatus.NO_SHOW.value
+            vi.ended_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(vi)
+            return _build_response(vi, db)
 
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
@@ -772,35 +921,51 @@ def end_video_interview(
                 ]
                 print(f"[end_interview] Using {len(actual_questions)} questions for transcript generation")
 
-        # --- Try REAL transcription from recording file ---
-        real_transcript = None
-        if vi.recording_url:
-            recording_path = vi.recording_url
-            # Resolve relative paths to absolute
-            if not os.path.isabs(recording_path):
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                backend_dir = os.path.join(base_dir, '..', '..', '..')
-                recording_path = os.path.normpath(os.path.join(backend_dir, recording_path))
-            print(f"[end_interview] Attempting real transcription from: {recording_path}")
-            real_transcript = transcribe_audio_with_groq(recording_path)
-
-        if real_transcript:
-            print(f"[end_interview] Using REAL transcript ({len(real_transcript)} chars)")
-            vi.transcript = real_transcript
-            vi.transcript_source = "recording"
-        else:
-            # Fall back to mock transcript generator
-            print(f"[end_interview] No real recording/transcription, using mock generator")
-            transcript = generate_transcript_for_video_interview(
-                video_interview_id=vi.id,
-                candidate_name=candidate_name,
-                interviewer_name=interviewer_name,
-                job_title=job_title,
-                duration_minutes=vi.duration_minutes or 30,
-                actual_questions=actual_questions if actual_questions else None
+        # --- REAL transcription from recording file (PRIMARY METHOD) ---
+        if not vi.recording_url:
+            raise HTTPException(
+                status_code=400,
+                detail="No recording file available. Cannot generate transcript without recording."
             )
-            vi.transcript = transcript
-            vi.transcript_source = "mock"
+        
+        # Validate recording file exists
+        recording_path = vi.recording_url
+        if not os.path.isabs(recording_path):
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            backend_dir = os.path.join(base_dir, '..', '..', '..')
+            recording_path = os.path.normpath(os.path.join(backend_dir, recording_path))
+        
+        print(f"[end_interview] Starting REAL transcription from: {recording_path}")
+        
+        # Use the new real transcript service
+        from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+        
+        try:
+            # Validate recording file
+            validate_recording_file(recording_path)
+            
+            # Create real transcript with actual timestamps
+            transcript_data = create_real_transcript(
+                interview_id=vi.id,
+                recording_path=recording_path,
+                interview_start_time=vi.started_at or vi.scheduled_at,
+                interview_end_time=datetime.now(timezone.utc),
+                question_timestamps=actual_questions if actual_questions else None
+            )
+            
+            vi.transcript = transcript_data["transcript_text"]
+            vi.transcript_source = "recording"
+            print(f"[end_interview] REAL transcript generated successfully ({len(transcript_data['transcript_text'])} chars)")
+            
+        except TranscriptionError as e:
+            print(f"[end_interview] Transcription failed: {e}")
+            vi.transcript = None
+            vi.transcript_source = "failed"
+            vi.transcript_error = str(e)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate transcript: {str(e)}"
+            )
 
         vi.transcript_generated_at = datetime.now(timezone.utc)
         print(f"[end_interview] Transcript saved for video interview {video_id}")
@@ -842,6 +1007,63 @@ def end_video_interview(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/check-grace-period -- Check grace period
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/check-grace-period")
+def check_grace_period(
+    video_id: int,
+    grace_minutes: int = Body(10, embed=True),
+    db: Session = Depends(get_db),
+):
+    """
+    Check if grace period has expired for a WAITING interview.
+    If expired and still WAITING, mark as NO_SHOW.
+    Grace period starts from scheduled_at time.
+    """
+    from datetime import timedelta
+    
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+    
+    # Only check if status is WAITING
+    if vi.status != VideoInterviewStatus.WAITING.value:
+        return {
+            "grace_period_expired": False,
+            "status": vi.status,
+            "message": "Interview is not in WAITING status"
+        }
+    
+    # Calculate if grace period expired
+    scheduled_time = vi.scheduled_at
+    now = datetime.now(timezone.utc)
+    grace_period_end = scheduled_time + timedelta(minutes=grace_minutes)
+    
+    if now > grace_period_end:
+        # Grace period expired - mark as NO_SHOW
+        vi.status = VideoInterviewStatus.NO_SHOW.value
+        vi.ended_at = now
+        db.commit()
+        db.refresh(vi)
+        print(f"[check_grace_period] Grace period expired for interview {video_id}, marked as NO_SHOW")
+        return {
+            "grace_period_expired": True,
+            "status": vi.status,
+            "message": "Grace period expired, candidate marked absent"
+        }
+    
+    # Still within grace period
+    remaining_seconds = int((grace_period_end - now).total_seconds())
+    return {
+        "grace_period_expired": False,
+        "status": vi.status,
+        "remaining_seconds": remaining_seconds,
+        "message": f"Grace period active, {remaining_seconds}s remaining"
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/video/interviews/{video_id}/transcript  -- Get transcript
 # ---------------------------------------------------------------------------
 
@@ -863,84 +1085,52 @@ def get_video_transcript(
     ):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Generate transcript if not exists
+    # Generate transcript if not exists - ONLY REAL TRANSCRIPTION
     if not vi.transcript:
-        from models import InterviewQuestion, JobApplication
-
-        try:
-            candidate_name = None
-            interviewer_name = None
-            job_title = None
-
-            if vi.candidate:
-                candidate_name = vi.candidate.full_name or vi.candidate.username
-            if vi.interviewer:
-                interviewer_name = vi.interviewer.full_name or vi.interviewer.username
-            if vi.job:
-                job_title = vi.job.title
-
-            # Fetch actual interview questions for this candidate/job
-            actual_questions = []
-            if vi.job_id:
-                # Get ALL questions for this job first
-                all_job_questions = db.query(InterviewQuestion).filter(
-                    InterviewQuestion.job_id == vi.job_id
-                ).all()
-
-                # Try multiple candidate_ids
-                possible_candidate_ids = []
-                if vi.candidate:
-                    application = db.query(JobApplication).filter(
-                        JobApplication.job_id == vi.job_id,
-                        JobApplication.applicant_email == vi.candidate.email
-                    ).first()
-                    if application:
-                        possible_candidate_ids.append(application.id)
-                if vi.candidate_id and vi.candidate_id not in possible_candidate_ids:
-                    possible_candidate_ids.append(vi.candidate_id)
-                for ecid in set(q.candidate_id for q in all_job_questions):
-                    if ecid not in possible_candidate_ids:
-                        possible_candidate_ids.append(ecid)
-
-                questions = []
-                for cid in possible_candidate_ids:
-                    questions = db.query(InterviewQuestion).filter(
-                        InterviewQuestion.job_id == vi.job_id,
-                        InterviewQuestion.candidate_id == cid,
-                        InterviewQuestion.is_approved == True
-                    ).all()
-                    if questions:
-                        break
-                if not questions:
-                    for cid in possible_candidate_ids:
-                        questions = db.query(InterviewQuestion).filter(
-                            InterviewQuestion.job_id == vi.job_id,
-                            InterviewQuestion.candidate_id == cid
-                        ).all()
-                        if questions:
-                            break
-
-                if questions:
-                    actual_questions = [
-                        {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
-                        for q in questions
-                    ]
-
-            transcript = generate_transcript_for_video_interview(
-                video_interview_id=vi.id,
-                candidate_name=candidate_name,
-                interviewer_name=interviewer_name,
-                job_title=job_title,
-                duration_minutes=vi.duration_minutes or 30,
-                actual_questions=actual_questions if actual_questions else None
+        if not vi.recording_url:
+            raise HTTPException(
+                status_code=400,
+                detail="No transcript available and no recording file found. Cannot generate transcript."
             )
-            vi.transcript = transcript
+        
+        # Use real transcription service
+        from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+        
+        try:
+            # Validate and prepare recording path
+            recording_path = vi.recording_url
+            if not os.path.isabs(recording_path):
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                backend_dir = os.path.join(base_dir, '..', '..', '..')
+                recording_path = os.path.normpath(os.path.join(backend_dir, recording_path))
+            
+            validate_recording_file(recording_path)
+            
+            # Get interview details
+            candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else None
+            interviewer_name = vi.interviewer.full_name or vi.interviewer.username if vi.interviewer else None
+            job_title = vi.job.title if vi.job else None
+            
+            # Create real transcript
+            transcript_data = create_real_transcript(
+                interview_id=vi.id,
+                recording_path=recording_path,
+                interview_start_time=vi.started_at or vi.scheduled_at,
+                interview_end_time=vi.ended_at or datetime.now(timezone.utc)
+            )
+            
+            # Save to database
+            vi.transcript = transcript_data["transcript_text"]
+            vi.transcript_source = "recording"
             vi.transcript_generated_at = datetime.now(timezone.utc)
-            vi.transcript_source = "mock"
             db.commit()
             db.refresh(vi)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to generate transcript: {e}")
+            
+        except TranscriptionError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate transcript: {str(e)}"
+            )
 
     return {
         "video_interview_id": vi.id,
@@ -949,6 +1139,62 @@ def get_video_transcript(
         "candidate_name": vi.candidate.full_name or vi.candidate.username if vi.candidate else None,
         "job_title": vi.job.title if vi.job else None
     }
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/check-grace-period -- Check if grace period expired
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/check-grace-period")
+def check_grace_period(
+    video_id: int,
+    grace_minutes: int = Body(10, embed=True),
+    db: Session = Depends(get_db),
+):
+    """
+    Check if grace period has expired for a WAITING interview.
+    If expired and still WAITING, mark as CANDIDATE_ABSENT.
+    Grace period starts from scheduled_at time.
+    """
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # Only check if status is WAITING
+    if vi.status != VideoInterviewStatus.WAITING.value:
+        return {
+            "grace_period_expired": False,
+            "status": vi.status,
+            "message": "Interview is not in WAITING status"
+        }
+
+    # Calculate if grace period expired
+    scheduled_time = vi.scheduled_at
+    now = datetime.now(timezone.utc)
+    grace_period_end = scheduled_time + timedelta(minutes=grace_minutes)
+
+    if now > grace_period_end:
+        # Grace period expired - mark as NO_SHOW
+        vi.status = VideoInterviewStatus.NO_SHOW.value
+        vi.ended_at = now
+        db.commit()
+        db.refresh(vi)
+        print(f"[check_grace_period] Grace period expired for interview {video_id}, marked as NO_SHOW")
+        return {
+            "grace_period_expired": True,
+            "status": vi.status,
+            "message": "Grace period expired, candidate marked absent"
+        }
+
+    # Still within grace period
+    remaining_seconds = int((grace_period_end - now).total_seconds())
+    return {
+        "grace_period_expired": False,
+        "status": vi.status,
+        "remaining_seconds": remaining_seconds,
+        "message": f"Grace period active, {remaining_seconds}s remaining"
+    }
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -1093,24 +1339,62 @@ def get_ai_interview_questions(
 def submit_ai_interview_answers(
     video_id: int,
     body: dict,
-    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Submit answers from AI interview and generate score."""
+    """
+    Submit AI interview data with real timestamps and generate transcript.
+    Called by AI agent after interview completes.
+    NO AUTH REQUIRED - AI agent cannot authenticate.
+    """
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus, JobApplication
-    from services.groq_service import score_transcript_with_groq
-    from services.gemini_service import score_transcript_with_gemini
-    import config
-
+    
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
-    answers = body.get("answers", [])
-    if not answers:
-        raise HTTPException(status_code=400, detail="No answers provided")
+    # Get interview data with timestamps from AI agent
+    interview_start_time = body.get("interview_start_time")
+    interview_end_time = body.get("interview_end_time") 
+    question_timestamps = body.get("question_timestamps", [])
+    total_questions = body.get("total_questions", 0)
+    completed_questions = body.get("completed_questions", 0)
+    
+    print(f"[ai-submit] Received AI interview data: video_id={video_id}, questions={total_questions}, completed={completed_questions}")
+    
+    if not interview_start_time or not question_timestamps:
+        print(f"[ai-submit] Missing timing data")
+        raise HTTPException(status_code=400, detail="Missing interview timing data")
 
-    # Find JobApplication for this candidate
+    # Build REAL transcript with actual timestamps
+    candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else "Candidate"
+    transcript_lines = []
+    
+    # Add interview start
+    start_dt = datetime.fromisoformat(interview_start_time.replace('Z', '+00:00'))
+    transcript_lines.append(f"[{start_dt.strftime('%H:%M:%S')}] AI Interviewer: Hello {candidate_name}! I'm your AI interviewer today.")
+    
+    # Add questions with REAL timestamps
+    for q_data in question_timestamps:
+        question_time = datetime.fromisoformat(q_data["timestamp"].replace('Z', '+00:00'))
+        transcript_lines.append(f"\n[{question_time.strftime('%H:%M:%S')}] AI Interviewer: Question {q_data.get('question_index', '?')}: {q_data['question_text']}")
+        transcript_lines.append(f"[{question_time.strftime('%H:%M:%S')}] {candidate_name}: [Response recorded]")
+    
+    # Add interview end
+    end_dt = datetime.fromisoformat(interview_end_time.replace('Z', '+00:00'))
+    transcript_lines.append(f"\n[{end_dt.strftime('%H:%M:%S')}] AI Interviewer: Thank you {candidate_name}! Interview completed.")
+
+    transcript_text = "\n".join(transcript_lines)
+
+    # Save transcript to video interview
+    vi.transcript = transcript_text
+    vi.transcript_generated_at = datetime.now(timezone.utc)
+    vi.transcript_source = "ai_interview"  # AI interview transcript
+    vi.status = VideoInterviewStatus.COMPLETED.value
+    vi.ended_at = datetime.now(timezone.utc)
+    
+    print(f"[ai-submit] Transcript generated ({len(transcript_text)} chars)")
+
+    # Get questions for scoring
     application = None
     if vi.candidate:
         application = db.query(JobApplication).filter(
@@ -1120,32 +1404,10 @@ def submit_ai_interview_answers(
 
     candidate_id_for_questions = application.id if application else vi.candidate_id
 
-    # Get the questions to score against
-    question_ids = [a["question_id"] for a in answers]
     questions = db.query(InterviewQuestion).filter(
-        InterviewQuestion.id.in_(question_ids)
+        InterviewQuestion.job_id == vi.job_id,
+        InterviewQuestion.candidate_id == candidate_id_for_questions
     ).all()
-
-    if not questions:
-        raise HTTPException(status_code=400, detail="Questions not found")
-
-    # Build transcript from answers for scoring
-    candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else "Candidate"
-    transcript_lines = []
-    for answer in answers:
-        q = next((q for q in questions if q.id == answer["question_id"]), None)
-        if q:
-            transcript_lines.append(f"[00:00] Interviewer: {q.question_text}")
-            transcript_lines.append(f"[00:00] {candidate_name}: {answer['answer_text']}")
-
-    transcript_text = "\n".join(transcript_lines)
-
-    # Save transcript to video interview
-    vi.transcript = transcript_text
-    vi.transcript_generated_at = datetime.now(timezone.utc)
-    vi.transcript_source = "recording"  # AI interview answers come from live session
-    vi.status = VideoInterviewStatus.COMPLETED.value
-    vi.ended_at = datetime.now(timezone.utc)
 
     # Prepare questions for scoring
     questions_for_scoring = [
@@ -1157,91 +1419,65 @@ def submit_ai_interview_answers(
         for q in questions
     ]
 
-    # Score with Groq (primary), Gemini (fallback)
-    score_result = None
-    llm_result = None
+    # Create or update interview session
+    session = db.query(InterviewSession).filter(
+        InterviewSession.job_id == vi.job_id,
+        InterviewSession.candidate_id == vi.candidate_id
+    ).first()
+
+    if not session:
+        session = InterviewSession(
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            application_id=candidate_id_for_questions,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="ai_interview",
+            started_at=start_dt,
+            transcript_text=transcript_text
+        )
+        db.add(session)
+        db.flush()
+        vi.session_id = session.id
+    else:
+        session.transcript_text = transcript_text
+        session.completed_at = end_dt
+
+    # Try to score with AI (optional - don't fail if scoring fails)
     try:
+        from services.groq_service import score_transcript_with_groq
+        from services.gemini_service import score_transcript_with_gemini
+        import config
+        
+        llm_result = None
         if config.GROQ_API_KEY:
             llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
+        elif config.GEMINI_API_KEY:
+            llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
+
+        if llm_result:
+            session.overall_score = float(llm_result.get("overall_score", 0))
+            rec_str = llm_result.get("recommendation", "reject")
+            session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
+            session.strengths = llm_result.get("strengths", "")
+            session.weaknesses = llm_result.get("weaknesses", "")
+            session.status = InterviewSessionStatus.SCORED
+            print(f"[ai-submit] Scoring completed: {session.overall_score}/100")
     except Exception as e:
-        print(f"[WARN] Groq scoring failed: {e}")
-
-    if not llm_result:
-        try:
-            if config.GEMINI_API_KEY:
-                llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
-        except Exception as e:
-            print(f"[WARN] Gemini scoring also failed: {e}")
-
-    if llm_result:
-        score_result = {
-            "overall_score": llm_result.get("overall_score", 0),
-            "recommendation": llm_result.get("recommendation", ""),
-            "strengths": llm_result.get("strengths", ""),
-            "weaknesses": llm_result.get("weaknesses", ""),
-            "per_question": llm_result.get("per_question", [])
-        }
-
-        # Create or update interview session
-        session = db.query(InterviewSession).filter(
-            InterviewSession.job_id == vi.job_id,
-            InterviewSession.application_id == candidate_id_for_questions
-        ).first()
-
-        if not session:
-            session = InterviewSession(
-                job_id=vi.job_id,
-                candidate_id=vi.candidate_id,
-                application_id=candidate_id_for_questions,
-                status=InterviewSessionStatus.SCORED,
-                interview_mode="ai_interview",
-                started_at=datetime.now(timezone.utc)
-            )
-            db.add(session)
-            db.flush()
-
-        session.transcript_text = transcript_text
-        session.overall_score = float(llm_result.get("overall_score", 0))
-        rec_str = llm_result.get("recommendation", "reject")
-        session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
-        session.strengths = llm_result.get("strengths", "")
-        session.weaknesses = llm_result.get("weaknesses", "")
-        session.status = InterviewSessionStatus.SCORED
-        session.completed_at = datetime.now(timezone.utc)
-
-        # Save individual answers with scores
-        for answer in answers:
-            q_id = answer["question_id"]
-            pq = next((p for p in llm_result.get("per_question", []) if p.get("question_id") == q_id), {})
-
-            existing_answer = db.query(InterviewAnswer).filter(
-                InterviewAnswer.session_id == session.id,
-                InterviewAnswer.question_id == q_id
-            ).first()
-
-            if existing_answer:
-                ans = existing_answer
-            else:
-                ans = InterviewAnswer(session_id=session.id, question_id=q_id)
-                db.add(ans)
-
-            ans.answer_text = answer["answer_text"]
-            ans.score = float(pq.get("score", 0))
-            ans.relevance_score = float(pq.get("relevance_score", 0))
-            ans.completeness_score = float(pq.get("completeness_score", 0))
-            ans.accuracy_score = float(pq.get("accuracy_score", 0))
-            ans.clarity_score = float(pq.get("clarity_score", 0))
-            ans.feedback = pq.get("feedback", "")
+        print(f"[ai-submit] Scoring failed (non-critical): {e}")
+        session.status = InterviewSessionStatus.COMPLETED
 
     db.commit()
     db.refresh(vi)
 
+    print(f"[ai-submit] ✅ AI interview data saved successfully")
+
     return {
-        "message": "AI Interview completed and scored successfully",
+        "success": True,
+        "message": "AI Interview completed and transcript generated",
         "video_interview_id": vi.id,
-        "answers_saved": len(answers),
-        "score_generated": score_result is not None,
-        "score_result": score_result
+        "transcript_length": len(transcript_text),
+        "questions_asked": total_questions,
+        "status": vi.status
     }
 
 

@@ -3,6 +3,7 @@ import asyncio
 import re
 import os
 import sys
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -30,10 +31,22 @@ except ImportError:
     HAS_OPENAI = False
 
 try:
+    from livekit.plugins import deepgram
+    HAS_DEEPGRAM = True
+except ImportError:
+    HAS_DEEPGRAM = False
+
+try:
     from livekit.plugins import elevenlabs
     HAS_ELEVENLABS = True
 except ImportError:
     HAS_ELEVENLABS = False
+
+try:
+    from livekit.plugins import cartesia
+    HAS_CARTESIA = True
+except ImportError:
+    HAS_CARTESIA = False
 
 logger = logging.getLogger("agent")
 
@@ -80,6 +93,10 @@ class InterviewAgent(Agent):
         self.last_speech_time: Optional[float] = None
         self.silence_detection_task: Optional[asyncio.Task] = None
         self.SILENCE_TIMEOUT = 120  # 120 seconds
+        
+        # Real timestamp tracking for transcript generation
+        self.interview_start_time: Optional[datetime] = None
+        self.question_timestamps: List[Dict[str, Any]] = []
 
     async def fetch_interview_questions(self, video_id: int) -> Optional[List[Dict[str, Any]]]:
         """Fetch candidate-specific questions from backend API"""
@@ -133,6 +150,9 @@ class InterviewAgent(Agent):
         if room_name.startswith("interview_"):
             video_id = int(room_name.split("_")[1])
             
+            # Capture interview start time
+            self.interview_start_time = datetime.utcnow()
+            
             # Fetch questions for this specific interview
             questions = await self.fetch_interview_questions(video_id)
             if questions:
@@ -169,6 +189,14 @@ class InterviewAgent(Agent):
         if self.current_question_index < len(self.questions):
             question = self.questions[self.current_question_index]
             question_text = question["question_text"]
+            
+            # Capture question timestamp for transcript
+            question_timestamp = {
+                "question_text": question_text,
+                "timestamp": datetime.utcnow().isoformat(),
+                "question_index": self.current_question_index + 1
+            }
+            self.question_timestamps.append(question_timestamp)
             
             await self.session.say(
                 f"Question {self.current_question_index + 1}: {question_text}",
@@ -219,8 +247,45 @@ class InterviewAgent(Agent):
             allow_interruptions=True
         )
         logger.info(f"✅ Interview concluded with {self.candidate_name}")
+        
+        # Save interview data with timestamps to backend
+        await self._save_interview_data()
+        
         # Optionally disconnect after a short delay
         await asyncio.sleep(3)
+
+    async def _save_interview_data(self):
+        """Save interview data with timestamps to backend"""
+        try:
+            import httpx
+            
+            # Extract video_id from room name
+            room_name = self.session.room.name
+            if room_name.startswith("interview_"):
+                video_id = int(room_name.split("_")[1])
+                
+                backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                api_url = f"{backend_url}/api/video/interviews/{video_id}/ai-submit"
+                
+                # Prepare interview data with timestamps
+                interview_data = {
+                    "video_id": video_id,
+                    "interview_start_time": self.interview_start_time.isoformat() if self.interview_start_time else None,
+                    "interview_end_time": datetime.utcnow().isoformat(),
+                    "question_timestamps": self.question_timestamps,
+                    "total_questions": len(self.questions),
+                    "completed_questions": self.current_question_index + 1
+                }
+                
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(api_url, json=interview_data)
+                    if response.status_code == 200:
+                        logger.info(f"✅ Interview data saved to backend successfully")
+                    else:
+                        logger.error(f"❌ Failed to save interview data: {response.status_code}")
+                        
+        except Exception as e:
+            logger.error(f"❌ Error saving interview data: {e}")
 
     async def on_reply(self, text: str):
         """Handle candidate's response"""
@@ -274,19 +339,32 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Starting interview with participant: {participant.identity}")
 
     # Choose STT/LLM/TTS based on available plugins
-    if not HAS_ELEVENLABS:
-        raise RuntimeError("ElevenLabs plugin required for TTS. Install: uv add livekit-plugins-elevenlabs")
+    # Priority: Deepgram TTS (free, reliable) > Cartesia > ElevenLabs
     
     if HAS_GROQ:
-        logger.info("Using Groq for STT and LLM, ElevenLabs for TTS")
+        logger.info("Using Groq for STT and LLM")
         stt = groq.STT(model="whisper-large-v3")
         llm = groq.LLM(model="llama-3.3-70b-versatile")
-        tts = elevenlabs.TTS()  # Free tier: 10,000 chars/month
+        
+        # Try Deepgram TTS first (free tier available)
+        if HAS_DEEPGRAM:
+            tts = deepgram.TTS(model="aura-asteria-en")  # Correct parameter is 'model' not 'voice'
+            logger.info("✅ Using Deepgram TTS (free tier)")
+        elif HAS_CARTESIA:
+            tts = cartesia.TTS(voice="79a125e8-cd45-4c13-8a67-188112f4dd22")
+            logger.info("✅ Using Cartesia TTS")
+        elif HAS_ELEVENLABS:
+            tts = elevenlabs.TTS()
+            logger.info("⚠️ Using ElevenLabs TTS (may have quota issues)")
+        else:
+            raise RuntimeError("No TTS provider available")
+            
     elif HAS_OPENAI:
-        logger.info("Using OpenAI for STT and LLM, ElevenLabs for TTS")
+        logger.info("Using OpenAI for STT, LLM, and TTS")
         stt = openai.STT(model="whisper-1")
         llm = openai.LLM(model="gpt-4o-mini")
-        tts = elevenlabs.TTS()  # Free tier: 10,000 chars/month
+        tts = openai.TTS(voice="alloy")
+        logger.info("✅ Using OpenAI TTS")
     else:
         raise RuntimeError("No STT/LLM provider available. Install livekit-plugins-groq or livekit-plugins-openai")
 
@@ -300,10 +378,10 @@ async def entrypoint(ctx: JobContext):
 
     agent = InterviewAgent()
     
-    # Hook into VAD events for real-time speech detection
+    # Hook into VAD events for real-time speech detection (synchronous wrapper)
     @session.vad.on("speech_started")
-    async def on_speech_started():
-        await agent.on_speech_detected()
+    def on_speech_started():
+        asyncio.create_task(agent.on_speech_detected())
 
     await session.start(
         room=ctx.room,

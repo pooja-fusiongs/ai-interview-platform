@@ -97,6 +97,12 @@ export const videoInterviewService = {
     const response = await apiClient.post('/api/video/join', { video_id: videoId });
     return response.data;
   },
+  checkGracePeriod: async (id: number, graceMinutes: number = 10) => {
+    const response = await apiClient.post(`/api/video/interviews/${id}/check-grace-period`, {
+      grace_minutes: graceMinutes
+    });
+    return response.data;
+  },
 };
 
 export default videoInterviewService;

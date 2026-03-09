@@ -512,7 +512,10 @@ class VideoInterview(Base):
     notes = Column(Text, nullable=True)
     transcript = Column(Text, nullable=True)
     transcript_generated_at = Column(DateTime(timezone=True), nullable=True)
-    transcript_source = Column(String, nullable=True)  # "recording", "upload", or "mock"
+    transcript_source = Column(String, nullable=True)  # "recording" or "failed" (NEVER "mock")
+    transcript_error = Column(Text, nullable=True)  # Error details if transcription failed
+    agent_dispatched = Column(Boolean, default=False)  # Track if AI agent was dispatched
+    candidate_joined_at = Column(DateTime(timezone=True), nullable=True)  # Track when candidate actually joined
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -13,7 +13,19 @@ if DATABASE_URL:
 
     print("Using PostgreSQL from DATABASE_URL")
     SQLALCHEMY_DATABASE_URL = DATABASE_URL
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    
+    # Add SSL configuration for cloud PostgreSQL (Supabase/Render)
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={
+            "sslmode": "require",
+            "connect_timeout": 10
+        },
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=5,
+        max_overflow=10
+    )
     print("PostgreSQL connected successfully")
 else:
     # Local development: try local PostgreSQL, fallback to SQLite

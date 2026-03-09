@@ -235,8 +235,13 @@ try:
     
     print("✅ Video Interview & Fraud Detection endpoints included")
     print(f"   Routes registered: {len(video_interviews_router.routes)} video interview routes")
+    print("   Video Interview Routes:")
+    for route in video_interviews_router.routes:
+        print(f"     {list(route.methods)} {route.path}")
 except Exception as e:
     import traceback
+    print(f"❌ ERROR importing Video Interview endpoints: {e}")
+    traceback.print_exc()
     print(f"⚠️ Could not load Video Interview endpoints: {e}")
     traceback.print_exc()
 

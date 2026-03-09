@@ -18,6 +18,7 @@ import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { VideoTilesGrid } from './VideoTilesGrid';
 import { getMediaDevices, requestMediaPermissions, getDeviceErrorMessage, createAudioOnlyConstraints } from '../../utils/mediaDeviceUtils';
+import Navigation from '../layout/Sidebar';
 
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
@@ -37,8 +38,10 @@ const VideoInterviewRoom: React.FC = () => {
   const [lkToken, setLkToken] = useState<string | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [gracePeriodTimer, setGracePeriodTimer] = useState<number | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const graceCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
   // const jitsiApiRef = useRef<any>(null); // Removed Jitsi ref
@@ -75,6 +78,9 @@ const VideoInterviewRoom: React.FC = () => {
             // If elapsed time is unreasonably large (>24 hours), reset to 0
             setElapsed(diff > 86400 ? 0 : Math.max(0, diff));
           }
+        } else if (data.status === 'waiting') {
+          // Interview is waiting for candidate - start grace period check
+          startGracePeriodCheck();
         }
       } catch (err: any) {
         setError(err.response?.data?.detail || err.message || 'Failed to load interview.');
@@ -86,6 +92,7 @@ const VideoInterviewRoom: React.FC = () => {
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (graceCheckIntervalRef.current) clearInterval(graceCheckIntervalRef.current);
       cleanupVideoCall();
     };
   }, [videoId]);
@@ -101,6 +108,39 @@ const VideoInterviewRoom: React.FC = () => {
     } finally {
       setLoadingQuestions(false);
     }
+  };
+
+  const startGracePeriodCheck = () => {
+    // Check grace period every 30 seconds
+    if (graceCheckIntervalRef.current) return; // Already checking
+    
+    const checkGrace = async () => {
+      try {
+        const response = await videoInterviewService.checkGracePeriod(Number(videoId), 10); // 10 minutes grace
+        
+        if (response.grace_period_expired) {
+          // Grace period expired, candidate didn't join
+          toast.error('Candidate did not join within grace period');
+          if (graceCheckIntervalRef.current) {
+            clearInterval(graceCheckIntervalRef.current);
+            graceCheckIntervalRef.current = null;
+          }
+          // Refresh interview data
+          const data = await videoInterviewService.getInterview(Number(videoId));
+          setInterview(data);
+        } else if (response.remaining_seconds) {
+          setGracePeriodTimer(response.remaining_seconds);
+        }
+      } catch (err) {
+        console.error('Grace period check failed:', err);
+      }
+    };
+    
+    // Check immediately
+    checkGrace();
+    
+    // Then check every 30 seconds
+    graceCheckIntervalRef.current = setInterval(checkGrace, 30000);
   };
 
   // Pre-request camera/mic permissions on mount to trigger browser prompt
@@ -209,7 +249,7 @@ const VideoInterviewRoom: React.FC = () => {
 
   const startInterviewDirectly = async () => {
     try {
-      await videoInterviewService.startInterview(Number(videoId));
+      await videoInterviewService.joinInterview(Number(videoId));
       const data = await videoInterviewService.getInterview(Number(videoId));
       setInterview(data);
       setIsActive(true);
@@ -228,7 +268,7 @@ const VideoInterviewRoom: React.FC = () => {
 
       // If interview is already in_progress (started by recruiter), just join
       if (interview?.status !== 'in_progress') {
-        await videoInterviewService.startInterview(Number(videoId));
+        await videoInterviewService.joinInterview(Number(videoId));
         // Refresh interview data to get the meeting URL
         const data = await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
@@ -405,10 +445,16 @@ const VideoInterviewRoom: React.FC = () => {
         toast.success('Interview completed!');
       }
 
-      // Redirect recruiter to detail page to view recording
+      // Redirect based on user role
       if (user?.role !== 'candidate') {
+        // Recruiter: Go to interview detail page
         setTimeout(() => {
           navigate(`/video-detail/${videoId}`);
+        }, 1500);
+      } else {
+        // Candidate: Go to thank you page with interview ID
+        setTimeout(() => {
+          navigate(`/thank-you?interviewId=${videoId}`);
         }, 1500);
       }
     } catch (err: any) {
@@ -450,56 +496,82 @@ const VideoInterviewRoom: React.FC = () => {
   const isCompleted = interview?.status === 'completed';
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', backgroundColor: '#0f172a' }}>
-      {/* LEFT SIDE - Questions Panel */}
+    <Navigation>
       <Box sx={{ 
-        width: { xs: '100%', md: '40%' }, 
-        backgroundColor: '#1e293b', 
-        borderRight: '1px solid #334155',
-        display: 'flex',
+        display: 'flex', 
         flexDirection: 'column',
-        overflow: 'hidden'
+        height: 'calc(100vh - 64px)', 
+        width: '100%',
+        overflow: 'hidden', 
+        backgroundColor: '#f8fafc'
       }}>
-        {/* Header */}
+        {/* Top Header Bar */}
         <Box sx={{ 
-          padding: '24px', 
-          borderBottom: '1px solid #334155',
-          backgroundColor: '#1e293b'
+          padding: '16px 24px', 
+          borderBottom: '1px solid #e2e8f0',
+          background: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton
               onClick={() => navigate('/video-interviews')}
               sx={{
-                color: '#94a3b8',
-                background: 'rgba(51, 65, 85, 0.5)',
-                '&:hover': { background: 'rgba(71, 85, 105, 0.5)' }
+                color: '#64748b',
+                '&:hover': { 
+                  background: '#f1f5f9',
+                  color: '#020291'
+                }
               }}
             >
               <ArrowBack />
             </IconButton>
-            <Box sx={{ flex: 1 }}>
-              <Typography sx={{ fontSize: '24px', fontWeight: 'bold', color: 'white', mb: 0.5 }}>
-                Interview Questions
+            <Box>
+              <Typography sx={{ 
+                fontSize: '18px', 
+                fontWeight: 700, 
+                color: '#1e293b'
+              }}>
+                {interview?.job_title || 'Software QA Engineer'}
               </Typography>
-              <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
-                {interview?.job_title || 'Loading...'}
+              <Typography sx={{ 
+                color: '#64748b', 
+                fontSize: '13px'
+              }}>
+                {interview?.candidate_name || 'pooja Mishra'} • Interview #{videoId}
               </Typography>
             </Box>
           </Box>
           
-          {/* Status Badges */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {/* Timer and Status */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {interview?.status === 'waiting' && gracePeriodTimer && (
+              <Chip
+                icon={<AccessTime sx={{ fontSize: 14 }} />}
+                label={`Waiting (${Math.floor(gracePeriodTimer / 60)}:${(gracePeriodTimer % 60).toString().padStart(2, '0')})`}
+                size="small"
+                sx={{
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  border: '1px solid #fde68a'
+                }}
+              />
+            )}
             {isActive && (
               <Chip
                 icon={<Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'blink 1s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
                 label={callJoined ? "LIVE" : "CONNECTING"}
                 size="small"
                 sx={{
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  color: '#f87171',
+                  background: '#fee2e2',
+                  color: '#991b1b',
                   fontWeight: 600,
                   fontSize: '12px',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  border: '1px solid #fecaca'
                 }}
               />
             )}
@@ -509,144 +581,199 @@ const VideoInterviewRoom: React.FC = () => {
                 label="REC"
                 size="small"
                 sx={{
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  color: '#f87171',
+                  background: '#fee2e2',
+                  color: '#991b1b',
                   fontWeight: 600,
                   fontSize: '12px',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  border: '1px solid #fecaca'
                 }}
               />
             )}
             <Box sx={{
-              background: 'rgba(59, 130, 246, 0.2)',
-              color: '#60a5fa',
+              background: '#dbeafe',
+              color: '#1e40af',
               borderRadius: '8px',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              padding: '6px 12px',
+              border: '1px solid #bfdbfe',
+              padding: '8px 16px',
               display: 'flex',
               alignItems: 'center',
               gap: 1
             }}>
-              <AccessTime sx={{ fontSize: 16 }} />
-              <Typography sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '14px' }}>
+              <AccessTime sx={{ fontSize: 18 }} />
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '15px' }}>
                 {formatTime(elapsed)}
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        {/* Scrollable Questions List */}
-        <Box sx={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-          {loadingQuestions ? (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <CircularProgress size={32} sx={{ color: '#60a5fa', mb: 2 }} />
-              <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
-                Loading questions...
-              </Typography>
-            </Box>
-          ) : questions.length > 0 ? (
-            questions.map((q: any, idx: number) => (
-              <Box
-                key={q.id || idx}
-                sx={{
-                  backgroundColor: 'rgba(51, 65, 85, 0.5)',
-                  borderRadius: '12px',
-                  padding: '20px',
-                  border: '1px solid rgba(71, 85, 105, 0.5)',
-                  marginBottom: '16px',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    backgroundColor: 'rgba(51, 65, 85, 0.7)',
-                    borderColor: 'rgba(71, 85, 105, 0.7)'
-                  }
-                }}
-              >
-                {/* Question Number & Difficulty Badge */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                  <Box sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                    color: '#60a5fa',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    border: '1px solid rgba(59, 130, 246, 0.3)'
-                  }}>
-                    {idx + 1}
+        {/* Main Content Area - Split Left/Right */}
+        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          {/* LEFT SIDE - Questions Panel */}
+          <Box sx={{ 
+            width: { xs: '100%', md: '40%' }, 
+            backgroundColor: 'white', 
+            borderRight: '1px solid #e2e8f0',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+
+          {/* Scrollable Questions List */}
+          <Box sx={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            padding: '20px',
+            background: '#f8fafc',
+            '&::-webkit-scrollbar': {
+              width: '6px'
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f5f9'
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#cbd5e1',
+              borderRadius: '3px',
+              '&:hover': {
+                background: '#94a3b8'
+              }
+            }
+          }}>
+            {loadingQuestions ? (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <CircularProgress size={32} sx={{ color: '#020291', mb: 2 }} />
+                <Typography sx={{ color: '#64748b', fontSize: '14px' }}>
+                  Loading questions...
+                </Typography>
+              </Box>
+            ) : questions.length > 0 ? (
+              questions.map((q: any, idx: number) => (
+                <Box
+                  key={q.id || idx}
+                  sx={{
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    border: '1px solid #e2e8f0',
+                    marginBottom: '16px',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                    '&:hover': {
+                      borderColor: '#8b5cf6',
+                      boxShadow: '0 4px 12px rgba(139, 92, 246, 0.1)',
+                      transform: 'translateY(-2px)'
+                    }
+                  }}
+                >
+                  {/* Question Number & Difficulty Badge */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                    <Box sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: '#ede9fe',
+                      color: '#7c3aed',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      border: '2px solid #ddd6fe'
+                    }}>
+                      {idx + 1}
+                    </Box>
+                    {q.difficulty && (
+                      <Chip
+                        label={q.difficulty.toUpperCase()}
+                        size="small"
+                        sx={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          height: '24px',
+                          borderRadius: '6px',
+                          ...(q.difficulty.toLowerCase() === 'easy' ? {
+                            background: '#dcfce7',
+                            color: '#166534',
+                            border: '1px solid #bbf7d0'
+                          } : q.difficulty.toLowerCase() === 'medium' || q.difficulty.toLowerCase() === 'intermediate' ? {
+                            background: '#fef3c7',
+                            color: '#92400e',
+                            border: '1px solid #fde68a'
+                          } : {
+                            background: '#fee2e2',
+                            color: '#991b1b',
+                            border: '1px solid #fecaca'
+                          })
+                        }}
+                      />
+                    )}
                   </Box>
-                  {q.difficulty && (
-                    <Chip
-                      label={q.difficulty.toUpperCase()}
-                      size="small"
-                      sx={{
-                        fontSize: '12px',
-                        fontWeight: 500,
-                        ...(q.difficulty.toLowerCase() === 'easy' ? {
-                          backgroundColor: 'rgba(34, 197, 94, 0.2)',
-                          color: '#4ade80',
-                          border: '1px solid rgba(34, 197, 94, 0.3)'
-                        } : q.difficulty.toLowerCase() === 'medium' || q.difficulty.toLowerCase() === 'intermediate' ? {
-                          backgroundColor: 'rgba(234, 179, 8, 0.2)',
-                          color: '#facc15',
-                          border: '1px solid rgba(234, 179, 8, 0.3)'
-                        } : {
-                          backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                          color: '#f87171',
-                          border: '1px solid rgba(239, 68, 68, 0.3)'
-                        })
-                      }}
-                    />
+                  {/* Question Text */}
+                  <Typography sx={{ 
+                    color: '#1e293b', 
+                    fontSize: '15px', 
+                    lineHeight: 1.6, 
+                    mb: q.skill_focus ? 1.5 : 0,
+                    fontWeight: 500
+                  }}>
+                    {q.question_text}
+                  </Typography>
+                  {q.skill_focus && (
+                    <Box sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      background: '#f3e8ff',
+                      border: '1px solid #e9d5ff',
+                      borderRadius: '6px',
+                      padding: '4px 10px'
+                    }}>
+                      <Typography sx={{ 
+                        color: '#7c3aed', 
+                        fontSize: '12px', 
+                        fontWeight: 600
+                      }}>
+                        Focus: {q.skill_focus}
+                      </Typography>
+                    </Box>
                   )}
                 </Box>
-                {/* Question Text */}
-                <Typography sx={{ color: '#e2e8f0', fontSize: '16px', lineHeight: 1.6, mb: q.skill_focus ? 1 : 0 }}>
-                  {q.question_text}
+              ))
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <SmartToy sx={{ fontSize: 48, color: '#cbd5e1', mb: 2 }} />
+                <Typography sx={{ color: '#64748b', fontSize: '14px' }}>
+                  Questions will be loaded when interview starts
                 </Typography>
-                {q.skill_focus && (
-                  <Typography sx={{ color: '#94a3b8', fontSize: '12px', fontStyle: 'italic' }}>
-                    Focus: {q.skill_focus}
-                  </Typography>
-                )}
               </Box>
-            ))
-          ) : (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <SmartToy sx={{ fontSize: 48, color: '#475569', mb: 2 }} />
-              <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
-                Questions will be loaded when interview starts
-              </Typography>
-            </Box>
-          )}
+            )}
+          </Box>
         </Box>
-      </Box>
 
-      {/* RIGHT SIDE - Video Panel */}
-      <Box sx={{ 
-        width: { xs: '100%', md: '60%' }, 
-        backgroundColor: '#0f172a',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
-        {/* Video Container */}
-        <Box sx={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-          <Paper sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: '#1e293b',
-            borderRadius: 0,
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
+        {/* RIGHT SIDE - Video Panel - Always 60% width */}
+        <Box sx={{ 
+          width: { xs: '100%', md: '60%' }, 
+          background: 'white',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* Video Container */}
+          <Box sx={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+            <Paper sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: '#f8fafc',
+              borderRadius: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'none'
+            }}>
               {isActive ? (
                 // LiveKit Video Call with Tiles
                 <Box
@@ -655,8 +782,8 @@ const VideoInterviewRoom: React.FC = () => {
                     height: '100%',
                     position: 'relative',
                     overflow: 'hidden',
-                    borderRadius: '20px',
-                    background: '#1e293b',
+                    borderRadius: 0,
+                    background: '#000',
                   }}
                 >
                   {lkToken ? (
@@ -681,54 +808,79 @@ const VideoInterviewRoom: React.FC = () => {
                   ) : (
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <CircularProgress sx={{ color: '#020291' }} />
-                      <Typography sx={{ color: 'white' }}>Establishing secure connection...</Typography>
+                      <Typography sx={{ color: '#64748b' }}>Establishing secure connection...</Typography>
                     </Box>
                   )}
                 </Box>
               ) : isCompleted ? (
-                <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 3 }}>
+                <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 4 }}>
                   <Box sx={{
-                    width: 80, height: 80, borderRadius: '50%',
-                    background: '#020291',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 16px',
-                    boxShadow: '0 0 40px rgba(16, 185, 129, 0.4)'
+                    width: 100, 
+                    height: 100, 
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    margin: '0 auto 24px',
+                    boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)'
                   }}>
-                    <Check sx={{ color: 'white', fontSize: 40 }} />
+                    <Check sx={{ color: 'white', fontSize: 50 }} />
                   </Box>
-                  <Typography sx={{ color: 'white', fontSize: '24px', fontWeight: 700, mb: 1 }}>
+                  <Typography sx={{ 
+                    color: '#1e293b', 
+                    fontSize: '28px', 
+                    fontWeight: 700, 
+                    mb: 2
+                  }}>
                     Interview Completed
                   </Typography>
                   {user?.role === 'candidate' ? (
                     <>
-                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: 1 }}>
+                      <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 1.5, lineHeight: 1.6 }}>
                         Thank you for attending the interview!
                       </Typography>
-                      <Typography sx={{ color: '#64748b', fontSize: '13px' }}>
+                      <Typography sx={{ color: '#94a3b8', fontSize: '14px', lineHeight: 1.6 }}>
                         The recruiter will review your interview and get back to you soon.
                       </Typography>
                     </>
                   ) : (
-                    <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                    <Typography sx={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>
                       Interview completed. You can close this window.
                     </Typography>
                   )}
                 </Box>
               ) : (
-                <Box sx={{ textAlign: 'center', p: { xs: 2, sm: 4 } }}>
+                <Box sx={{ textAlign: 'center', p: { xs: 3, sm: 5 } }}>
                   <Box sx={{
-                    width: 120, height: 120, borderRadius: '50%',
+                    width: 120, 
+                    height: 120, 
+                    borderRadius: '50%',
                     background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 24px',
-                    boxShadow: '0 0 40px rgba(139, 92, 246, 0.4)'
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    margin: '0 auto 32px',
+                    boxShadow: '0 12px 32px rgba(139, 92, 246, 0.4)'
                   }}>
                     <SmartToy sx={{ color: 'white', fontSize: 60 }} />
                   </Box>
-                  <Typography sx={{ color: 'white', fontSize: { xs: '20px', sm: '28px' }, fontWeight: 700, mb: 1 }}>
+                  <Typography sx={{ 
+                    color: '#1e293b', 
+                    fontSize: { xs: '24px', sm: '32px' }, 
+                    fontWeight: 700, 
+                    mb: 2
+                  }}>
                     AI Interview Ready
                   </Typography>
-                  <Typography sx={{ color: '#94a3b8', fontSize: { xs: '13px', sm: '15px' }, mb: 4 }}>
+                  <Typography sx={{ 
+                    color: '#64748b', 
+                    fontSize: { xs: '14px', sm: '16px' }, 
+                    mb: 5,
+                    lineHeight: 1.7,
+                    maxWidth: '500px',
+                    mx: 'auto'
+                  }}>
                     {user?.role === 'candidate' 
                       ? 'AI will conduct the interview and automatically score responses'
                       : 'Join as observer to watch the AI interview (mic and camera will be disabled)'}
@@ -740,15 +892,17 @@ const VideoInterviewRoom: React.FC = () => {
                     onClick={handleStart}
                     sx={{
                       background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                      padding: '16px 48px',
+                      padding: '16px 40px',
                       borderRadius: '12px',
                       fontWeight: 700,
                       fontSize: '16px',
                       textTransform: 'none',
                       boxShadow: '0 8px 24px rgba(139, 92, 246, 0.4)',
+                      transition: 'all 0.2s',
                       '&:hover': {
                         background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
                         boxShadow: '0 12px 32px rgba(139, 92, 246, 0.5)',
+                        transform: 'translateY(-2px)',
                       }
                     }}
                   >
@@ -761,40 +915,41 @@ const VideoInterviewRoom: React.FC = () => {
 
         {/* End Meeting Button - Floating Bottom Right */}
         {isActive && (
-          <Box sx={{ position: 'absolute', bottom: 32, right: 32, zIndex: 10 }}>
-              <Button
-                onClick={handleEnd}
-                disabled={ending}
-                startIcon={ending ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CallEnd />}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  padding: '16px 24px',
-                  backgroundColor: '#ef4444',
-                  color: 'white',
-                  fontWeight: 600,
-                  borderRadius: '9999px',
-                  textTransform: 'none',
-                  fontSize: '15px',
-                  boxShadow: '0 20px 25px -5px rgba(239, 68, 68, 0.5), 0 10px 10px -5px rgba(239, 68, 68, 0.4)',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    backgroundColor: '#dc2626',
-                    transform: 'scale(1.05)',
-                    boxShadow: '0 25px 30px -5px rgba(239, 68, 68, 0.6)'
-                  },
-                  '&:disabled': {
-                    backgroundColor: '#991b1b',
-                    color: '#fca5a5'
-                  }
-                }}
-              >
-                {ending ? 'Ending...' : 'End Meeting'}
-              </Button>
-            </Box>
-          )}
-        </Box>
+          <Box sx={{ position: 'absolute', bottom: 24, right: 24, zIndex: 10 }}>
+            <Button
+              onClick={handleEnd}
+              disabled={ending}
+              startIcon={ending ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CallEnd />}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                padding: '14px 28px',
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                color: 'white',
+                fontWeight: 700,
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontSize: '15px',
+                boxShadow: '0 8px 24px rgba(239, 68, 68, 0.4)',
+                transition: 'all 0.2s',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 12px 32px rgba(239, 68, 68, 0.5)'
+                },
+                '&:disabled': {
+                  background: '#9ca3af',
+                  color: '#e5e7eb'
+                }
+              }}
+            >
+              {ending ? 'Ending...' : 'End Meeting'}
+            </Button>
+          </Box>
+        )}
+      </Box>
+    </Box>
 
         {/* Uploading Recording Overlay */}
       {/* Uploading Recording Overlay */}
@@ -865,7 +1020,8 @@ const VideoInterviewRoom: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+      </Box>
+    </Navigation>
   );
 };
 

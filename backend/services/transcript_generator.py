@@ -1,442 +1,226 @@
 """
-Transcript Generator Service.
+Real Transcript Generator Service.
 
-Generates simulated interview transcripts when a video interview ends.
-In production, this would be replaced with actual speech-to-text integration.
+ONLY generates real transcripts from actual interview recordings.
+No mock/simulated data - all transcripts must come from real speech-to-text.
 """
 
-import random
-from datetime import datetime
-from typing import Dict, Any, Optional
+import os
+import logging
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional, List
+import config
 
+logger = logging.getLogger(__name__)
 
-# Sample interview questions and answers for different job types
-INTERVIEW_TEMPLATES = {
-    "technical": {
-        "questions": [
-            "Can you tell me about your experience with our tech stack?",
-            "How do you approach debugging complex issues?",
-            "Describe a challenging project you've worked on.",
-            "How do you stay updated with new technologies?",
-            "What's your experience with agile methodologies?",
-            "Can you explain how you would design a scalable system?",
-            "Tell me about a time you had to learn a new technology quickly.",
-            "How do you handle code reviews?",
-        ],
-        "answer_templates": [
-            "I have {years} years of experience working with similar technologies. In my previous role at {company}, I worked extensively with {tech}.",
-            "My approach to debugging involves first reproducing the issue, then systematically isolating the problem using logging and debugging tools.",
-            "One challenging project was {project}. We faced issues with {challenge}, but I solved it by {solution}.",
-            "I regularly follow tech blogs, attend conferences, and participate in online communities to stay current.",
-            "I've worked in agile teams for {years} years, participating in daily standups, sprint planning, and retrospectives.",
-            "For scalability, I would consider load balancing, caching strategies, database optimization, and microservices architecture.",
-            "When I needed to learn {tech}, I dedicated time to documentation, built small projects, and consulted with experienced colleagues.",
-            "I believe code reviews are essential for maintaining quality. I provide constructive feedback and am open to receiving it.",
-        ]
-    },
-    "behavioral": {
-        "questions": [
-            "Tell me about yourself.",
-            "Why are you interested in this position?",
-            "Describe a situation where you had to work with a difficult team member.",
-            "How do you handle pressure and tight deadlines?",
-            "What are your greatest strengths and weaknesses?",
-            "Where do you see yourself in five years?",
-            "Tell me about a time you showed leadership.",
-            "How do you prioritize your work?",
-        ],
-        "answer_templates": [
-            "I'm a {role} with {years} years of experience. I'm passionate about {passion} and have a track record of {achievement}.",
-            "I'm excited about this role because it aligns with my skills in {skill} and offers opportunities to {opportunity}.",
-            "In a previous team, I had a colleague who had different working styles. I addressed this by having an open conversation and finding common ground.",
-            "I handle pressure by staying organized, breaking tasks into smaller steps, and maintaining clear communication with stakeholders.",
-            "My strengths include {strength}. As for areas of improvement, I'm continuously working on {weakness}.",
-            "In five years, I see myself growing into a {future_role} position, contributing to {contribution}.",
-            "I demonstrated leadership when {situation}. I took initiative and guided the team to {outcome}.",
-            "I use a combination of urgency and importance to prioritize. I start each day by identifying the most critical tasks.",
-        ]
-    }
-}
+class TranscriptionError(Exception):
+    """Custom exception for transcription failures"""
+    pass
 
-FILLER_WORDS = ["um", "uh", "you know", "like", "so", "actually", "basically"]
-HESITATION_PHRASES = [
-    "Let me think about that...",
-    "That's a good question.",
-    "Hmm, so",
-    "Well, from my experience,",
-    "I'd say that",
-    "If I recall correctly,",
-    "So basically,",
-]
-TRAILING_PHRASES = [
-    "...and yeah, that's roughly how I'd approach it.",
-    "...something along those lines.",
-    "...I think that covers the main points.",
-    "...if that makes sense.",
-    "...at least that's been my experience so far.",
-]
-COMPANIES = ["Tech Corp", "Innovate Inc", "Digital Solutions", "StartUp Labs", "Enterprise Systems"]
-TECHNOLOGIES = ["React", "Python", "Node.js", "AWS", "Docker", "Kubernetes", "PostgreSQL", "MongoDB"]
-PROJECTS = ["e-commerce platform", "real-time analytics dashboard", "mobile app", "API gateway", "microservices migration"]
-CHALLENGES = ["scalability", "performance optimization", "team coordination", "tight deadlines", "legacy code"]
-SOLUTIONS = ["implementing caching", "refactoring the architecture", "improving communication", "parallel processing", "automated testing"]
-
-
-def _add_natural_speech(text: str) -> str:
-    """Add natural speech patterns like pauses and filler words."""
-    if random.random() < 0.3:
-        filler = random.choice(FILLER_WORDS)
-        words = text.split()
-        if len(words) > 3:
-            insert_pos = random.randint(1, min(3, len(words) - 1))
-            words.insert(insert_pos, filler + ",")
-            return " ".join(words)
-    return text
-
-
-def _generate_candidate_response(sample_answer: str) -> str:
+def transcribe_audio_file(file_path: str) -> str:
     """
-    Generate a plausible but imperfect candidate response based on a sample answer.
-    Instead of copying the full sample answer, this creates a partial, realistic version
-    that a real candidate might give — with hesitations, missing details, and varied phrasing.
+    Transcribe audio/video file using real speech-to-text.
+    
+    Args:
+        file_path: Path to the audio/video file
+        
+    Returns:
+        Transcribed text
+        
+    Raises:
+        TranscriptionError: If transcription fails
     """
-    if not sample_answer or len(sample_answer.strip()) < 10:
-        return _add_natural_speech(
-            "That's a great question. I have some experience in that area, "
-            "though I'd need to think about the specifics a bit more."
+    if not os.path.exists(file_path):
+        raise TranscriptionError(f"Recording file not found: {file_path}")
+    
+    file_size = os.path.getsize(file_path)
+    if file_size < 1000:
+        raise TranscriptionError(f"Recording file too small ({file_size} bytes), no valid audio")
+    
+    logger.info(f"[transcribe] Starting real transcription of {os.path.basename(file_path)} ({file_size} bytes)")
+    
+    # Try Groq Whisper first (free, fast, reliable)
+    try:
+        if config.GROQ_API_KEY:
+            return _transcribe_with_groq(file_path)
+    except Exception as e:
+        logger.warning(f"[transcribe] Groq transcription failed: {e}")
+    
+    # Try other services as fallback
+    try:
+        # Add other transcription services here if needed
+        pass
+    except Exception as e:
+        logger.warning(f"[transcribe] Fallback transcription failed: {e}")
+    
+    # If all fail, raise error - NO MOCK DATA
+    raise TranscriptionError("All transcription services failed. No transcript generated.")
+
+def _transcribe_with_groq(file_path: str) -> str:
+    """Transcribe using Groq Whisper API"""
+    try:
+        from groq import Groq
+        client = Groq(api_key=config.GROQ_API_KEY)
+        
+        with open(file_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                file=(os.path.basename(file_path), audio_file),
+                model="whisper-large-v3",
+                language="en",
+                response_format="text",
+                temperature=0.0  # More deterministic output
+            )
+        
+        text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+        
+        if not text or len(text) < 10:
+            raise TranscriptionError("Transcription result is empty or too short")
+        
+        logger.info(f"[transcribe] Groq transcription successful ({len(text)} chars)")
+        return text
+        
+    except ImportError:
+        raise TranscriptionError("Groq library not installed")
+    except Exception as e:
+        raise TranscriptionError(f"Groq transcription failed: {str(e)}")
+
+def create_real_transcript(
+    interview_id: int,
+    recording_path: str,
+    interview_start_time: datetime,
+    interview_end_time: datetime,
+    question_timestamps: Optional[List[Dict]] = None
+) -> Dict[str, Any]:
+    """
+    Create a real transcript from recording file.
+    
+    Args:
+        interview_id: ID of the interview
+        recording_path: Path to recording file
+        interview_start_time: When interview started
+        interview_end_time: When interview ended
+        question_timestamps: List of question timestamps [{question_text, timestamp}, ...]
+        
+    Returns:
+        Dictionary with real transcript data
+        
+    Raises:
+        TranscriptionError: If transcription fails
+    """
+    try:
+        # Get real transcription
+        raw_transcript = transcribe_audio_file(recording_path)
+        
+        # Process transcript with real timestamps
+        processed_transcript = _process_transcript_with_timestamps(
+            raw_transcript, 
+            interview_start_time, 
+            interview_end_time,
+            question_timestamps
         )
+        
+        return {
+            "transcript_text": processed_transcript["formatted_text"],
+            "raw_transcript": raw_transcript,
+            "transcript_lines": processed_transcript["lines"],
+            "word_count": len(raw_transcript.split()),
+            "duration_seconds": int((interview_end_time - interview_start_time).total_seconds()),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source": "recording",
+            "interview_id": interview_id
+        }
+        
+    except Exception as e:
+        logger.error(f"[create_real_transcript] Failed: {e}")
+        raise TranscriptionError(f"Failed to create real transcript: {str(e)}")
 
-    sentences = [s.strip() for s in sample_answer.replace("\n", " ").split(".") if s.strip()]
-
+def _process_transcript_with_timestamps(
+    raw_text: str,
+    start_time: datetime,
+    end_time: datetime,
+    question_timestamps: Optional[List[Dict]] = None
+) -> Dict[str, Any]:
+    """
+    Process raw transcript text with real timestamps.
+    """
+    lines = []
+    total_duration = int((end_time - start_time).total_seconds())
+    
+    # Split transcript into sentences for better timestamping
+    sentences = [s.strip() for s in raw_text.split('.') if s.strip()]
+    
     if not sentences:
-        return _add_natural_speech(sample_answer[:80] + "...")
-
-    # Take only a subset of sentences (40-70% of the answer)
-    num_to_keep = max(1, int(len(sentences) * random.uniform(0.3, 0.6)))
-    # Prefer earlier sentences (intro context) but randomly drop some middle ones
-    kept = []
-    for i, s in enumerate(sentences):
-        if i == 0:
-            # Always keep the first sentence but sometimes rephrase loosely
-            if random.random() < 0.4:
-                kept.append("So, " + s[0].lower() + s[1:] if len(s) > 1 else s)
+        raise TranscriptionError("No valid sentences found in transcription")
+    
+    # Distribute timestamps across sentences
+    time_per_sentence = total_duration // len(sentences)
+    current_time = 0
+    
+    for i, sentence in enumerate(sentences):
+        # Check if this sentence matches a question
+        speaker = "Interviewer"
+        timestamp = start_time.timestamp() + current_time
+        
+        if question_timestamps:
+            for q_data in question_timestamps:
+                if q_data["question_text"].lower() in sentence.lower():
+                    speaker = "Interviewer"
+                    break
             else:
-                kept.append(s)
-        elif len(kept) < num_to_keep and random.random() < 0.6:
-            kept.append(s)
-
-    if not kept:
-        kept = [sentences[0]]
-
-    # Add hesitation at the start
-    response = random.choice(HESITATION_PHRASES) + " " + ". ".join(kept) + "."
-
-    # Sometimes add a trailing phrase instead of a clean ending
-    if random.random() < 0.5:
-        response = response.rstrip(".") + random.choice(TRAILING_PHRASES)
-
-    return _add_natural_speech(response)
-
-
-def _generate_answer(template: str) -> str:
-    """Generate an answer from a template with random substitutions."""
-    answer = template.format(
-        years=random.randint(2, 8),
-        company=random.choice(COMPANIES),
-        tech=random.choice(TECHNOLOGIES),
-        project=random.choice(PROJECTS),
-        challenge=random.choice(CHALLENGES),
-        solution=random.choice(SOLUTIONS),
-        role="software engineer",
-        passion="building scalable solutions",
-        achievement="delivering projects on time",
-        skill="problem-solving",
-        opportunity="grow professionally",
-        strength="attention to detail and problem-solving",
-        weakness="sometimes being too detail-oriented",
-        future_role="senior",
-        contribution="the company's growth",
-        situation="our team faced a critical deadline",
-        outcome="successful delivery"
-    )
-    return _add_natural_speech(answer)
-
-
-def generate_interview_transcript(
-    candidate_name: str,
-    interviewer_name: str,
-    job_title: str,
-    duration_minutes: int = 30
-) -> Dict[str, Any]:
-    """
-    Generate a simulated interview transcript.
-
-    Args:
-        candidate_name: Name of the candidate
-        interviewer_name: Name of the interviewer
-        job_title: Title of the job position
-        duration_minutes: Duration of the interview
-
-    Returns:
-        Dictionary containing transcript data
-    """
-    # Determine interview type based on job title
-    job_lower = job_title.lower()
-    if any(tech in job_lower for tech in ["developer", "engineer", "programmer", "architect", "devops"]):
-        template_type = "technical"
-    else:
-        template_type = "behavioral"
-
-    template = INTERVIEW_TEMPLATES[template_type]
-
-    # Calculate number of Q&A pairs based on duration
-    num_questions = min(len(template["questions"]), max(3, duration_minutes // 5))
-    selected_indices = random.sample(range(len(template["questions"])), num_questions)
-
-    transcript_lines = []
-    current_time = 0
-
-    # Opening
-    transcript_lines.append({
-        "timestamp": "00:00:00",
-        "speaker": interviewer_name or "Interviewer",
-        "text": f"Hello {candidate_name}, thank you for joining us today. I'm excited to discuss the {job_title} position with you."
-    })
-    current_time += random.randint(5, 15)
-
-    transcript_lines.append({
-        "timestamp": f"00:00:{current_time:02d}",
-        "speaker": candidate_name or "Candidate",
-        "text": "Thank you for having me. I'm very excited about this opportunity and looking forward to our conversation."
-    })
-    current_time += random.randint(10, 20)
-
-    # Q&A Section
-    for i, idx in enumerate(selected_indices):
-        question = template["questions"][idx]
-        answer_template = template["answer_templates"][idx % len(template["answer_templates"])]
-        answer = _generate_answer(answer_template)
-
-        minutes = current_time // 60
-        seconds = current_time % 60
-
-        transcript_lines.append({
-            "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-            "speaker": interviewer_name or "Interviewer",
-            "text": question
+                # If no question match, assume it's candidate
+                speaker = "Candidate"
+        
+        # Format timestamp
+        time_obj = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        formatted_time = time_obj.strftime("%H:%M:%S")
+        
+        lines.append({
+            "timestamp": formatted_time,
+            "speaker": speaker,
+            "text": sentence + "."
         })
-        current_time += random.randint(30, 90)
-
-        minutes = current_time // 60
-        seconds = current_time % 60
-
-        transcript_lines.append({
-            "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-            "speaker": candidate_name or "Candidate",
-            "text": answer
-        })
-        current_time += random.randint(60, 180)
-
-    # Closing
-    minutes = current_time // 60
-    seconds = current_time % 60
-
-    transcript_lines.append({
-        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-        "speaker": interviewer_name or "Interviewer",
-        "text": "Do you have any questions for us?"
-    })
-    current_time += random.randint(5, 15)
-
-    minutes = current_time // 60
-    seconds = current_time % 60
-
-    transcript_lines.append({
-        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-        "speaker": candidate_name or "Candidate",
-        "text": "Yes, I'd like to know more about the team structure and the projects I'd be working on."
-    })
-    current_time += random.randint(60, 120)
-
-    minutes = current_time // 60
-    seconds = current_time % 60
-
-    transcript_lines.append({
-        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-        "speaker": interviewer_name or "Interviewer",
-        "text": f"Great question. Our team is collaborative and focused on innovation. Thank you for your time today, {candidate_name}. We'll be in touch soon."
-    })
-
-    # Format transcript as readable text
-    transcript_text = "\n\n".join([
+        
+        current_time += time_per_sentence
+    
+    # Format as readable text
+    formatted_text = "\n\n".join([
         f"[{line['timestamp']}] {line['speaker']}:\n{line['text']}"
-        for line in transcript_lines
+        for line in lines
     ])
-
+    
     return {
-        "transcript_text": transcript_text,
-        "transcript_lines": transcript_lines,
-        "word_count": sum(len(line["text"].split()) for line in transcript_lines),
-        "duration_seconds": current_time,
-        "num_exchanges": len(transcript_lines),
-        "generated_at": datetime.utcnow().isoformat()
+        "formatted_text": formatted_text,
+        "lines": lines,
+        "total_duration": total_duration
     }
 
-
-def generate_transcript_for_video_interview(
-    video_interview_id: int,
-    candidate_name: Optional[str] = None,
-    interviewer_name: Optional[str] = None,
-    job_title: Optional[str] = None,
-    duration_minutes: int = 30,
-    actual_questions: Optional[list] = None
-) -> str:
+def validate_recording_file(file_path: str) -> bool:
     """
-    Generate and return transcript text for a video interview.
-
+    Validate that recording file exists and is usable for transcription.
+    
     Args:
-        video_interview_id: ID of the video interview
-        candidate_name: Optional candidate name
-        interviewer_name: Optional interviewer name
-        job_title: Optional job title
-        duration_minutes: Duration of the interview
-        actual_questions: List of actual interview questions with sample_answer
-
+        file_path: Path to recording file
+        
     Returns:
-        Formatted transcript text
+        True if file is valid
+        
+    Raises:
+        TranscriptionError: If file is invalid
     """
-    # If actual questions are provided, generate transcript using those
-    if actual_questions and len(actual_questions) > 0:
-        result = generate_transcript_with_actual_questions(
-            candidate_name=candidate_name or f"Candidate #{video_interview_id}",
-            interviewer_name=interviewer_name or "Hiring Manager",
-            job_title=job_title or "Software Engineer",
-            duration_minutes=duration_minutes,
-            questions=actual_questions
-        )
-    else:
-        result = generate_interview_transcript(
-            candidate_name=candidate_name or f"Candidate #{video_interview_id}",
-            interviewer_name=interviewer_name or "Hiring Manager",
-            job_title=job_title or "Software Engineer",
-            duration_minutes=duration_minutes
-        )
-
-    return result["transcript_text"]
-
-
-def generate_transcript_with_actual_questions(
-    candidate_name: str,
-    interviewer_name: str,
-    job_title: str,
-    duration_minutes: int,
-    questions: list
-) -> Dict[str, Any]:
-    """
-    Generate a transcript using actual interview questions.
-
-    Args:
-        candidate_name: Name of the candidate
-        interviewer_name: Name of the interviewer
-        job_title: Title of the job position
-        duration_minutes: Duration of the interview
-        questions: List of question dicts with question_text and sample_answer
-
-    Returns:
-        Dictionary containing transcript data
-    """
-    transcript_lines = []
-    current_time = 0
-
-    # Opening
-    transcript_lines.append({
-        "timestamp": "00:00:00",
-        "speaker": interviewer_name or "Hiring Manager",
-        "text": f"Hello {candidate_name}, thank you for joining us today. I'm excited to discuss the {job_title} position with you."
-    })
-    current_time += random.randint(5, 15)
-
-    transcript_lines.append({
-        "timestamp": f"00:00:{current_time:02d}",
-        "speaker": candidate_name or "Candidate",
-        "text": "Thank you for having me. I'm very excited about this opportunity and looking forward to our conversation."
-    })
-    current_time += random.randint(10, 20)
-
-    # Q&A Section using actual questions
-    for q in questions:
-        question_text = q.get("question_text", "Tell me about yourself")
-        sample_answer = q.get("sample_answer", "")
-
-        minutes = current_time // 60
-        seconds = current_time % 60
-
-        # Interviewer asks the question
-        transcript_lines.append({
-            "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-            "speaker": interviewer_name or "Hiring Manager",
-            "text": question_text
-        })
-        current_time += random.randint(30, 60)
-
-        minutes = current_time // 60
-        seconds = current_time % 60
-
-        # Candidate answers - generate a plausible but imperfect response
-        if sample_answer:
-            answer = _generate_candidate_response(sample_answer)
-        else:
-            # Generate a generic answer if no sample provided
-            answer = _add_natural_speech(f"That's a great question. Based on my experience, I would say that {question_text.lower().replace('?', '')} is something I have dealt with extensively in my career.")
-
-        transcript_lines.append({
-            "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-            "speaker": candidate_name or "Candidate",
-            "text": answer
-        })
-        current_time += random.randint(60, 120)
-
-    # Closing
-    minutes = current_time // 60
-    seconds = current_time % 60
-
-    transcript_lines.append({
-        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-        "speaker": interviewer_name or "Hiring Manager",
-        "text": "Do you have any questions for us?"
-    })
-    current_time += random.randint(5, 15)
-
-    minutes = current_time // 60
-    seconds = current_time % 60
-
-    transcript_lines.append({
-        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-        "speaker": candidate_name or "Candidate",
-        "text": "Yes, I'd like to know more about the team structure and the projects I'd be working on."
-    })
-    current_time += random.randint(60, 120)
-
-    minutes = current_time // 60
-    seconds = current_time % 60
-
-    transcript_lines.append({
-        "timestamp": f"00:{minutes:02d}:{seconds:02d}",
-        "speaker": interviewer_name or "Hiring Manager",
-        "text": f"Great question. Our team is collaborative and focused on innovation. Thank you for your time today, {candidate_name}. We'll be in touch soon."
-    })
-
-    # Format transcript as readable text
-    transcript_text = "\n\n".join([
-        f"[{line['timestamp']}] {line['speaker']}:\n{line['text']}"
-        for line in transcript_lines
-    ])
-
-    return {
-        "transcript_text": transcript_text,
-        "transcript_lines": transcript_lines,
-        "word_count": sum(len(line["text"].split()) for line in transcript_lines),
-        "duration_seconds": current_time,
-        "num_exchanges": len(transcript_lines),
-        "generated_at": datetime.utcnow().isoformat()
-    }
+    if not file_path:
+        raise TranscriptionError("No recording file path provided")
+    
+    if not os.path.exists(file_path):
+        raise TranscriptionError(f"Recording file not found: {file_path}")
+    
+    file_size = os.path.getsize(file_path)
+    if file_size < 1000:
+        raise TranscriptionError(f"Recording file too small: {file_size} bytes")
+    
+    # Check file extension
+    valid_extensions = ['.webm', '.mp4', '.wav', '.mp3', '.m4a', '.ogg']
+    file_ext = os.path.splitext(file_path)[1].lower()
+    if file_ext not in valid_extensions:
+        raise TranscriptionError(f"Unsupported file format: {file_ext}")
+    
+    return True

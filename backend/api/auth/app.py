@@ -35,6 +35,29 @@ def read_users_me(current_user: User = Depends(get_current_active_user)):
     """Get current user information"""
     return current_user
 
+# Token refresh endpoint
+@auth_router.post("/refresh")
+def refresh_token(current_user: User = Depends(get_current_active_user)):
+    """
+    Refresh access token for authenticated user.
+    Used to extend session without re-login, especially during active interviews.
+    """
+    from datetime import timedelta
+    from api.auth.jwt_handler import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+    
+    # Create new token with extended expiry
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": current_user.username, "role": current_user.role.value, "user_id": current_user.id},
+        expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
+    }
+
 # Role endpoints
 @auth_router.get("/roles")
 def get_roles():
