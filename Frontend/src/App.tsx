@@ -52,7 +52,6 @@ import VideoInterviewRoom from './components/video/VideoInterviewRoom'
 import VideoInterviewDetail from './components/video/VideoInterviewDetail'
 import CandidateVideoConsent from './components/video/CandidateVideoConsent'
 import AIInterviewRoom from './components/video/AIInterviewRoom'
-import ThankYouPage from './pages/ThankYouPage'
 
 // Fraud Detection Components
 import FraudDashboard from './components/fraud/FraudDashboard'
@@ -520,12 +519,7 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
 
-            {/* Thank You Page */}
-            <Route path="/thank-you" element={
-              <ProtectedRoute>
-                <ThankYouPage />
-              </ProtectedRoute>
-            } />
+
 
             {/* Fraud Detection Routes */}
             <Route path="/fraud-dashboard" element={

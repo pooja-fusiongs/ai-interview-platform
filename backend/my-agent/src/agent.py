@@ -253,6 +253,11 @@ class InterviewAgent(Agent):
         
         # Optionally disconnect after a short delay
         await asyncio.sleep(3)
+        # Save interview data with timestamps to backend
+        await self._save_interview_data()
+        
+        # Optionally disconnect after a short delay
+        await asyncio.sleep(3)
 
     async def _save_interview_data(self):
         """Save interview data with timestamps to backend"""
