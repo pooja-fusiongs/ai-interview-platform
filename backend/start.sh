@@ -2,14 +2,14 @@
 echo "Starting backend and AI agent..."
 
 # Start backend in background
-python main_final.py &
+python -m uvicorn backend.main_final:app --host 0.0.0.0 --port $PORT &
 BACKEND_PID=$!
 
 # Wait a moment for backend to start
 sleep 3
 
 # Start AI agent worker in background
-cd my-agent && uv run python src/agent.py dev &
+cd backend/my-agent && uv run python src/agent.py dev &
 AGENT_PID=$!
 
 echo "Backend PID: $BACKEND_PID"
