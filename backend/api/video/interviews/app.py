@@ -90,20 +90,10 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
 
         if db:
             print(f"[DEBUG] Looking for interview session data")
-            # Try to find the InterviewSession for this interview
-            candidate_id_for_session = application.id if application else vi.candidate_id
-
-            session = db.query(InterviewSession).filter(
-                InterviewSession.job_id == vi.job_id,
-                InterviewSession.application_id == candidate_id_for_session
-            ).first()
-
-            # Fallback: try with candidate_id directly
-            if not session:
-                session = db.query(InterviewSession).filter(
-                    InterviewSession.job_id == vi.job_id,
-                    InterviewSession.candidate_id == vi.candidate_id
-                ).first()
+            
+            session = None
+            if vi.session_id is not None:
+                session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
 
             if session and session.overall_score is not None:
                 print(f"[DEBUG] Found session data for interview {vi.id}")
@@ -287,13 +277,8 @@ def schedule_video_interview(
             candidate_name_for_email = candidate.full_name or candidate.username
             candidate_email_for_notification = candidate.email
 
-        # Attempt to create a Zoom meeting
-        topic = f"Interview: {job.title} - {candidate_name_for_email}"
-        zoom_data = create_zoom_meeting(
-            topic=topic,
-            start_time=body.scheduled_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            duration=body.duration_minutes,
-        )
+        # LiveKit integration is used instead of Zoom/Jitsi
+        zoom_data = None
 
         # Use current_user as interviewer if not provided
         interviewer_id = body.interviewer_id if body.interviewer_id else current_user.id
@@ -1438,10 +1423,9 @@ def submit_ai_interview_answers(
     ]
 
     # Create or update interview session
-    session = db.query(InterviewSession).filter(
-        InterviewSession.job_id == vi.job_id,
-        InterviewSession.candidate_id == vi.candidate_id
-    ).first()
+    session = None
+    if vi.session_id is not None:
+        session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
 
     if not session:
         session = InterviewSession(
@@ -1458,6 +1442,7 @@ def submit_ai_interview_answers(
         vi.session_id = session.id
     else:
         session.transcript_text = transcript_text
+        session.status = InterviewSessionStatus.IN_PROGRESS if not is_final else session.status
         if is_final:
             session.completed_at = end_dt
 

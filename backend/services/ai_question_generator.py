@@ -187,13 +187,40 @@ class AIQuestionGenerator:
     ) -> List[Dict[str, Any]]:
         """
         Generate questions using LLM APIs.
-        Fallback chain: Groq (free, fast) -> Gemini -> preview mode (last resort).
+        Fallback chain: OpenAI (7-phase framework) -> Groq -> Gemini -> preview mode (last resort).
         """
         job_skills = self._parse_skills(job.skills_required or "")
         resume_text = resume.parsed_text if resume else ""
         experience_years = resume.experience_years if resume else (candidate.experience_years if candidate else 0)
 
-        # Try Groq first (free, fast, no quota limits)
+        # Try OpenAI first (7-phase framework)
+        try:
+            from services.open_ai_service import generate_interview_questions
+            raw = generate_interview_questions(
+                job_title=job.title or "",
+                company=job.company or "",
+                job_description=job.description or "",
+                years_experience=experience_years or 0,
+                duration_minutes=30 if total_questions <= 10 else 60,
+                resume_text=resume_text,
+                skill_weights=None,
+            )
+            if raw:
+                converted = []
+                for q in raw:
+                    converted.append({
+                        "question_text": q["question_text"],
+                        "sample_answer": q["suggested_answer"],
+                        "question_type": self._map_phase_to_type(q["category"]),
+                        "difficulty": self._map_difficulty(q["difficulty"]),
+                        "skill_focus": self._extract_skill_from_text(q["question_text"])
+                    })
+                print("[QuestionGenerator] Questions generated via OpenAI 7-phase framework")
+                return converted
+        except Exception as e:
+            print(f"[QuestionGenerator] OpenAI 7-phase failed: {e}")
+
+        # Try Groq (free, fast, no quota limits)
         try:
             from services.groq_service import generate_questions_with_groq
             groq_questions = generate_questions_with_groq(
@@ -226,8 +253,38 @@ class AIQuestionGenerator:
             print(f"[QuestionGenerator] Gemini failed: {e}")
 
         # Last resort: preview mode
-        print("[QuestionGenerator] All LLMs unavailable, falling back to preview question generation")
+        print("[QuestionGenerator] All LLMs failed, falling back to preview mode")
         return self._generate_preview_questions(job, candidate, resume, total_questions)
+
+    def _map_phase_to_type(self, phase: str) -> str:
+        """Map 7-phase interview framework to question types"""
+        mapping = {
+            "Persona": "behavioral",
+            "Context": "scenario",
+            "Workflow": "technical",
+            "Choice": "scenario",
+            "Internal": "technical",
+            "Proof": "behavioral",
+            "Lifecycle": "technical",
+        }
+        return mapping.get(phase, "technical")
+
+    def _map_difficulty(self, difficulty_label: str) -> str:
+        """Map OpenAI difficulty labels to our difficulty enum values"""
+        if "1" in difficulty_label or "Foundational" in difficulty_label:
+            return "basic"
+        elif "2" in difficulty_label or "Advanced" in difficulty_label:
+            return "intermediate"
+        elif "3" in difficulty_label or "Expert" in difficulty_label:
+            return "advanced"
+        return "intermediate"
+
+    def _extract_skill_from_text(self, question_text: str) -> str:
+        """Extract skill from question text like [Python] How do you..."""
+        import re
+        match = re.match(r'^\[([^\]]+)\]', question_text)
+        return match.group(1) if match else None
+
     
     def _parse_skills(self, skills_text: str) -> List[str]:
         """Parse skills from text or JSON string"""

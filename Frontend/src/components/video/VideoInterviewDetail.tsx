@@ -284,97 +284,7 @@ const VideoInterviewDetail: React.FC = () => {
                     </Box>
                   </Box>
 
-                  {/* Meeting Link */}
-                  {(interview.zoom_meeting_url || interview.zoom_meeting_link) && (
-                    <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid #f1f5f9', maxWidth: '100%', overflow: 'hidden' }}>
-                      <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', mb: 2 }}>
-                        Meeting Link
-                      </Typography>
-                      <Box sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        background: '#f8fafc',
-                        padding: { xs: '10px 12px', sm: '12px 16px' },
-                        borderRadius: '10px',
-                        border: '1px solid #e2e8f0',
-                        maxWidth: '100%',
-                        overflow: 'hidden'
-                      }}>
-                        <Typography sx={{
-                          fontSize: { xs: '12px', sm: '14px' },
-                          color: '#3b82f6',
-                          flex: 1,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          minWidth: 0
-                        }}>
-                          {interview.zoom_meeting_url || interview.zoom_meeting_link}
-                        </Typography>
-                        <Tooltip title="Copy Link">
-                          <IconButton
-                            size="small"
-                            onClick={() => copyToClipboard(interview.zoom_meeting_url || interview.zoom_meeting_link)}
-                            sx={{ color: '#64748b', flexShrink: 0, padding: { xs: '4px', sm: '8px' } }}
-                          >
-                            <ContentCopy sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Open Meeting">
-                          <IconButton
-                            size="small"
-                            onClick={() => window.open(interview.zoom_meeting_url || interview.zoom_meeting_link, '_blank')}
-                            sx={{ color: '#3b82f6', flexShrink: 0, padding: { xs: '4px', sm: '8px' } }}
-                          >
-                            <OpenInNew sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                      {interview.zoom_passcode && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                          <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                            Passcode: <strong style={{ color: '#1e293b' }}>{interview.zoom_passcode}</strong>
-                          </Typography>
-                          <Tooltip title="Copy Passcode">
-                            <IconButton
-                              size="small"
-                              onClick={() => copyToClipboard(interview.zoom_passcode)}
-                              sx={{ color: '#64748b', padding: '4px' }}
-                            >
-                              <ContentCopy sx={{ fontSize: 14 }} />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      )}
-                    </Box>
-                  )}
 
-                  {/* Join Meeting Button */}
-                  {(interview.zoom_meeting_url || interview.zoom_meeting_link) && status === 'scheduled' && (
-                    <Button
-                      variant="contained"
-                      startIcon={<Videocam />}
-                      onClick={() => window.open(interview.zoom_meeting_url || interview.zoom_meeting_link, '_blank')}
-                      sx={{
-                        mt: 3,
-                        width: '100%',
-                        backgroundColor: '#020291',
-                        padding: '14px',
-                        borderRadius: '10px',
-                        fontWeight: 600,
-                        fontSize: '15px',
-                        textTransform: 'none',
-                        boxShadow: '0 4px 14px rgba(2, 2, 145, 0.3)',
-                        '&:hover': {
-                          backgroundColor: '#01016d',
-                          boxShadow: '0 6px 20px rgba(2, 2, 145, 0.4)'
-                        }
-                      }}
-                    >
-                      Join Meeting
-                    </Button>
-                  )}
                 </Box>
               </Box>
 
@@ -586,12 +496,12 @@ const VideoInterviewDetail: React.FC = () => {
                       margin: '0 auto 16px',
                       border: '3px solid rgba(255,255,255,0.3)'
                     }}>
-                      <CheckCircle sx={{ fontSize: { xs: 30, sm: 40 },color:"#0F17BF" }} />
+                      <CheckCircle sx={{ fontSize: { xs: 30, sm: 40 }, color: "#0F17BF" }} />
                     </Box>
-                    <Typography sx={{ fontSize: { xs: '18px', sm: '22px' }, fontWeight: 700, mb: 1 ,color:'#111827'}}>
+                    <Typography sx={{ fontSize: { xs: '18px', sm: '22px' }, fontWeight: 700, mb: 1, color: '#111827' }}>
                       Score Generated Successfully!
                     </Typography>
-                    <Typography sx={{ fontSize: { xs: '13px', sm: '14px' }, opacity: 0.9, mb: 3 ,color:'#6B7280'}}>
+                    <Typography sx={{ fontSize: { xs: '13px', sm: '14px' }, opacity: 0.9, mb: 3, color: '#6B7280' }}>
                       Interview has been scored and results are available
                     </Typography>
                     <Button
