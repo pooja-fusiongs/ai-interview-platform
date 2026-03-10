@@ -70,6 +70,23 @@ def auto_migrate():
         ("users", "languages", "TEXT"),
         ("users", "profile_image", "VARCHAR"),
         ("video_interviews", "transcript_source", "VARCHAR"),
+        # Client merge: new fields for jobs
+        ("jobs", "skills_weightage_json", "TEXT"),
+        ("jobs", "description_file_path", "VARCHAR"),
+        ("jobs", "years_experience", "INTEGER"),
+        # Client merge: new fields for job_applications (candidate scoring)
+        ("job_applications", "interview_datetime", "TIMESTAMP"),
+        ("job_applications", "duration_minutes", "INTEGER DEFAULT 30"),
+        ("job_applications", "overall_score", "INTEGER"),
+        ("job_applications", "ai_score", "FLOAT"),
+        ("job_applications", "final_score", "FLOAT"),
+        ("job_applications", "transcript_text", "TEXT"),
+        ("job_applications", "transcript_path", "VARCHAR"),
+        ("job_applications", "report_card_json", "TEXT"),
+        # Client merge: new fields for interview_questions
+        ("interview_questions", "suggested_answer", "TEXT"),
+        ("interview_questions", "category", "VARCHAR(100)"),
+        ("interview_questions", "order_number", "INTEGER DEFAULT 0"),
     ]
 
     with engine.begin() as conn:
@@ -257,6 +274,14 @@ except Exception as e:
     import traceback
     print(f"⚠️ Could not load LiveKit endpoints: {e}")
     traceback.print_exc()
+
+# Import and mount Interview Rating endpoints (from client merge)
+try:
+    from api.ratings.app import router as ratings_router
+    app.include_router(ratings_router, tags=["Interview Ratings"])
+    print("✅ Interview Rating & Report Card endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load Interview Rating endpoints: {e}")
 
 # Import and mount Post-Hire Feedback endpoints
 try:

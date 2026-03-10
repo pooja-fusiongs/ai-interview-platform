@@ -58,6 +58,7 @@ import FraudDashboard from './components/fraud/FraudDashboard'
 import FraudAnalysisPanel from './components/fraud/FraudAnalysisPanel'
 import RealTimeFlagMonitor from './components/fraud/RealTimeFlagMonitor'
 
+
 // Post-Hire Feedback Components
 import FeedbackForm from './components/feedback/FeedbackForm'
 import FeedbackList from './components/feedback/FeedbackList'
@@ -392,6 +393,7 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
             
+
             {/* Profile - All roles */}
             <Route path="/candidate-profile" element={
               <ProtectedRoute>

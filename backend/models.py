@@ -102,6 +102,11 @@ class Job(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    # Skills weightage (from client - weighted skill assessment)
+    skills_weightage_json = Column(Text, nullable=True)  # JSON: [{"skill": "Python", "weightage": 30}, ...]
+    description_file_path = Column(String, nullable=True)  # Uploaded JD file path
+    years_experience = Column(Integer, nullable=True)  # Required years of experience
+
     # ATS fields
     ats_source = Column(String, nullable=True)
     ats_external_id = Column(String, nullable=True)
@@ -131,6 +136,16 @@ class JobApplication(Base):
     availability = Column(String, nullable=True)  # Immediate, 2 weeks, 1 month, etc.
     status = Column(String, default="Applied")  # Applied, Reviewed, Interview, Rejected, Hired
     applied_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Interview scheduling & scoring fields (from client merge)
+    interview_datetime = Column(DateTime(timezone=True), nullable=True)
+    duration_minutes = Column(Integer, default=30)
+    overall_score = Column(Integer, nullable=True)  # Recruiter average rating (1-10)
+    ai_score = Column(Float, nullable=True)  # AI transcript score (1-10)
+    final_score = Column(Float, nullable=True)  # 80% AI + 20% recruiter
+    transcript_text = Column(Text, nullable=True)
+    transcript_path = Column(String, nullable=True)
+    report_card_json = Column(Text, nullable=True)  # Cached JSON report card
 
     # ATS fields
     ats_source = Column(String, nullable=True)
@@ -200,11 +215,17 @@ class InterviewQuestion(Base):
     reviewed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
+    # Client merge fields - for interview rating flow
+    suggested_answer = Column(Text, nullable=True)  # Formatted evaluation signals
+    category = Column(String(100), nullable=True)  # Persona, Context, Workflow, etc.
+    order_number = Column(Integer, nullable=True, default=0)
+
     # Relationships
     job = relationship("Job")
     candidate = relationship("JobApplication")
     reviewer = relationship("User")
+    rating = relationship("InterviewRating", back_populates="question", uselist=False, cascade="all, delete-orphan")
 
 class InterviewQuestionVersion(Base):
     __tablename__ = "interview_question_versions"
@@ -312,6 +333,21 @@ class InterviewAnswer(Base):
     # Relationships
     session = relationship("InterviewSession", back_populates="answers")
     question = relationship("InterviewQuestion")
+
+
+# ==================== Interview Rating Model (from client merge) ====================
+
+class InterviewRating(Base):
+    """Per-question recruiter rating (1-10 scale) from client's iHire system."""
+    __tablename__ = "interview_ratings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False, unique=True)
+    rating = Column(Integer, nullable=False)  # 1-10 scale
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    question = relationship("InterviewQuestion", back_populates="rating")
 
 
 # ==================== GDPR Models ====================

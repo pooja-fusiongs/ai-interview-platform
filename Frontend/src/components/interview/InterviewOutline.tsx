@@ -16,6 +16,7 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
+    LinearProgress,
 } from '@mui/material';
 import {
     Edit as EditIcon,
@@ -32,6 +33,7 @@ import {
 import Collapse from '@mui/material/Collapse';
 import { toast } from 'react-hot-toast';
 import questionGenerationService from '../../services/questionGenerationService';
+import { ratingService } from '../../services/ratingService';
 
 interface Question {
     id: string;
@@ -79,6 +81,15 @@ const InterviewOutline: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyQuestionLabel, setHistoryQuestionLabel] = useState('');
 
+  // Rating state (from client merge)
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [ratingNotes, setRatingNotes] = useState<Record<string, string>>({});
+  const [ratingLoading, setRatingLoading] = useState<string | null>(null);
+  const [ratingSummary, setRatingSummary] = useState<any>(null);
+  const [transcriptText, setTranscriptText] = useState('');
+  const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
+
     // Get navigation context from URL parameters
     const fromPage = searchParams.get('from');
     const jobId = searchParams.get('jobId');
@@ -90,6 +101,28 @@ const InterviewOutline: React.FC = () => {
             fetchQuestionSet();
         }
     }, [setId]);
+
+    // Load saved ratings when questionSet is available
+    const loadSavedRatings = async (jId: number, cId: number) => {
+        try {
+            const summary = await ratingService.getSummary(jId, cId);
+            setRatingSummary(summary);
+            const savedRatings: Record<string, number> = {};
+            const savedNotes: Record<string, string> = {};
+            (summary.questions || []).forEach((q: any) => {
+                if (q.rating) {
+                    savedRatings[String(q.id)] = q.rating;
+                }
+                if (q.notes) {
+                    savedNotes[String(q.id)] = q.notes;
+                }
+            });
+            setRatings(savedRatings);
+            setRatingNotes(savedNotes);
+        } catch {
+            // Summary endpoint may fail if no ratings yet - that's ok
+        }
+    };
 
     const fetchQuestionSet = async () => {
         try {
@@ -130,6 +163,8 @@ const InterviewOutline: React.FC = () => {
                     if (transformedQuestions.length > 0) {
                         setExpandedQuestionId(transformedQuestions[0].id);
                     }
+                    // Load saved ratings
+                    loadSavedRatings(currentSet.job_id, currentSet.application_id);
                 } catch (error) {
                     // If detailed fetch fails, use the basic data
                     console.log('Detailed fetch failed, using basic data:', error);
@@ -385,6 +420,38 @@ const InterviewOutline: React.FC = () => {
         }
     };
 
+    // Rating handlers (from client merge)
+    const handleSelectRating = (questionId: string, rating: number) => {
+        setRatings(prev => ({ ...prev, [questionId]: rating }));
+    };
+
+    const handleSubmitRating = async (questionId: string) => {
+        const jId = questionSet?.job_id;
+        const cId = questionSet?.application_id;
+        const rating = ratings[questionId];
+        if (!jId || !cId || !rating) return;
+
+        setRatingLoading(questionId);
+        try {
+            await ratingService.rateQuestion(jId, cId, parseInt(questionId), {
+                rating,
+                notes: ratingNotes[questionId] || undefined,
+            });
+            toast.success(`Rating ${rating}/10 submitted!`);
+            loadSavedRatings(jId, cId);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.detail || 'Failed to save rating');
+        } finally {
+            setRatingLoading(null);
+        }
+    };
+
+    const getRatingColor = (r: number): string => {
+        if (r >= 8) return '#22c55e';
+        if (r >= 6) return '#f59e0b';
+        return '#ef4444';
+    };
+
     if (loading) {
         return (
             <Navigation>
@@ -604,85 +671,49 @@ const InterviewOutline: React.FC = () => {
                                         }
                                     })() : 'N/A'}
                                 </Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 0, sm: 0 } }}>
-                                    {/* Skill Match Accuracy */}
-                                    <Box sx={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        gap: 0.5,
-                                        minWidth: { xs: 100, sm: 120 },
-                                        pr: { xs: '12px', sm: '20px' }
-                                    }}>
-                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: { xs: '0.7rem', sm: '0.75rem' }, textAlign: 'center' }}>
-                                            Skill Match Accuracy
-                                        </Typography>
-                                        <Box sx={{
-                                            width: { xs: 48, sm: 60 },
-                                            height: { xs: 48, sm: 60 },
-                                            borderRadius: '50%',
-                                            background: `conic-gradient(#f97316 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}>
-                                            <Box sx={{
-                                                width: { xs: 34, sm: 44 },
-                                                height: { xs: 34, sm: 44 },
-                                                borderRadius: '50%',
-                                                backgroundColor: '#fff',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center'
-                                            }}>
-                                                <Typography sx={{ color: '#374151', fontWeight: 700, fontSize: { xs: '0.8rem', sm: '1rem' } }}>
-                                                    {Math.round((getApprovedCount() / (questionSet?.questions.length || 1)) * 100)}%
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                    </Box>
-
-                                    {/* Completed Questions */}
-                                    <Box sx={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        gap: 0.5,
-                                        borderLeft: "1px solid #80808038",
-                                        pl: { xs: '12px', sm: '20px' },
-                                        minWidth: { xs: 100, sm: 120 }
-                                    }}>
-                                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: { xs: '0.7rem', sm: '0.75rem' }, textAlign: 'center' }}>
-                                            Completed Questions
-                                        </Typography>
-                                        <Box sx={{
-                                            width: { xs: 48, sm: 60 },
-                                            height: { xs: 48, sm: 60 },
-                                            borderRadius: '50%',
-                                            background: `conic-gradient(#10b981 0deg ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg, #f3f4f6 ${(getApprovedCount() / (questionSet?.questions.length || 1)) * 360}deg 360deg)`,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}>
-                                            <Box sx={{
-                                                width: { xs: 34, sm: 44 },
-                                                height: { xs: 34, sm: 44 },
-                                                borderRadius: '50%',
-                                                backgroundColor: '#fff',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center'
-                                            }}>
-                                                <Typography sx={{ color: '#374151', fontWeight: 700, fontSize: { xs: '0.8rem', sm: '1rem' } }}>
-                                                    {getApprovedCount()}
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                    </Box>
-                                </Box>
+                                
                             </Box>
                         )}
                     </Box>
+
+                    {/* Score Cards (from client merge) */}
+                    {ratingSummary && (
+                        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                            {[
+                                { label: 'Final Score', value: ratingSummary.final_score },
+                                { label: 'AI Score', value: ratingSummary.ai_score },
+                                { label: 'Recruiter Score', value: ratingSummary.overall_score },
+                            ].map((item, i) => (
+                                <Card key={i} sx={{ flex: 1, textAlign: 'center', border: '1px solid #e5e7eb' }}>
+                                    <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                                        <Typography variant="caption" color="text.secondary">{item.label}</Typography>
+                                        <Typography variant="h5" fontWeight={700} sx={{ color: item.value && item.value >= 7 ? '#22c55e' : item.value && item.value >= 5 ? '#f59e0b' : '#374151' }}>
+                                            {item.value ? `${item.value}/10` : '-'}
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </Box>
+                    )}
+
+                    {/* Rated Progress */}
+                    {ratingSummary && ratingSummary.total_questions > 0 && (
+                        <Box sx={{ mb: 3, p: 2, backgroundColor: '#f9fafb', borderRadius: 2, border: '1px solid #e5e7eb' }}>
+                            <Box display="flex" justifyContent="space-between" mb={1}>
+                                <Typography variant="body2" color="text.secondary">
+                                    Rated: {ratingSummary.rated_questions} / {ratingSummary.total_questions} questions
+                                </Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                    {Math.round((ratingSummary.rated_questions / ratingSummary.total_questions) * 100)}%
+                                </Typography>
+                            </Box>
+                            <LinearProgress
+                                variant="determinate"
+                                value={(ratingSummary.rated_questions / ratingSummary.total_questions) * 100}
+                                sx={{ height: 6, borderRadius: 3, backgroundColor: '#e5e7eb', '& .MuiLinearProgress-bar': { backgroundColor: '#020291' } }}
+                            />
+                        </Box>
+                    )}
 
                     {/* Tabs for Filtering */}
                     <Box sx={{ borderBottom: 1, borderColor: '#e5e7eb', mb: { xs: 2, sm: 4 } }}>
@@ -769,6 +800,22 @@ const InterviewOutline: React.FC = () => {
                                         }}>
                                             {question.question}
                                         </Typography>
+
+                                        {/* Rating badge */}
+                                        {ratings[question.id] && (
+                                            <Chip
+                                                label={`${ratings[question.id]}/10`}
+                                                size="small"
+                                                sx={{
+                                                    backgroundColor: getRatingColor(ratings[question.id]) + '20',
+                                                    color: getRatingColor(ratings[question.id]),
+                                                    fontWeight: 700,
+                                                    fontSize: '0.75rem',
+                                                    height: 26,
+                                                    border: `1px solid ${getRatingColor(ratings[question.id])}40`,
+                                                }}
+                                            />
+                                        )}
 
                                         {/* Edit icon */}
                                         <IconButton
@@ -908,6 +955,78 @@ const InterviewOutline: React.FC = () => {
                                                     </Typography>
                                                 )}
                                             </Box>
+
+                                            {/* Rating Section (from client merge) */}
+                                            <Box sx={{ mt: 2, p: 2, backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 2 }}>
+                                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151', mb: 1 }}>
+                                                    Rate (1-10):
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1.5 }}>
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((r) => (
+                                                        <Button
+                                                            key={r}
+                                                            variant={ratings[question.id] === r ? 'contained' : 'outlined'}
+                                                            size="small"
+                                                            disabled={ratingLoading === question.id}
+                                                            onClick={(e) => { e.stopPropagation(); handleSelectRating(question.id, r); }}
+                                                            sx={{
+                                                                minWidth: 36,
+                                                                height: 32,
+                                                                p: 0,
+                                                                fontSize: '0.8rem',
+                                                                fontWeight: 700,
+                                                                backgroundColor: ratings[question.id] === r ? getRatingColor(r) : 'transparent',
+                                                                borderColor: getRatingColor(r),
+                                                                color: ratings[question.id] === r ? 'white' : getRatingColor(r),
+                                                                '&:hover': {
+                                                                    backgroundColor: getRatingColor(r) + '30',
+                                                                    borderColor: getRatingColor(r),
+                                                                },
+                                                            }}
+                                                        >
+                                                            {r}
+                                                        </Button>
+                                                    ))}
+                                                    {ratingLoading === question.id && (
+                                                        <CircularProgress size={20} sx={{ ml: 1, alignSelf: 'center' }} />
+                                                    )}
+                                                </Box>
+                                                <TextField
+                                                    fullWidth
+                                                    multiline
+                                                    rows={2}
+                                                    placeholder="Add notes about this answer..."
+                                                    value={ratingNotes[question.id] || ''}
+                                                    onChange={(e) => setRatingNotes(prev => ({ ...prev, [question.id]: e.target.value }))}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    size="small"
+                                                    sx={{
+                                                        '& .MuiOutlinedInput-root': {
+                                                            fontSize: '0.85rem',
+                                                        }
+                                                    }}
+                                                />
+                                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        disabled={!ratings[question.id] || ratingLoading === question.id}
+                                                        onClick={(e) => { e.stopPropagation(); handleSubmitRating(question.id); }}
+                                                        sx={{
+                                                            backgroundColor: '#020291',
+                                                            color: 'white',
+                                                            textTransform: 'none',
+                                                            fontWeight: 600,
+                                                            fontSize: '0.8rem',
+                                                            px: 3,
+                                                            '&:hover': { backgroundColor: '#01016d' },
+                                                            '&:disabled': { backgroundColor: '#9ca3af', color: 'white' },
+                                                        }}
+                                                    >
+                                                        {ratingLoading === question.id ? 'Submitting...' : 'Submit Rating'}
+                                                    </Button>
+                                                </Box>
+                                            </Box>
                                         </Box>
                                     </Collapse>
                                 </Box>
@@ -940,6 +1059,123 @@ const InterviewOutline: React.FC = () => {
                             <Typography variant="body2" color="textSecondary">
                                 Questions for this candidate haven't been generated yet.
                             </Typography>
+                        </Box>
+                    )}
+
+
+                    {/* Transcript Section (from client merge) */}
+                    <Box sx={{ mt: 4, p: 3, backgroundColor: '#fafbfc', border: '1px solid #e5e7eb', borderRadius: 2 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', mb: 1, fontSize: '1rem' }}>
+                            Interview Transcript
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Submit the interview transcript for AI scoring. Paste text or upload a file (.txt, .pdf, .docx).
+                        </Typography>
+
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={5}
+                            placeholder="Paste interview transcript here..."
+                            value={transcriptText}
+                            onChange={(e) => setTranscriptText(e.target.value)}
+                            sx={{ mb: 2, backgroundColor: '#fff' }}
+                        />
+
+                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Button
+                                variant="outlined"
+                                component="label"
+                                size="small"
+                                sx={{ textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
+                            >
+                                {transcriptFile ? transcriptFile.name : 'Upload File'}
+                                <input
+                                    type="file"
+                                    hidden
+                                    accept=".txt,.pdf,.docx"
+                                    onChange={(e) => setTranscriptFile(e.target.files?.[0] || null)}
+                                />
+                            </Button>
+
+                            <Button
+                                variant="contained"
+                                size="small"
+                                onClick={async () => {
+                                    if (!transcriptText.trim() && !transcriptFile) {
+                                        toast.error('Please provide a transcript');
+                                        return;
+                                    }
+                                    const jId = questionSet?.job_id;
+                                    const cId = questionSet?.application_id;
+                                    if (!jId || !cId) return;
+
+                                    setTranscriptLoading(true);
+                                    try {
+                                        const formData = new FormData();
+                                        if (transcriptText.trim()) formData.append('transcript_text', transcriptText.trim());
+                                        if (transcriptFile) formData.append('transcript_file', transcriptFile);
+
+                                        const result = await ratingService.submitTranscript(jId, cId, formData);
+                                        toast.success(`AI Score: ${result.ai_score}/10 | Final: ${result.final_score}/10`);
+                                        loadSavedRatings(jId, cId);
+                                    } catch (err: any) {
+                                        toast.error(err?.response?.data?.detail || 'Failed to process transcript');
+                                    } finally {
+                                        setTranscriptLoading(false);
+                                    }
+                                }}
+                                disabled={transcriptLoading || (!transcriptText.trim() && !transcriptFile)}
+                                sx={{
+                                    backgroundColor: '#020291',
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    '&:hover': { backgroundColor: '#01016d' },
+                                    '&:disabled': { backgroundColor: '#9ca3af', color: 'white' },
+                                }}
+                            >
+                                {transcriptLoading ? 'Processing...' : 'Submit for AI Scoring'}
+                            </Button>
+                            {transcriptLoading && <CircularProgress size={20} />}
+                        </Box>
+                    </Box>
+
+                    {/* Report Card (from client merge) */}
+                    {ratingSummary?.report_card && (
+                        <Box sx={{ mt: 3, p: 3, backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 2 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', mb: 2, fontSize: '1rem' }}>
+                                Interview Report Card
+                            </Typography>
+
+                            {ratingSummary.report_card.performed_well?.length > 0 && (
+                                <Box sx={{ mb: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ color: '#22c55e', fontWeight: 600, mb: 0.5 }}>Performed Well</Typography>
+                                    {ratingSummary.report_card.performed_well.map((item: string, i: number) => (
+                                        <Typography key={i} variant="body2" sx={{ pl: 2, mb: 0.3 }}>• {item}</Typography>
+                                    ))}
+                                </Box>
+                            )}
+
+                            {ratingSummary.report_card.areas_to_improve?.length > 0 && (
+                                <Box sx={{ mb: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ color: '#f59e0b', fontWeight: 600, mb: 0.5 }}>Areas to Improve</Typography>
+                                    {ratingSummary.report_card.areas_to_improve.map((item: string, i: number) => (
+                                        <Typography key={i} variant="body2" sx={{ pl: 2, mb: 0.3 }}>• {item}</Typography>
+                                    ))}
+                                </Box>
+                            )}
+
+                            {ratingSummary.report_card.transcript_qa?.length > 0 && (
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Q&A Observations</Typography>
+                                    {ratingSummary.report_card.transcript_qa.map((qa: any, i: number) => (
+                                        <Box key={i} sx={{ p: 1.5, mb: 1, backgroundColor: '#f9fafb', borderRadius: 1 }}>
+                                            <Typography variant="body2" fontWeight={600}>Q: {qa.question}</Typography>
+                                            <Typography variant="body2" color="text.secondary">{qa.answer_summary}</Typography>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            )}
                         </Box>
                     )}
                 </Box>

@@ -1,0 +1,399 @@
+"""
+Interview Ratings API - Merged from client's iHire codebase.
+Provides per-question rating (1-10), transcript AI scoring, and report card generation.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from sqlalchemy.orm import Session
+from sqlalchemy import func as sa_func
+from typing import Optional
+import json
+
+from database import get_db
+from models import (
+    User, Job, JobApplication, InterviewQuestion, InterviewRating
+)
+from schemas import (
+    RatingCreate, RatingUpdate, RatingResponse,
+    TranscriptScoreResponse, InterviewSummaryResponse
+)
+from api.auth.jwt_handler import get_current_active_user
+from services.ihire_ai_service import score_transcript, generate_report_card
+from services.file_service import save_upload_file, validate_file, extract_text_from_file
+
+router = APIRouter(
+    prefix="/api/jobs/{job_id}/candidates/{candidate_id}",
+    tags=["Interview Ratings"]
+)
+
+
+def get_candidate_with_auth(job_id: int, candidate_id: int, user: User, db: Session):
+    """Ensures user owns the job and candidate exists."""
+    job = db.query(Job).filter(
+        Job.id == job_id,
+        Job.created_by == user.id,
+        Job.is_active == True
+    ).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    candidate = db.query(JobApplication).filter(
+        JobApplication.id == candidate_id,
+        JobApplication.job_id == job.id
+    ).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return job, candidate
+
+
+@router.post("/questions/{question_id}/rate", response_model=RatingResponse)
+async def rate_question(
+    job_id: int,
+    candidate_id: int,
+    question_id: int,
+    rating_data: RatingCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create or update a rating for a question (1-10 scale)."""
+    job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
+
+    # Validate rating range
+    if rating_data.rating < 1 or rating_data.rating > 10:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 10")
+
+    question = db.query(InterviewQuestion).filter(
+        InterviewQuestion.id == question_id,
+        InterviewQuestion.candidate_id == candidate.id
+    ).first()
+
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Check if rating already exists
+    existing_rating = db.query(InterviewRating).filter(
+        InterviewRating.question_id == question.id
+    ).first()
+
+    if existing_rating:
+        existing_rating.rating = rating_data.rating
+        existing_rating.notes = rating_data.notes
+        _update_overall_score(candidate, db)
+        db.commit()
+        db.refresh(existing_rating)
+        return existing_rating
+
+    new_rating = InterviewRating(
+        question_id=question.id,
+        rating=rating_data.rating,
+        notes=rating_data.notes
+    )
+    db.add(new_rating)
+    db.flush()
+    _update_overall_score(candidate, db)
+    db.commit()
+    db.refresh(new_rating)
+
+    return new_rating
+
+
+@router.put("/questions/{question_id}/rate", response_model=RatingResponse)
+async def update_rating(
+    job_id: int,
+    candidate_id: int,
+    question_id: int,
+    rating_data: RatingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update an existing rating."""
+    job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
+
+    question = db.query(InterviewQuestion).filter(
+        InterviewQuestion.id == question_id,
+        InterviewQuestion.candidate_id == candidate.id
+    ).first()
+
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    rating = db.query(InterviewRating).filter(
+        InterviewRating.question_id == question.id
+    ).first()
+
+    if not rating:
+        raise HTTPException(status_code=404, detail="Rating not found")
+
+    if rating_data.rating is not None:
+        if rating_data.rating < 1 or rating_data.rating > 10:
+            raise HTTPException(status_code=400, detail="Rating must be between 1 and 10")
+        rating.rating = rating_data.rating
+    if rating_data.notes is not None:
+        rating.notes = rating_data.notes
+
+    _update_overall_score(candidate, db)
+    db.commit()
+    db.refresh(rating)
+
+    return rating
+
+
+@router.post("/transcript", response_model=TranscriptScoreResponse)
+async def submit_transcript(
+    job_id: int,
+    candidate_id: int,
+    transcript_text: Optional[str] = Form(None),
+    transcript_file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Submit interview transcript (text or file) for AI scoring."""
+    job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
+
+    final_transcript = ""
+
+    if transcript_file and transcript_file.filename:
+        if not validate_file(transcript_file):
+            raise HTTPException(status_code=400, detail="Invalid file type. Allowed: .pdf, .docx, .txt")
+        file_path = await save_upload_file(transcript_file, f"transcripts/{job_id}/{candidate_id}")
+        candidate.transcript_path = file_path
+        final_transcript = extract_text_from_file(file_path)
+
+    if transcript_text and transcript_text.strip():
+        final_transcript = transcript_text.strip()
+        candidate.transcript_text = final_transcript
+
+    if not final_transcript:
+        raise HTTPException(status_code=400, detail="Please provide a transcript (text or file)")
+
+    # Get questions and answers for context
+    questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.candidate_id == candidate.id
+    ).order_by(InterviewQuestion.order_number).all()
+
+    questions_and_answers = []
+    for q in questions:
+        questions_and_answers.append({
+            "question": q.question_text,
+            "suggested_answer": q.suggested_answer or q.sample_answer or ""
+        })
+
+    job_description = job.description or ""
+    if job.description_file_path:
+        jd_text = extract_text_from_file(job.description_file_path)
+        if jd_text:
+            job_description = jd_text
+
+    # Call AI to score
+    ai_result = score_transcript(
+        transcript=final_transcript,
+        job_title=job.title,
+        job_description=job_description,
+        candidate_name=candidate.applicant_name,
+        questions_and_answers=questions_and_answers
+    )
+
+    ai_score = ai_result["score"]
+    candidate.ai_score = ai_score
+
+    # Final score = 80% AI + 20% recruiter
+    if candidate.overall_score is not None:
+        candidate.final_score = round((ai_score * 0.8) + (candidate.overall_score * 0.2), 1)
+    else:
+        candidate.final_score = ai_score
+
+    # Build report card
+    all_ratings = (
+        db.query(InterviewRating)
+        .join(InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id)
+        .filter(InterviewQuestion.candidate_id == candidate.id)
+        .all()
+    )
+    rating_lookup = {r.question_id: r for r in all_ratings}
+
+    questions_data = []
+    for q in questions:
+        rating_row = rating_lookup.get(q.id)
+        questions_data.append({
+            "question_text": q.question_text,
+            "category": q.category or q.skill_focus,
+            "rating": rating_row.rating if rating_row else None,
+            "notes": rating_row.notes if rating_row else "",
+        })
+
+    report_card = _build_report_card(
+        job, candidate, questions_data, ai_result["feedback"], final_transcript
+    )
+    candidate.report_card_json = json.dumps(report_card)
+
+    db.commit()
+    db.refresh(candidate)
+
+    return {
+        "ai_score": candidate.ai_score,
+        "final_score": candidate.final_score,
+        "ai_feedback": ai_result["feedback"],
+        "report_card": _get_saved_report_card(candidate),
+    }
+
+
+@router.get("/summary", response_model=InterviewSummaryResponse)
+async def get_interview_summary(
+    job_id: int,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get complete interview summary with all ratings and scores."""
+    job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
+
+    questions = (
+        db.query(InterviewQuestion)
+        .filter(InterviewQuestion.candidate_id == candidate.id)
+        .order_by(InterviewQuestion.order_number)
+        .all()
+    )
+
+    all_ratings = (
+        db.query(InterviewRating)
+        .join(InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id)
+        .filter(InterviewQuestion.candidate_id == candidate.id)
+        .all()
+    )
+    rating_map = {r.question_id: r for r in all_ratings}
+
+    total_questions = len(questions)
+    rated_questions = 0
+    total_score = 0
+    questions_data = []
+
+    for q in questions:
+        rating = rating_map.get(q.id)
+        q_data = {
+            "id": q.id,
+            "question_text": q.question_text,
+            "suggested_answer": q.suggested_answer or q.sample_answer,
+            "category": q.category or q.skill_focus,
+            "difficulty": str(q.difficulty.value) if q.difficulty else None,
+            "order_number": q.order_number or 0,
+            "rating": None,
+            "notes": None
+        }
+
+        if rating:
+            rated_questions += 1
+            total_score += rating.rating
+            q_data["rating"] = rating.rating
+            q_data["notes"] = rating.notes
+
+        questions_data.append(q_data)
+
+    average_score = round(total_score / rated_questions, 1) if rated_questions > 0 else None
+
+    report_card = _get_saved_report_card(candidate)
+
+    if report_card is None and candidate.ai_score is not None and candidate.transcript_text:
+        report_card = _build_report_card(
+            job, candidate, questions_data, "", candidate.transcript_text or ""
+        )
+        candidate.report_card_json = json.dumps(report_card)
+        db.commit()
+
+    return {
+        "candidate_id": candidate.id,
+        "candidate_name": candidate.applicant_name,
+        "candidate_email": candidate.applicant_email,
+        "position_title": job.title,
+        "position_company": job.company,
+        "interview_datetime": candidate.interview_datetime.isoformat() if candidate.interview_datetime else None,
+        "duration_minutes": candidate.duration_minutes,
+        "total_questions": total_questions,
+        "rated_questions": rated_questions,
+        "average_score": average_score,
+        "overall_score": candidate.overall_score,
+        "ai_score": candidate.ai_score,
+        "final_score": candidate.final_score,
+        "report_card": report_card,
+        "questions": questions_data
+    }
+
+
+def _build_report_card(
+    job: Job,
+    candidate: JobApplication,
+    questions_data: list[dict],
+    ai_feedback: str = "",
+    transcript_text: str = "",
+) -> dict:
+    """Build report card with strengths/improvements context from ratings."""
+    strengths_context = []
+    improvements_context = []
+
+    for q in questions_data:
+        category = q.get("category") or "General"
+        if q.get("rating") is not None:
+            score = float(q["rating"])
+            if score >= 8:
+                strengths_context.append(f"Strong in {category}: {q.get('question_text', '')[:120]}")
+            elif score <= 5:
+                improvements_context.append(f"Weak in {category}: {q.get('question_text', '')[:120]}")
+
+    recruiter_score = float(candidate.overall_score) if candidate.overall_score is not None else None
+    ai_score = float(candidate.ai_score) if candidate.ai_score is not None else None
+    overall_score = float(candidate.final_score) if candidate.final_score is not None else None
+
+    scores = [
+        {"label": "Overall Rating", "score": overall_score},
+        {"label": "iHire Rating", "score": ai_score},
+        {"label": "Recruiter Rating", "score": recruiter_score},
+    ]
+
+    return generate_report_card(
+        candidate_name=candidate.applicant_name,
+        job_title=job.title,
+        score_breakdown=scores,
+        strengths_context=strengths_context[:6],
+        improvements_context=improvements_context[:6],
+        transcript_feedback=ai_feedback,
+        transcript_text=transcript_text,
+    )
+
+
+def _get_saved_report_card(candidate: JobApplication) -> Optional[dict]:
+    """Retrieve cached report card from candidate JSON field."""
+    if not candidate.report_card_json:
+        return None
+    try:
+        return json.loads(candidate.report_card_json)
+    except json.JSONDecodeError:
+        return None
+
+
+def _update_overall_score(candidate: JobApplication, db: Session):
+    """Recalculate overall + final scores."""
+    result = db.query(
+        sa_func.count(InterviewRating.id),
+        sa_func.coalesce(sa_func.sum(InterviewRating.rating), 0),
+    ).join(
+        InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
+    ).filter(
+        InterviewQuestion.candidate_id == candidate.id
+    ).first()
+
+    rated_count = result[0] if result else 0
+    total_score = result[1] if result else 0
+
+    if rated_count > 0:
+        candidate.overall_score = round(total_score / rated_count)
+    else:
+        candidate.overall_score = None
+
+    if candidate.ai_score is not None and candidate.overall_score is not None:
+        candidate.final_score = round((candidate.ai_score * 0.8) + (candidate.overall_score * 0.2), 1)
+    elif candidate.ai_score is not None:
+        candidate.final_score = candidate.ai_score
+    elif candidate.overall_score is not None:
+        candidate.final_score = float(candidate.overall_score)
+    else:
+        candidate.final_score = None

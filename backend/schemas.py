@@ -431,6 +431,74 @@ class RecruiterCandidateResponse(BaseModel):
         from_attributes = True
 
 
+# ==================== Interview Rating & Report Card Schemas (from client merge) ====================
+
+class RatingCreate(BaseModel):
+    rating: int
+    notes: Optional[str] = None
+
+    @classmethod
+    def validate_rating_range(cls, v):
+        if v < 1 or v > 10:
+            raise ValueError("Rating must be between 1 and 10")
+        return v
+
+class RatingUpdate(BaseModel):
+    rating: Optional[int] = None
+    notes: Optional[str] = None
+
+class RatingResponse(BaseModel):
+    id: int
+    question_id: int
+    rating: int
+    notes: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class TranscriptScoreResponse(BaseModel):
+    ai_score: float
+    final_score: float
+    ai_feedback: str
+    report_card: Optional[dict] = None
+
+class ReportCardScoreItem(BaseModel):
+    label: str
+    score: Optional[float] = None
+
+class TranscriptQAItem(BaseModel):
+    question: str
+    answer_summary: str
+
+class InterviewReportCard(BaseModel):
+    scores: List[ReportCardScoreItem] = []
+    performed_well: List[str] = []
+    areas_to_improve: List[str] = []
+    transcript_qa: List[TranscriptQAItem] = []
+
+class InterviewSummaryResponse(BaseModel):
+    candidate_id: int
+    candidate_name: str
+    candidate_email: Optional[str] = None
+    position_title: str
+    position_company: Optional[str] = None
+    interview_datetime: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    total_questions: int
+    rated_questions: int
+    average_score: Optional[float] = None
+    overall_score: Optional[int] = None
+    ai_score: Optional[float] = None
+    final_score: Optional[float] = None
+    report_card: Optional[InterviewReportCard] = None
+    questions: List[dict] = []
+
+class SkillWeightage(BaseModel):
+    skill: str
+    weightage: float
+
+
 # ==================== GDPR Schemas ====================
 
 class ConsentCreate(BaseModel):
