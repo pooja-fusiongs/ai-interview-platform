@@ -33,7 +33,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
 
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
-  const [agentStatus, setAgentStatus] = useState('Agent is joining...');
+  const [agentStatus, setAgentStatus] = useState('Connecting to interview...');
 
   const agent = useMemo(() =>
     remoteParticipants.find(p =>
@@ -44,9 +44,9 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
   useEffect(() => {
     if (agent) {
       if (agent.isSpeaking) {
-        setAgentStatus('Agent is speaking...');
+        setAgentStatus('AI Interviewer is speaking...');
       } else {
-        setAgentStatus('Agent is listening, ask it a question');
+        setAgentStatus('Interview in progress');
       }
     } else if (remoteParticipants.length > 0) {
       setAgentStatus('Waiting for AI Interviewer...');

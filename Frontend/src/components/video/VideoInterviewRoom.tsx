@@ -445,16 +445,11 @@ const VideoInterviewRoom: React.FC = () => {
         toast.success('Interview completed!');
       }
 
-      // Redirect based on user role
+      // Redirect ONLY for recruiters to detail page
+      // Candidates stay on same page to see completion message
       if (user?.role !== 'candidate') {
-        // Recruiter: Go to interview detail page
         setTimeout(() => {
           navigate(`/video-detail/${videoId}`);
-        }, 1500);
-      } else {
-        // Candidate: Go to thank you page with interview ID
-        setTimeout(() => {
-          navigate(`/thank-you?interviewId=${videoId}`);
         }, 1500);
       }
     } catch (err: any) {

@@ -47,6 +47,8 @@ const VideoRoomNew: React.FC = () => {
     videoContainerRef.current.appendChild(iframe);
   };
 
+  const [interviewEnded, setInterviewEnded] = useState(false);
+
   const handleEndMeeting = async () => {
     if (window.confirm('Are you sure you want to end this interview?')) {
       try {
@@ -63,7 +65,13 @@ const VideoRoomNew: React.FC = () => {
           })
         });
 
-        
+        if (response.ok) {
+          // Show completion message instead of redirecting
+          setInterviewEnded(true);
+        } else {
+          console.error('Failed to end interview');
+          navigate('/video-interviews');
+        }
       } catch (error) {
         console.error('Error ending interview:', error);
         navigate('/video-interviews');
@@ -73,6 +81,71 @@ const VideoRoomNew: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+      {/* Interview Completed Overlay */}
+      {interviewEnded && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#1e293b',
+            borderRadius: '16px',
+            padding: '48px',
+            maxWidth: '500px',
+            textAlign: 'center',
+            border: '1px solid #334155'
+          }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(34, 197, 94, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 24px',
+              border: '2px solid #22c55e'
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <h2 style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', marginBottom: '16px' }}>
+              Interview Completed!
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: '16px', marginBottom: '32px', lineHeight: '1.6' }}>
+              Thank you for completing the interview. Your responses have been recorded and will be reviewed by our team.
+            </p>
+            <button
+              onClick={() => navigate('/video-interviews')}
+              style={{
+                backgroundColor: '#020291',
+                color: 'white',
+                padding: '12px 32px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#0101a0'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#020291'}
+            >
+              View My Interviews
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* LEFT SIDE - Questions Panel (40% width) */}
       <div style={{ 
         width: '40%', 

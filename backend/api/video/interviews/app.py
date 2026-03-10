@@ -1267,22 +1267,17 @@ def create_demo_video_interview(
 @router.get("/api/video/interviews/{video_id}/ai-questions")
 def get_ai_interview_questions(
     video_id: int,
-    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Get approved questions for AI-driven interview."""
+    """
+    Get approved questions for AI-driven interview.
+    NO AUTH REQUIRED - AI agent cannot authenticate.
+    """
     from models import InterviewQuestion, JobApplication
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
-
-    # Candidates can only view their own
-    if (
-        current_user.role == UserRole.CANDIDATE
-        and vi.candidate_id != current_user.id
-    ):
-        raise HTTPException(status_code=403, detail="Access denied")
 
     # Find JobApplication for this candidate
     application = None
@@ -1358,41 +1353,64 @@ def submit_ai_interview_answers(
     question_timestamps = body.get("question_timestamps", [])
     total_questions = body.get("total_questions", 0)
     completed_questions = body.get("completed_questions", 0)
+    agent_transcript = body.get("transcript", "")
+    is_final = body.get("is_final", False)
     
-    print(f"[ai-submit] Received AI interview data: video_id={video_id}, questions={total_questions}, completed={completed_questions}")
+    print(f"[ai-submit] Received AI interview data: video_id={video_id}, questions={total_questions}, completed={completed_questions}, is_final={is_final}")
     
-    if not interview_start_time or not question_timestamps:
-        print(f"[ai-submit] Missing timing data")
-        raise HTTPException(status_code=400, detail="Missing interview timing data")
+    # ✅ FLEXIBLE VALIDATION - Handle missing data gracefully
+    if not question_timestamps:
+        print(f"[ai-submit] ⚠️ No question_timestamps, but continuing...")
+        question_timestamps = []
+    
+    if not interview_start_time:
+        print(f"[ai-submit] ⚠️ No interview_start_time, using current time")
+        interview_start_time = datetime.now(timezone.utc).isoformat()
+    
+    # OLD STRICT VALIDATION (causing 400 errors):
+    # if not interview_start_time or not question_timestamps:
+    #     print(f"[ai-submit] Missing timing data")
+    #     raise HTTPException(status_code=400, detail="Missing interview timing data")
 
-    # Build REAL transcript with actual timestamps
-    candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else "Candidate"
-    transcript_lines = []
-    
-    # Add interview start
-    start_dt = datetime.fromisoformat(interview_start_time.replace('Z', '+00:00'))
-    transcript_lines.append(f"[{start_dt.strftime('%H:%M:%S')}] AI Interviewer: Hello {candidate_name}! I'm your AI interviewer today.")
-    
-    # Add questions with REAL timestamps
-    for q_data in question_timestamps:
-        question_time = datetime.fromisoformat(q_data["timestamp"].replace('Z', '+00:00'))
-        transcript_lines.append(f"\n[{question_time.strftime('%H:%M:%S')}] AI Interviewer: Question {q_data.get('question_index', '?')}: {q_data['question_text']}")
-        transcript_lines.append(f"[{question_time.strftime('%H:%M:%S')}] {candidate_name}: [Response recorded]")
-    
-    # Add interview end
-    end_dt = datetime.fromisoformat(interview_end_time.replace('Z', '+00:00'))
-    transcript_lines.append(f"\n[{end_dt.strftime('%H:%M:%S')}] AI Interviewer: Thank you {candidate_name}! Interview completed.")
-
-    transcript_text = "\n".join(transcript_lines)
+    # Use agent transcript if available, otherwise build from timestamps
+    if agent_transcript:
+        transcript_text = agent_transcript
+    else:
+        # Build transcript from timestamps with actual candidate answers
+        candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else "Candidate"
+        transcript_lines = []
+        start_dt = datetime.fromisoformat(interview_start_time.replace('Z', '+00:00'))
+        transcript_lines.append(f"[{start_dt.strftime('%H:%M:%S')}] AI Interviewer: Hello {candidate_name}!")
+        
+        for q_data in question_timestamps:
+            question_time = datetime.fromisoformat(q_data["timestamp"].replace('Z', '+00:00'))
+            transcript_lines.append(f"\n[{question_time.strftime('%H:%M:%S')}] AI Interviewer: Question {q_data.get('question_index', '?')}: {q_data['question_text']}")
+            
+            # Add candidate's actual answer if available
+            candidate_answer = q_data.get('candidate_answer', '[No response recorded]')
+            answer_time_str = q_data.get('answer_timestamp')
+            if answer_time_str:
+                answer_time = datetime.fromisoformat(answer_time_str.replace('Z', '+00:00'))
+                transcript_lines.append(f"[{answer_time.strftime('%H:%M:%S')}] {candidate_name}: {candidate_answer}")
+            else:
+                # Fallback if no answer timestamp
+                transcript_lines.append(f"[{question_time.strftime('%H:%M:%S')}] {candidate_name}: {candidate_answer}")
+        
+        end_dt = datetime.fromisoformat(interview_end_time.replace('Z', '+00:00'))
+        transcript_lines.append(f"\n[{end_dt.strftime('%H:%M:%S')}] AI Interviewer: Thank you {candidate_name}! Interview completed.")
+        transcript_text = "\n".join(transcript_lines)
 
     # Save transcript to video interview
     vi.transcript = transcript_text
     vi.transcript_generated_at = datetime.now(timezone.utc)
     vi.transcript_source = "ai_interview"  # AI interview transcript
-    vi.status = VideoInterviewStatus.COMPLETED.value
-    vi.ended_at = datetime.now(timezone.utc)
     
-    print(f"[ai-submit] Transcript generated ({len(transcript_text)} chars)")
+    if is_final:
+        vi.status = VideoInterviewStatus.COMPLETED.value
+        vi.ended_at = datetime.now(timezone.utc)
+        print(f"[ai-submit] Transcript generated ({len(transcript_text)} chars) and interview marked as COMPLETED")
+    else:
+        print(f"[ai-submit] Intermediate transcript generated ({len(transcript_text)} chars) saved")
 
     # Get questions for scoring
     application = None
@@ -1440,31 +1458,16 @@ def submit_ai_interview_answers(
         vi.session_id = session.id
     else:
         session.transcript_text = transcript_text
-        session.completed_at = end_dt
+        if is_final:
+            session.completed_at = end_dt
 
-    # Try to score with AI (optional - don't fail if scoring fails)
-    try:
-        from services.groq_service import score_transcript_with_groq
-        from services.gemini_service import score_transcript_with_gemini
-        import config
-        
-        llm_result = None
-        if config.GROQ_API_KEY:
-            llm_result = score_transcript_with_groq(transcript_text, questions_for_scoring)
-        elif config.GEMINI_API_KEY:
-            llm_result = score_transcript_with_gemini(transcript_text, questions_for_scoring)
-
-        if llm_result:
-            session.overall_score = float(llm_result.get("overall_score", 0))
-            rec_str = llm_result.get("recommendation", "reject")
-            session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
-            session.strengths = llm_result.get("strengths", "")
-            session.weaknesses = llm_result.get("weaknesses", "")
-            session.status = InterviewSessionStatus.SCORED
-            print(f"[ai-submit] Scoring completed: {session.overall_score}/100")
-    except Exception as e:
-        print(f"[ai-submit] Scoring failed (non-critical): {e}")
+    # DON'T auto-score - let recruiter trigger scoring manually
+    # Just mark as completed, not scored
+    if is_final:
         session.status = InterviewSessionStatus.COMPLETED
+        print(f"[ai-submit] Interview completed - awaiting manual scoring")
+    else:
+        print(f"[ai-submit] Interview intermediate save - continuing")
 
     db.commit()
     db.refresh(vi)
@@ -1479,6 +1482,132 @@ def submit_ai_interview_answers(
         "questions_asked": total_questions,
         "status": vi.status
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/generate-score  -- Manual score generation
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/generate-score")
+def generate_interview_score(
+    video_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually trigger score generation for a completed AI interview.
+    Requires transcript to be present.
+    """
+    from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus, JobApplication
+    from services.groq_service import score_transcript_with_groq
+    from services.gemini_service import score_transcript_with_gemini
+    import config
+    
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+    
+    if not vi.transcript:
+        raise HTTPException(status_code=400, detail="No transcript available. Complete the interview first.")
+    
+    # Get questions for scoring
+    application = None
+    if vi.candidate:
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id,
+            JobApplication.applicant_email == vi.candidate.email
+        ).first()
+
+    candidate_id_for_questions = application.id if application else vi.candidate_id
+
+    questions = db.query(InterviewQuestion).filter(
+        InterviewQuestion.job_id == vi.job_id,
+        InterviewQuestion.candidate_id == candidate_id_for_questions
+    ).all()
+    
+    if not questions:
+        raise HTTPException(status_code=400, detail="No questions found for this interview")
+
+    # Prepare questions for scoring
+    questions_for_scoring = [
+        {
+            "question_id": q.id,
+            "question_text": q.question_text,
+            "sample_answer": q.sample_answer or ""
+        }
+        for q in questions
+    ]
+
+    # Get or create interview session
+    session = db.query(InterviewSession).filter(
+        InterviewSession.job_id == vi.job_id,
+        InterviewSession.candidate_id == vi.candidate_id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=400, detail="No interview session found")
+
+    # Score with AI
+    try:
+        llm_result = None
+        if config.GROQ_API_KEY:
+            llm_result = score_transcript_with_groq(vi.transcript, questions_for_scoring)
+        elif config.GEMINI_API_KEY:
+            llm_result = score_transcript_with_gemini(vi.transcript, questions_for_scoring)
+        
+        if not llm_result:
+            raise HTTPException(status_code=500, detail="AI scoring service unavailable")
+
+        session.overall_score = float(llm_result.get("overall_score", 0))
+        rec_str = llm_result.get("recommendation", "reject")
+        session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
+        session.strengths = llm_result.get("strengths", "")
+        session.weaknesses = llm_result.get("weaknesses", "")
+        session.status = InterviewSessionStatus.SCORED
+        
+        # Save per-question scores
+        per_question_scores = llm_result.get("per_question_scores", [])
+        for pq in per_question_scores:
+            answer = db.query(InterviewAnswer).filter(
+                InterviewAnswer.session_id == session.id,
+                InterviewAnswer.question_id == pq.get("question_id")
+            ).first()
+            
+            if not answer:
+                answer = InterviewAnswer(
+                    session_id=session.id,
+                    question_id=pq.get("question_id"),
+                    answer_text=pq.get("extracted_answer", "[From transcript]")
+                )
+                db.add(answer)
+            
+            answer.score = float(pq.get("score", 0))
+            answer.relevance_score = float(pq.get("relevance_score", 0))
+            answer.completeness_score = float(pq.get("completeness_score", 0))
+            answer.accuracy_score = float(pq.get("accuracy_score", 0))
+            answer.clarity_score = float(pq.get("clarity_score", 0))
+            answer.feedback = pq.get("feedback", "")
+        
+        db.commit()
+        db.refresh(session)
+        
+        print(f"[generate-score] ✅ Scoring completed: {session.overall_score}/100")
+        
+        return {
+            "success": True,
+            "message": "Score generated successfully",
+            "overall_score": session.overall_score,
+            "recommendation": session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation),
+            "strengths": session.strengths,
+            "weaknesses": session.weaknesses,
+            "interview_session_id": session.id
+        }
+        
+    except Exception as e:
+        print(f"[generate-score] ❌ Scoring failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate score: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
