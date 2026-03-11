@@ -45,6 +45,7 @@ const VideoInterviewDetail: React.FC = () => {
   const [, setNotes] = useState('');
   const [transcript, setTranscript] = useState<string | null>(null);
   const [scoreResult, setScoreResult] = useState<any>(null);
+  const [scoring, setScoring] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,14 +307,11 @@ const VideoInterviewDetail: React.FC = () => {
                     Interview Transcript
                   </Typography>
                   {transcript && (
-                    <Tooltip title="Copy Transcript & Go to Manage Candidates">
+                    <Tooltip title="Copy Transcript">
                       <IconButton
                         onClick={() => {
                           navigator.clipboard.writeText(transcript);
-                          toast.success('Transcript copied! Redirecting to Manage Candidates...');
-                          setTimeout(() => {
-                            navigate(`/recruiter-candidates?jobId=${interview.job_id}&jobTitle=${encodeURIComponent(interview.job_title || '')}`);
-                          }, 1000);
+                          toast.success('Transcript copied to clipboard!');
                         }}
                         sx={{
                           background: '#f8fafc',
@@ -362,13 +360,26 @@ const VideoInterviewDetail: React.FC = () => {
                       <Button
                         variant="contained"
                         fullWidth
-                        startIcon={<ContentCopy />}
-                        onClick={() => {
-                          navigator.clipboard.writeText(transcript);
-                          toast.success('Transcript copied! Redirecting to Manage Candidates...');
-                          setTimeout(() => {
-                            navigate(`/recruiter-candidates?jobId=${interview.job_id}&jobTitle=${encodeURIComponent(interview.job_title || '')}`);
-                          }, 1000);
+                        startIcon={scoring ? <CircularProgress size={18} sx={{ color: 'white' }} /> : <Assessment />}
+                        disabled={scoring}
+                        onClick={async () => {
+                          setScoring(true);
+                          try {
+                            const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcript);
+                            toast.success('Transcript scored successfully!');
+                            setScoreResult({
+                              overall_score: result.overall_score,
+                              recommendation: result.recommendation || 'next_round',
+                              strengths: result.strengths || '',
+                              weaknesses: result.weaknesses || '',
+                              per_question: result.per_question_scores || [],
+                              interview_session_id: result.interview_session_id
+                            });
+                          } catch (err: any) {
+                            toast.error(err.response?.data?.detail || err.message || 'Failed to score transcript');
+                          } finally {
+                            setScoring(false);
+                          }
                         }}
                         sx={{
                           padding: '12px',
@@ -381,7 +392,7 @@ const VideoInterviewDetail: React.FC = () => {
                           }
                         }}
                       >
-                        Copy Transcript & Go to Manage Candidates
+                        {scoring ? 'Scoring with AI...' : 'Submit & Score with AI'}
                       </Button>
                     )}
                   </Box>
@@ -438,27 +449,27 @@ const VideoInterviewDetail: React.FC = () => {
                   <Box sx={{
                     borderRadius: '12px',
                     overflow: 'hidden',
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #e2e8f0',
-                    padding: { xs: '16px', sm: '24px' },
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 2
+                    backgroundColor: '#0f172a',
                   }}>
-                    <Box sx={{
-                      width: 56, height: 56, borderRadius: '50%',
-                      backgroundColor: '#020291',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Videocam sx={{ color: 'white', fontSize: 28 }} />
-                    </Box>
-                    <Typography sx={{ color: '#94a3b8', fontSize: '13px' }}>
-                      Video recording of the interview
-                    </Typography>
                     <video
                       controls
-                      style={{ width: '100%', maxWidth: '640px', borderRadius: '8px' }}
+                      preload="metadata"
+                      onLoadedMetadata={(e) => {
+                        const video = e.currentTarget;
+                        // Fix webm duration issue — seek to end then back to get real duration
+                        if (video.duration === Infinity || isNaN(video.duration)) {
+                          video.currentTime = 1e101;
+                          video.addEventListener('timeupdate', function fixDuration() {
+                            video.currentTime = 0;
+                            video.removeEventListener('timeupdate', fixDuration);
+                          }, { once: true });
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        display: 'block',
+                        borderRadius: '12px',
+                      }}
                       src={`${API_BASE_URL}${interview.recording_url}`}
                     >
                       Your browser does not support video playback.

@@ -14,11 +14,272 @@ import {
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant, useRemoteParticipants, useTracks, useRoomContext } from '@livekit/components-react';
 import '@livekit/components-styles';
+import { Track } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
-import { getMediaDevices, requestMediaPermissions, getDeviceErrorMessage, createAudioOnlyConstraints } from '../../utils/mediaDeviceUtils';
+import { getMediaDevices, requestMediaPermissions, getDeviceErrorMessage } from '../../utils/mediaDeviceUtils';
 import Navigation from '../layout/Sidebar';
+
+/**
+ * Suppresses "ignoring incoming text stream" console warnings from LiveKit agent events.
+ * Registers no-op handlers for known agent text stream topics.
+ */
+const AgentEventsSuppressor: React.FC = () => {
+  const room = useRoomContext();
+
+  useEffect(() => {
+    if (!room) return;
+    try {
+      // Register no-op handlers to suppress "ignoring incoming text stream" warnings
+      room.registerTextStreamHandler('lk.agent.events', (_reader, _info) => {});
+      room.registerTextStreamHandler('lk.transcription', (_reader, _info) => {});
+    } catch (err) {
+      // Handler already registered or API not available — ignore
+    }
+    return () => {
+      try {
+        room.unregisterTextStreamHandler('lk.agent.events');
+        room.unregisterTextStreamHandler('lk.transcription');
+      } catch {
+        // ignore cleanup errors
+      }
+    };
+  }, [room]);
+
+  return null;
+};
+
+/**
+ * InterviewRecorder - Records candidate camera video + ALL audio automatically.
+ * Uses useTracks hook for reliable track detection (no polling misses).
+ * Uses AudioContext to mix candidate mic + AI agent audio.
+ * NO extra browser prompts — uses LiveKit tracks directly.
+ * Must be placed INSIDE <LiveKitRoom>.
+ */
+const InterviewRecorder: React.FC<{
+  shouldRecord: boolean;
+  mediaRecorderRef: React.MutableRefObject<MediaRecorder | null>;
+  recordedChunksRef: React.MutableRefObject<Blob[]>;
+  onRecordingChange: (recording: boolean) => void;
+}> = ({ shouldRecord, mediaRecorderRef, recordedChunksRef, onRecordingChange }) => {
+  const { localParticipant } = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
+  const allTracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: false },
+      { source: Track.Source.Microphone, withPlaceholder: false },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false }
+  );
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const destinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const connectedRemotesRef = useRef<Set<string>>(new Set());
+  const startedRef = useRef(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animFrameRef = useRef<number>(0);
+  const camVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const screenVideoElRef = useRef<HTMLVideoElement | null>(null);
+
+  // Find local tracks via useTracks (reactive)
+  const localCamTrackRef = allTracks.find(
+    t => t.participant.isLocal && t.source === Track.Source.Camera && t.publication?.track
+  );
+  const localMicTrackRef = allTracks.find(
+    t => t.participant.isLocal && t.source === Track.Source.Microphone && t.publication?.track
+  );
+  const localScreenTrackRef = allTracks.find(
+    t => t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
+  );
+
+  const camMediaTrack = localCamTrackRef?.publication?.track?.mediaStreamTrack;
+  const micMediaTrack = localMicTrackRef?.publication?.track?.mediaStreamTrack;
+  const screenMediaTrack = localScreenTrackRef?.publication?.track?.mediaStreamTrack;
+
+  // Attach/detach camera video element when track changes
+  useEffect(() => {
+    if (camMediaTrack) {
+      if (!camVideoElRef.current) {
+        camVideoElRef.current = document.createElement('video');
+        camVideoElRef.current.muted = true;
+        camVideoElRef.current.playsInline = true;
+      }
+      camVideoElRef.current.srcObject = new MediaStream([camMediaTrack]);
+      camVideoElRef.current.play().catch(() => {});
+    } else if (camVideoElRef.current) {
+      camVideoElRef.current.srcObject = null;
+    }
+  }, [camMediaTrack]);
+
+  // Attach/detach screen share video element when track changes
+  useEffect(() => {
+    if (screenMediaTrack) {
+      if (!screenVideoElRef.current) {
+        screenVideoElRef.current = document.createElement('video');
+        screenVideoElRef.current.muted = true;
+        screenVideoElRef.current.playsInline = true;
+      }
+      screenVideoElRef.current.srcObject = new MediaStream([screenMediaTrack]);
+      screenVideoElRef.current.play().catch(() => {});
+    } else if (screenVideoElRef.current) {
+      screenVideoElRef.current.srcObject = null;
+    }
+  }, [screenMediaTrack]);
+
+  // Start recording when mic track becomes available
+  useEffect(() => {
+    if (!shouldRecord || startedRef.current || mediaRecorderRef.current) return;
+    if (!micMediaTrack) return;
+
+    const timer = setTimeout(() => {
+      if (startedRef.current || mediaRecorderRef.current) return;
+      startedRef.current = true;
+
+      try {
+        console.log(`🎬 Starting recording: screen=${!!screenMediaTrack}, camera=${!!camMediaTrack}, mic=${!!micMediaTrack}`);
+
+        // --- Audio setup ---
+        const audioCtx = new AudioContext();
+        audioCtxRef.current = audioCtx;
+        const destination = audioCtx.createMediaStreamDestination();
+        destinationRef.current = destination;
+
+        const localSource = audioCtx.createMediaStreamSource(new MediaStream([micMediaTrack]));
+        localSource.connect(destination);
+        console.log('🎤 Candidate mic connected to audio mixer');
+
+        for (const remote of remoteParticipants) {
+          const remoteMicPub = remote.getTrackPublication(Track.Source.Microphone);
+          const remoteTrack = remoteMicPub?.track?.mediaStreamTrack;
+          if (remoteTrack) {
+            const src = audioCtx.createMediaStreamSource(new MediaStream([remoteTrack]));
+            src.connect(destination);
+            connectedRemotesRef.current.add(remote.identity);
+            console.log(`🤖 AI agent audio connected: ${remote.identity}`);
+          }
+        }
+
+        // --- Canvas compositing setup ---
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        canvasRef.current = canvas;
+        const ctx = canvas.getContext('2d')!;
+
+        // Draw loop: composites screen share + camera onto canvas
+        const drawFrame = () => {
+          const screenVid = screenVideoElRef.current;
+          const camVid = camVideoElRef.current;
+          const hasScreen = screenVid?.srcObject && screenVid.readyState >= 2;
+          const hasCam = camVid?.srcObject && camVid.readyState >= 2;
+
+          // Black background
+          ctx.fillStyle = '#1a1a2e';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          if (hasScreen && hasCam) {
+            // Screen share full canvas
+            ctx.drawImage(screenVid, 0, 0, canvas.width, canvas.height);
+            // Camera PiP in bottom-right corner (200x150)
+            const pipW = 200, pipH = 150, pipMargin = 16;
+            const pipX = canvas.width - pipW - pipMargin;
+            const pipY = canvas.height - pipH - pipMargin;
+            // PiP border
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
+            ctx.drawImage(camVid, pipX, pipY, pipW, pipH);
+          } else if (hasScreen) {
+            // Screen share only — full canvas
+            ctx.drawImage(screenVid, 0, 0, canvas.width, canvas.height);
+          } else if (hasCam) {
+            // Camera only — centered with aspect ratio preserved
+            const vw = camVid.videoWidth || 640;
+            const vh = camVid.videoHeight || 480;
+            const scale = Math.min(canvas.width / vw, canvas.height / vh);
+            const dw = vw * scale;
+            const dh = vh * scale;
+            ctx.drawImage(camVid, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+          }
+          // When both camera and screen share are off, just dark background (already drawn above)
+
+          animFrameRef.current = requestAnimationFrame(drawFrame);
+        };
+        drawFrame();
+
+        // --- MediaRecorder setup ---
+        const canvasStream = canvas.captureStream(30); // 30fps
+        const combinedStream = new MediaStream();
+        canvasStream.getVideoTracks().forEach(t => combinedStream.addTrack(t));
+        destination.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+
+        recordedChunksRef.current = [];
+
+        let mimeType = 'video/webm;codecs=vp8,opus';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/webm';
+          if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4';
+        }
+
+        console.log(`🎬 Recording: ${combinedStream.getVideoTracks().length} video + ${combinedStream.getAudioTracks().length} audio, MIME: ${mimeType}`);
+
+        const mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+        };
+        mediaRecorder.onerror = (event: any) => {
+          console.error('❌ MediaRecorder error:', event.error);
+        };
+
+        mediaRecorder.start(1000);
+        mediaRecorderRef.current = mediaRecorder;
+        onRecordingChange(true);
+        console.log('✅ Recording started (canvas compositing mode)');
+      } catch (err) {
+        console.error('❌ Failed to start recording:', err);
+        startedRef.current = false;
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [shouldRecord, micMediaTrack]);
+
+  // Dynamically connect AI agent audio when it joins AFTER recording starts
+  useEffect(() => {
+    if (!audioCtxRef.current || !destinationRef.current || !mediaRecorderRef.current) return;
+    const audioCtx = audioCtxRef.current;
+    const destination = destinationRef.current;
+
+    for (const remote of remoteParticipants) {
+      if (connectedRemotesRef.current.has(remote.identity)) continue;
+
+      const remoteMicPub = remote.getTrackPublication(Track.Source.Microphone);
+      const remoteTrack = remoteMicPub?.track?.mediaStreamTrack;
+      if (remoteTrack) {
+        try {
+          const src = audioCtx.createMediaStreamSource(new MediaStream([remoteTrack]));
+          src.connect(destination);
+          connectedRemotesRef.current.add(remote.identity);
+          console.log(`🤖 AI agent audio connected (late join): ${remote.identity}`);
+        } catch (err) {
+          console.error('Failed to connect remote audio:', err);
+        }
+      }
+    }
+  }, [remoteParticipants]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close();
+      }
+    };
+  }, []);
+
+  return null;
+};
 
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
@@ -47,7 +308,6 @@ const VideoInterviewRoom: React.FC = () => {
   // const jitsiApiRef = useRef<any>(null); // Removed Jitsi ref
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-  const recordingStreamRef = useRef<MediaStream | null>(null);
   const maxParticipantsRef = useRef(0);
 
   useEffect(() => {
@@ -277,12 +537,8 @@ const VideoInterviewRoom: React.FC = () => {
 
       setIsActive(true);
       toast.success('Joining interview...');
-
-      // Note: We'll start recording AFTER the video room connects to avoid device conflicts
-      // but we set a flag or call it with a slight delay
-      setTimeout(() => {
-        startRecording();
-      }, 2000);
+      // Recording starts automatically via InterviewRecorder component inside LiveKitRoom
+      // No manual startRecording() needed - no extra browser prompts!
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to join interview');
     }
@@ -293,52 +549,10 @@ const VideoInterviewRoom: React.FC = () => {
     toast.error('Recording consent is required to start the interview.');
   };
 
-  const startRecording = async () => {
-    // If already recording, don't start again
-    if (isRecording || mediaRecorderRef.current) return;
-
-    try {
-      console.log('🎤 Starting AUDIO-ONLY backup recording...');
-
-      // Request AUDIO ONLY to avoid device conflict with LiveKit camera
-      const stream = await navigator.mediaDevices.getUserMedia(createAudioOnlyConstraints());
-
-      recordingStreamRef.current = stream;
-      recordedChunksRef.current = [];
-
-      // Prefer audio/webm;codecs=opus, fallback to audio/webm
-      let mimeType = 'audio/webm;codecs=opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'audio/webm';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'audio/mp4'; // Last resort fallback
-        }
-      }
-
-      console.log(`🎤 Using MIME type: ${mimeType}`);
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onerror = (event: any) => {
-        console.error('❌ MediaRecorder error:', event.error);
-      };
-
-      mediaRecorder.start(1000); // Collect data every second
-      mediaRecorderRef.current = mediaRecorder;
-      setIsRecording(true);
-      console.log('✅ Audio-only backup recording started successfully');
-    } catch (err: any) {
-      console.error('❌ Failed to start audio recording:', err);
-      const errorMsg = getDeviceErrorMessage(err);
-      toast.error(errorMsg + ' Interview will continue without backup recording.');
-    }
-  };
+  // Recording callback for InterviewRecorder component
+  const handleRecordingChange = React.useCallback((recording: boolean) => {
+    setIsRecording(recording);
+  }, []);
 
   const stopAndUploadRecording = async () => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
@@ -349,11 +563,8 @@ const VideoInterviewRoom: React.FC = () => {
       const recorder = mediaRecorderRef.current!;
 
       recorder.onstop = async () => {
-        // Stop all tracks
-        if (recordingStreamRef.current) {
-          recordingStreamRef.current.getTracks().forEach(track => track.stop());
-          recordingStreamRef.current = null;
-        }
+        // Don't stop LiveKit tracks — LiveKit manages them
+        // Just stop the MediaRecorder
 
         setIsRecording(false);
 
@@ -364,9 +575,9 @@ const VideoInterviewRoom: React.FC = () => {
         }
 
         const blob = new Blob(recordedChunksRef.current, {
-          type: recordedChunksRef.current[0]?.type || 'audio/webm'
+          type: recordedChunksRef.current[0]?.type || 'video/webm'
         });
-        console.log(`🎤 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB, type: ${blob.type}`);
+        console.log(`🎬 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB, type: ${blob.type}`);
 
         // Upload to backend (silently for candidates)
         const isCandidate = user?.role === 'candidate';
@@ -410,20 +621,27 @@ const VideoInterviewRoom: React.FC = () => {
     try {
       setEnding(true);
 
-      // Only upload recording if candidate actually joined (2+ participants)
-      if (maxParticipantsRef.current >= 2) {
-        await stopAndUploadRecording();
-      } else {
-        // No-show: stop recording without uploading
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
+      // Upload recording if MediaRecorder exists
+      if (mediaRecorderRef.current) {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          // Recorder is still active — stop and upload
+          console.log(`🎬 Stopping recorder (state: ${mediaRecorderRef.current.state}, isRecording: ${isRecording})`);
+          await stopAndUploadRecording();
+        } else if (recordedChunksRef.current.length > 0) {
+          // Recorder already inactive but has chunks (e.g., silently errored) — upload what we have
+          console.log(`🎬 Recorder inactive but has ${recordedChunksRef.current.length} chunks — uploading`);
+          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          console.log(`🎬 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+          try {
+            await videoInterviewService.uploadRecording(Number(videoId), blob);
+            if (user?.role !== 'candidate') toast.success('Recording uploaded successfully!');
+          } catch (err) {
+            console.error('Failed to upload recording:', err);
+            if (user?.role !== 'candidate') toast.error('Failed to upload recording.');
+          }
+          recordedChunksRef.current = [];
+          setIsRecording(false);
         }
-        if (recordingStreamRef.current) {
-          recordingStreamRef.current.getTracks().forEach(track => track.stop());
-          recordingStreamRef.current = null;
-        }
-        setIsRecording(false);
-        recordedChunksRef.current = [];
       }
 
       // Clean up all video call elements
@@ -797,8 +1015,17 @@ const VideoInterviewRoom: React.FC = () => {
                         }}
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >
+                        <AgentEventsSuppressor />
                         <VideoTilesGrid onEndCall={handleEnd} />
                         <RoomAudioRenderer />
+                        {user?.role === 'candidate' && (
+                          <InterviewRecorder
+                            shouldRecord={isActive}
+                            mediaRecorderRef={mediaRecorderRef}
+                            recordedChunksRef={recordedChunksRef}
+                            onRecordingChange={handleRecordingChange}
+                          />
+                        )}
                       </LiveKitRoom>
                     ) : (
                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -908,41 +1135,7 @@ const VideoInterviewRoom: React.FC = () => {
               </Paper>
             </Box>
 
-            {/* End Meeting Button - Floating Bottom Right */}
-            {isActive && (
-              <Box sx={{ position: 'absolute', bottom: 24, right: 24, zIndex: 10 }}>
-                <Button
-                  onClick={handleEnd}
-                  disabled={ending}
-                  startIcon={ending ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <CallEnd />}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    padding: '14px 28px',
-                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    color: 'white',
-                    fontWeight: 700,
-                    borderRadius: '12px',
-                    textTransform: 'none',
-                    fontSize: '15px',
-                    boxShadow: '0 8px 24px rgba(239, 68, 68, 0.4)',
-                    transition: 'all 0.2s',
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 12px 32px rgba(239, 68, 68, 0.5)'
-                    },
-                    '&:disabled': {
-                      background: '#9ca3af',
-                      color: '#e5e7eb'
-                    }
-                  }}
-                >
-                  {ending ? 'Ending...' : 'End Meeting'}
-                </Button>
-              </Box>
-            )}
+            {/* End Meeting button removed — already inside VideoTilesGrid control bar */}
           </Box>
         </Box>
 

@@ -5,7 +5,7 @@ import {
   TablePagination, TextField, InputAdornment, FormControl, Select, MenuItem,
   Button, Popover, Badge, Card, CardContent, useMediaQuery, useTheme
 } from '@mui/material';
-import { Visibility, PlayArrow, Cancel, Search, FilterList, Close } from '@mui/icons-material';
+import { Visibility, PlayArrow, Cancel, Search, FilterList, Close, Refresh } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
@@ -57,20 +57,22 @@ const VideoInterviewList: React.FC = () => {
   // Count active filters
   const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (jobFilter !== 'all' ? 1 : 0);
 
+  const fetchInterviews = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = isCandidate
+        ? await videoInterviewService.getMyInterviews()
+        : await videoInterviewService.getInterviews();
+      setInterviews(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load interviews.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchInterviews = async () => {
-      try {
-        // Use dedicated endpoint for candidates to ensure they see their interviews
-        const data = isCandidate 
-          ? await videoInterviewService.getMyInterviews()
-          : await videoInterviewService.getInterviews();
-        setInterviews(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load interviews.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchInterviews();
   }, [isCandidate]);
 
@@ -157,6 +159,25 @@ const VideoInterviewList: React.FC = () => {
         }}>
           <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b', fontSize: { xs: '20px', sm: '24px', md: '28px' } }}>Video Interviews</Typography>
           <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Refresh Button */}
+            <Tooltip title="Refresh">
+              <IconButton
+                onClick={fetchInterviews}
+                disabled={loading}
+                sx={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  color: '#64748b',
+                  '&:hover': {
+                    borderColor: '#020291',
+                    color: '#020291',
+                    backgroundColor: '#f0f0ff',
+                  }
+                }}
+              >
+                <Refresh sx={{ animation: loading ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+              </IconButton>
+            </Tooltip>
             {/* Filter Button */}
             <Badge badgeContent={activeFilterCount} sx={{ '& .MuiBadge-badge': { backgroundColor: '#020291', color: '#fff' } }}>
               <Button

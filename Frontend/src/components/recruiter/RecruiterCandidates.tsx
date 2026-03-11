@@ -11,11 +11,12 @@ import Navigation from '../layout/Sidebar'
 import { recruiterService, RecruiterCandidate } from '../../services/recruiterService'
 
 const RecruiterCandidates = () => {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const jobId = parseInt(searchParams.get('jobId') || '0')
   const jobTitle = searchParams.get('jobTitle') || 'Job'
   const interviewId = searchParams.get('interviewId') || ''
+  const openTranscriptForId = searchParams.get('openTranscript') || ''
 
   const [candidates, setCandidates] = useState<RecruiterCandidate[]>([])
   const [filteredCandidates, setFilteredCandidates] = useState<RecruiterCandidate[]>([])
@@ -71,6 +72,25 @@ const RecruiterCandidates = () => {
     }
     setCurrentPage(1) // Reset to first page when search changes
   }, [searchQuery, candidates])
+
+  // Auto-open Upload Transcript dialog when redirected from Video Interview Detail
+  useEffect(() => {
+    if (openTranscriptForId && candidates.length > 0) {
+      const candidate = candidates.find(c => c.id === parseInt(openTranscriptForId));
+      if (candidate) {
+        setSelectedCandidate(candidate);
+        // Pre-fill transcript from clipboard if available
+        navigator.clipboard.readText().then(text => {
+          if (text && text.length > 10) setTranscriptText(text);
+        }).catch(() => {});
+        setTranscriptDialogOpen(true);
+        // Remove param from URL so dialog doesn't reopen after submit
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('openTranscript');
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+  }, [openTranscriptForId, candidates]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredCandidates.length / itemsPerPage)
