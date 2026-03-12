@@ -6,7 +6,6 @@ import {
   Typography,
   Button,
   Avatar,
-  Chip,
   Menu,
   MenuItem,
   Divider,
@@ -15,6 +14,7 @@ import {
   useMediaQuery,
 } from '@mui/material'
 import { getAccessibleRoutes, getRoleColor } from '../../utils/roleUtils'
+import { Badge } from '@mui/material'
 
 interface NavigationProps {
   children: React.ReactNode;
@@ -72,11 +72,15 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
       return true
     }
 
-    if (route === '/jobs' && location.pathname === '/candidate-matching') {
+
+    if (route === '/jobs' && location.pathname === '/recruiter-candidates') {
       return true
     }
 
-    if (route === '/jobs' && location.pathname === '/recruiter-candidates') {
+    if (route === '/fraud-dashboard' && location.pathname.startsWith('/fraud-analysis')) {
+      return true
+    }
+    if (route === '/feedback-list' && location.pathname.startsWith('/feedback')) {
       return true
     }
 
@@ -342,41 +346,11 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
           {/* Right side - Notifications + User Menu */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', sm: '12px', md: '20px' }, flexShrink: 0 }}>
             {/* Notification Bell */}
-            <Button sx={{
-              background: 'none',
-              border: 'none',
-              color: '#64748b',
-              cursor: 'pointer',
-              padding: { xs: '6px', sm: '8px', md: '10px' },
-              borderRadius: '8px',
-              position: 'relative',
-              fontSize: { xs: '16px', md: '18px' },
-              minWidth: 'auto',
-              '&:hover': {
-                background: '#f1f5f9',
-                color: '#1e293b'
-              }
-            }}>
-              <i className="fas fa-bell"></i>
-              <Chip
-                label="3"
-                size="small"
-                sx={{
-                  position: 'absolute',
-                  top: { xs: '2px', md: '6px' },
-                  right: { xs: '2px', md: '6px' },
-                  background: '#ef4444',
-                  color: 'white',
-                  fontSize: { xs: '9px', md: '10px' },
-                  height: { xs: '16px', md: '18px' },
-                  minWidth: { xs: '16px', md: '18px' },
-                  fontWeight: 600,
-                  '& .MuiChip-label': {
-                    padding: '0 4px'
-                  }
-                }}
-              />
-            </Button>
+            <IconButton sx={{ color: '#64748b', '&:hover': { color: '#020291', background: '#EEF0FF' } }}>
+              <Badge badgeContent={3} color="error" sx={{ '& .MuiBadge-badge': { fontSize: '10px', minWidth: '18px', height: '18px' } }}>
+                <i className="fas fa-bell" style={{ fontSize: 18 }}></i>
+              </Badge>
+            </IconButton>
 
             {/* User Menu Button */}
             <Box
@@ -484,19 +458,6 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
               >
                 <i className="fas fa-user-circle" style={{ width: 20, color: '#64748b' }}></i>
                 My Profile
-              </MenuItem>
-
-              <MenuItem
-                onClick={() => handleMenuItemClick('/consent-manager')}
-                sx={{
-                  py: 1.5,
-                  px: 2,
-                  fontSize: { xs: '13px', md: '14px' },
-                  gap: '12px'
-                }}
-              >
-                <i className="fas fa-shield-alt" style={{ width: 20, color: '#64748b' }}></i>
-                Privacy & Consent
               </MenuItem>
 
               <Divider sx={{ my: 1 }} />

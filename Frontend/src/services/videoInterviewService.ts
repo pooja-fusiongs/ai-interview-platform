@@ -1,4 +1,13 @@
 import apiClient from './api';
+import axios from 'axios';
+
+// Guest axios instance — no auth token needed
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
+const guestClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 60000,
+  headers: { 'Content-Type': 'application/json' },
+});
 
 export const videoInterviewService = {
   scheduleInterview: async (data: any) => {
@@ -100,6 +109,33 @@ export const videoInterviewService = {
   checkGracePeriod: async (id: number, graceMinutes: number = 10) => {
     const response = await apiClient.post(`/api/video/interviews/${id}/check-grace-period`, {
       grace_minutes: graceMinutes
+    });
+    return response.data;
+  },
+
+  // Guest (candidate) methods — no auth required
+  guestGetInterview: async (id: number) => {
+    const response = await guestClient.get(`/api/video/guest/${id}`);
+    return response.data;
+  },
+  guestJoinInterview: async (videoId: number) => {
+    const response = await guestClient.post(`/api/video/guest/${videoId}/join`);
+    return response.data;
+  },
+  guestUpdateRecordingConsent: async (id: number, consent: boolean) => {
+    const response = await guestClient.patch(`/api/video/guest/${id}/recording-consent`, { consent });
+    return response.data;
+  },
+  guestEndInterview: async (id: number) => {
+    const response = await guestClient.post(`/api/video/guest/${id}/end`);
+    return response.data;
+  },
+  guestUploadRecording: async (id: number, blob: Blob) => {
+    const formData = new FormData();
+    formData.append('file', blob, `interview_${id}.webm`);
+    const response = await guestClient.post(`/api/video/guest/${id}/upload-recording`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
     });
     return response.data;
   },

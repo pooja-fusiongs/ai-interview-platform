@@ -12,7 +12,7 @@ import { getRoleDisplayName, getRoleColor, getAccessibleRoutes, getRolePermissio
 
 const RoleTester: React.FC = () => {
   const { user } = useAuth();
-  const [selectedRole, setSelectedRole] = useState<UserRole>('candidate');
+  const [selectedRole, setSelectedRole] = useState<UserRole>('recruiter');
 
   // This is for testing only - simulates role switching
   const simulateRoleSwitch = (role: UserRole) => {
@@ -28,8 +28,8 @@ const RoleTester: React.FC = () => {
     window.location.reload();
   };
 
-  const roles: UserRole[] = ['recruiter', 'domain_expert', 'admin', 'candidate'];
-  const currentRole = user?.role || 'candidate';
+  const roles: UserRole[] = ['recruiter', 'domain_expert', 'admin'];
+  const currentRole = user?.role || 'recruiter';
   const accessibleRoutes = getAccessibleRoutes(currentRole);
   const permissions = getRolePermissions(currentRole);
 

@@ -50,15 +50,16 @@ class UserResponse(BaseModel):
 # Job Schemas
 class JobBase(BaseModel):
     title: str
-    description: str
+    description: Optional[str] = ""
     company: str
-    location: str
+    location: Optional[str] = ""
     salary_range: Optional[str] = None
-    job_type: str
-    work_mode: str
-    experience_level: str
-    department: str
+    job_type: Optional[str] = "Full-time"
+    work_mode: Optional[str] = "Remote"
+    experience_level: Optional[str] = ""
+    department: Optional[str] = ""
     skills_required: Optional[str] = None
+    skills_weightage: Optional[str] = None
     number_of_openings: int = 1
     interview_type: str = "AI"
     number_of_questions: int = 10
@@ -822,9 +823,9 @@ class QualityMetricResponse(BaseModel):
         from_attributes = True
 
 class QualityDashboardResponse(BaseModel):
-    overall_prediction_accuracy: float
-    score_performance_correlation: float
+    prediction_accuracy: float
+    correlation: float
     total_hires_tracked: int
-    hire_success_rate: float
-    average_performance_by_recommendation: dict
+    success_rate: float
+    by_recommendation: dict
     metrics_over_time: List[dict]

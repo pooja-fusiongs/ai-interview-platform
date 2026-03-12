@@ -36,7 +36,6 @@ export interface RolePermissions {
   canViewCandidates: boolean;
   canManageUsers: boolean;
   canEvaluateJobs: boolean;
-  canApplyJobs: boolean;
   canViewProfile: boolean;
 }
 
@@ -151,22 +150,11 @@ export interface Candidate {
 
 export interface JobFormData {
   title: string;
-  department: string;
-  experienceRequired: string;
-  employmentType: string;
-  location: string;
-  workMode: string;
-  jobSummary: string;
-  requiredSkills: string[];
-  numberOfOpenings: number;
-  interviewType: string;
-  applicationDeadline: string;
-  salary: string;
-  experienceLevel: string;
-  numberOfQuestions: number;
-  resumeParsingEnabled: boolean;
-  questionGenerationReady: boolean;
-  expertReviewStatus: 'pending' | 'completed';
+  company: string;
+  yearsExperience: number;
+  description: string;
+  skills: Array<{ skill: string; weightage: number }>;
+  file: File | null;
 }
 
 export interface ApplicationFormData {

@@ -21,10 +21,6 @@ import {
   Card,
   CardContent,
   TablePagination,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
@@ -36,9 +32,6 @@ import {
   Refresh,
   CheckCircle,
   Cancel,
-  MoreVert,
-  Edit,
-  Delete,
   Assessment,
   StarRate,
   PersonOff,
@@ -131,8 +124,6 @@ const FeedbackList: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -160,15 +151,6 @@ const FeedbackList: React.FC = () => {
     fetchFeedbacks();
   }, []);
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, feedback: Feedback) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedFeedback(feedback);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedFeedback(null);
-  };
 
   // Filter feedbacks based on search query
   const filteredFeedbacks = feedbacks.filter((fb) => {
@@ -767,36 +749,6 @@ const FeedbackList: React.FC = () => {
                             >
                               View Details
                             </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<Edit sx={{ fontSize: '16px' }} />}
-                              onClick={() => navigate(`/feedback/${fb.id}/edit`)}
-                              sx={{
-                                flex: 1,
-                                borderRadius: '8px',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                fontSize: '13px',
-                                borderColor: '#e5e7eb',
-                                color: '#64748b',
-                                '&:hover': { borderColor: '#d1d5db', backgroundColor: '#f8fafc' },
-                              }}
-                            >
-                              Edit
-                            </Button>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleMenuOpen(e, fb)}
-                              sx={{
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '8px',
-                                color: '#64748b',
-                                '&:hover': { backgroundColor: '#f8fafc', borderColor: '#d1d5db' },
-                              }}
-                            >
-                              <MoreVert sx={{ fontSize: '18px' }} />
-                            </IconButton>
                           </Box>
                         </CardContent>
                       </Card>
@@ -924,16 +876,6 @@ const FeedbackList: React.FC = () => {
                                   <Visibility sx={{ fontSize: '18px' }} />
                                 </IconButton>
                               </Tooltip>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => handleMenuOpen(e, fb)}
-                                sx={{
-                                  color: '#94a3b8',
-                                  '&:hover': { backgroundColor: '#f1f5f9', color: '#64748b' },
-                                }}
-                              >
-                                <MoreVert sx={{ fontSize: '20px' }} />
-                              </IconButton>
                             </Box>
                           </TableCell>
                         </TableRow>
@@ -979,54 +921,6 @@ const FeedbackList: React.FC = () => {
           )}
         </Card>
 
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-          PaperProps={{
-            sx: {
-              borderRadius: '12px',
-              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.12)',
-              border: '1px solid #e5e7eb',
-              minWidth: 160,
-            },
-          }}
-        >
-          <MenuItem
-            onClick={() => {
-              if (selectedFeedback) navigate(`/feedback/${selectedFeedback.id}`);
-              handleMenuClose();
-            }}
-            sx={{ fontSize: '14px', py: 1.5 }}
-          >
-            <ListItemIcon>
-              <Visibility sx={{ fontSize: '18px', color: '#3b82f6' }} />
-            </ListItemIcon>
-            <ListItemText>View Details</ListItemText>
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              if (selectedFeedback) navigate(`/feedback/${selectedFeedback.id}/edit`);
-              handleMenuClose();
-            }}
-            sx={{ fontSize: '14px', py: 1.5 }}
-          >
-            <ListItemIcon>
-              <Edit sx={{ fontSize: '18px', color: '#64748b' }} />
-            </ListItemIcon>
-            <ListItemText>Edit</ListItemText>
-          </MenuItem>
-          <MenuItem
-            onClick={handleMenuClose}
-            sx={{ fontSize: '14px', py: 1.5, color: '#ef4444' }}
-          >
-            <ListItemIcon>
-              <Delete sx={{ fontSize: '18px', color: '#ef4444' }} />
-            </ListItemIcon>
-            <ListItemText>Delete</ListItemText>
-          </MenuItem>
-        </Menu>
       </Box>
     </Navigation>
   );

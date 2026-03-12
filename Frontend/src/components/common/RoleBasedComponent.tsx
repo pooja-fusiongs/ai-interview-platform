@@ -63,12 +63,6 @@ export const DomainExpertOnly: React.FC<{ children: React.ReactNode; fallback?: 
   </RoleBasedComponent>
 );
 
-export const CandidateOnly: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback }) => (
-  <RoleBasedComponent allowedRoles={['candidate']} fallback={fallback}>
-    {children}
-  </RoleBasedComponent>
-);
-
 export const RecruiterOrAdmin: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback }) => (
   <RoleBasedComponent allowedRoles={['recruiter', 'admin']} fallback={fallback}>
     {children}
@@ -96,12 +90,6 @@ export const CanViewCandidates: React.FC<{ children: React.ReactNode; fallback?:
 
 export const CanManageUsers: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback }) => (
   <RoleBasedComponent requiredPermission="canManageUsers" fallback={fallback}>
-    {children}
-  </RoleBasedComponent>
-);
-
-export const CanApplyJobs: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback }) => (
-  <RoleBasedComponent requiredPermission="canApplyJobs" fallback={fallback}>
     {children}
   </RoleBasedComponent>
 );

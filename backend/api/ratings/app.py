@@ -28,11 +28,14 @@ router = APIRouter(
 
 
 def get_candidate_with_auth(job_id: int, candidate_id: int, user: User, db: Session):
-    """Ensures user owns the job and candidate exists."""
-    job = db.query(Job).filter(
+    """Ensures job exists and candidate belongs to it. Recruiters and admins can access any job."""
+    role = user.role.value if user.role else ""
+    if role in ("admin", "recruiter"):
+        job = db.query(Job).filter(Job.id == job_id).first()
+    else:
+        job = db.query(Job).filter(
         Job.id == job_id,
         Job.created_by == user.id,
-        Job.is_active == True
     ).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")

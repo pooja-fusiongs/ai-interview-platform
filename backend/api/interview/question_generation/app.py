@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
-from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion, InterviewAnswer
+from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion, InterviewAnswer, InterviewRating, CandidateResume
 from schemas import (
     QuestionGenerateRequest,
     InterviewQuestionResponse,
@@ -162,7 +162,10 @@ def regenerate_questions(
 
     question_ids = [q.id for q in existing_questions]
     if question_ids:
-        # Delete answers referencing these questions
+        db.query(InterviewRating).filter(
+            InterviewRating.question_id.in_(question_ids)
+        ).delete(synchronize_session=False)
+
         db.query(InterviewAnswer).filter(
             InterviewAnswer.question_id.in_(question_ids)
         ).delete(synchronize_session=False)
@@ -603,8 +606,32 @@ def get_question_sets(
                     "skills_tested": [q.skill_focus] if q.skill_focus else []
                 })
 
-            # Determine main topics from questions
-            main_topics = list(set([q.skill_focus for q in questions if q.skill_focus]))
+            # Get skills from job + candidate resume (fixed, not from generated questions)
+            main_topics = []
+            if job and job.skills_required:
+                try:
+                    import json as _json
+                    job_skills = _json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
+                    if isinstance(job_skills, list):
+                        main_topics.extend(job_skills)
+                except Exception:
+                    pass
+            if candidate:
+                # Try candidate resume skills
+                resume = db.query(CandidateResume).filter(CandidateResume.candidate_id == candidate.id).first() if candidate else None
+                if resume and resume.skills:
+                    try:
+                        resume_skills = _json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills
+                        if isinstance(resume_skills, list):
+                            main_topics.extend(resume_skills)
+                    except Exception:
+                        pass
+            main_topics = list(dict.fromkeys(main_topics))  # deduplicate preserving order
+
+            # Fallback: if no skills from job/resume, use question skill_focus values
+            if not main_topics and questions:
+                fallback_skills = [q.skill_focus for q in questions if q.skill_focus and q.skill_focus != "null"]
+                main_topics = list(dict.fromkeys(fallback_skills))
 
             result.append({
                 "id": str(session.id),
@@ -680,7 +707,31 @@ def get_question_sets_test(db: Session = Depends(get_db)):
             "skills_tested": [q.skill_focus] if q.skill_focus else []
         } for q in questions]
 
-        main_topics = list(set(q.skill_focus for q in questions if q.skill_focus))
+        # Get skills from job + candidate resume (fixed, not from generated questions)
+        main_topics = []
+        if job and job.skills_required:
+            try:
+                import json as _json
+                job_skills = _json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
+                if isinstance(job_skills, list):
+                    main_topics.extend(job_skills)
+            except Exception:
+                pass
+        if candidate:
+            resume = db.query(CandidateResume).filter(CandidateResume.candidate_id == candidate.id).first() if candidate else None
+            if resume and resume.skills:
+                try:
+                    resume_skills = _json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills
+                    if isinstance(resume_skills, list):
+                        main_topics.extend(resume_skills)
+                except Exception:
+                    pass
+        main_topics = list(dict.fromkeys(main_topics))  # deduplicate preserving order
+
+        # Fallback: if no skills from job/resume, use question skill_focus values
+        if not main_topics and questions:
+            fallback_skills = [q.skill_focus for q in questions if q.skill_focus and q.skill_focus != "null"]
+            main_topics = list(dict.fromkeys(fallback_skills))
 
         result.append({
             "id": str(session.id),

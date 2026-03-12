@@ -139,23 +139,65 @@ class AIQuestionGenerator:
 
         # Generate questions with static answers first (fast)
         questions = []
-        skills_to_test = list(set(job_skills + resume_skills))[:8]
+        # Use skill weightage if available, otherwise fall back to job+resume skills
+        skill_weights = None
+        if job.skills_weightage_json:
+            try:
+                skill_weights = json.loads(job.skills_weightage_json)
+            except (json.JSONDecodeError, TypeError):
+                skill_weights = None
 
-        if len(skills_to_test) < 8:
-            skills_to_test.extend(self._get_default_skills(job.department))
+        if skill_weights:
+            # Distribute questions based on skill weightage
+            total_weight = sum(float(sw.get("weightage", 0)) for sw in skill_weights if float(sw.get("weightage", 0)) > 0)
+            skill_questions_list = []
+            for sw in skill_weights:
+                skill_name = sw.get("skill", "").strip()
+                weight = float(sw.get("weightage", 0))
+                if skill_name and weight > 0 and total_weight > 0:
+                    count = max(1, round((weight / total_weight) * int(total_questions * 0.8)))
+                    skill_questions_list.append((skill_name, count))
 
-        # Generate skill-based questions (80% of total)
-        skill_questions = int(total_questions * 0.8)
-        for i in range(skill_questions):
-            skill = skills_to_test[i % len(skills_to_test)]
-            template = random.choice(templates["technical"])
-            question = self._create_question_from_template(
-                template, skill, is_senior, job.title, job.department
-            )
-            questions.append(question)
+            # Adjust to fit total skill questions
+            skill_questions = int(total_questions * 0.8)
+            current_total = sum(c for _, c in skill_questions_list)
+            if current_total > skill_questions and skill_questions_list:
+                # Trim from the largest
+                skill_questions_list.sort(key=lambda x: x[1], reverse=True)
+                while sum(c for _, c in skill_questions_list) > skill_questions:
+                    for idx in range(len(skill_questions_list)):
+                        if sum(c for _, c in skill_questions_list) <= skill_questions:
+                            break
+                        name, cnt = skill_questions_list[idx]
+                        if cnt > 1:
+                            skill_questions_list[idx] = (name, cnt - 1)
+                            break
+
+            for skill_name, count in skill_questions_list:
+                for _ in range(count):
+                    template = random.choice(templates["technical"])
+                    question = self._create_question_from_template(
+                        template, skill_name.lower(), is_senior, job.title, job.department
+                    )
+                    questions.append(question)
+        else:
+            skills_to_test = list(set(job_skills + resume_skills))[:8]
+
+            if len(skills_to_test) < 8:
+                skills_to_test.extend(self._get_default_skills(job.department))
+
+            # Generate skill-based questions (80% of total)
+            skill_questions = int(total_questions * 0.8)
+            for i in range(skill_questions):
+                skill = skills_to_test[i % len(skills_to_test)]
+                template = random.choice(templates["technical"])
+                question = self._create_question_from_template(
+                    template, skill, is_senior, job.title, job.department
+                )
+                questions.append(question)
 
         # Generate behavioral questions (20% of total)
-        behavioral_questions = total_questions - skill_questions
+        behavioral_questions = total_questions - len(questions)
         for i in range(behavioral_questions):
             template = random.choice(templates["behavioral"])
             question = self._create_question_from_template(
@@ -193,6 +235,14 @@ class AIQuestionGenerator:
         resume_text = resume.parsed_text if resume else ""
         experience_years = resume.experience_years if resume else (candidate.experience_years if candidate else 0)
 
+        # Parse skill weights from job if available
+        skill_weights = None
+        if job.skills_weightage_json:
+            try:
+                skill_weights = json.loads(job.skills_weightage_json)
+            except (json.JSONDecodeError, TypeError):
+                skill_weights = None
+
         # Try OpenAI first (7-phase framework)
         try:
             from services.open_ai_service import generate_interview_questions
@@ -202,8 +252,9 @@ class AIQuestionGenerator:
                 job_description=job.description or "",
                 years_experience=experience_years or 0,
                 duration_minutes=30 if total_questions <= 10 else 60,
+                candidate_name=candidate.applicant_name or "",
                 resume_text=resume_text,
-                skill_weights=None,
+                skill_weights=skill_weights,
             )
             if raw:
                 converted = []
@@ -213,7 +264,7 @@ class AIQuestionGenerator:
                         "sample_answer": q["suggested_answer"],
                         "question_type": self._map_phase_to_type(q["category"]),
                         "difficulty": self._map_difficulty(q["difficulty"]),
-                        "skill_focus": self._extract_skill_from_text(q["question_text"])
+                        "skill_focus": q.get("skill_focus") or self._extract_skill_from_text(q["question_text"])
                     })
                 print("[QuestionGenerator] Questions generated via OpenAI 7-phase framework")
                 return converted

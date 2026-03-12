@@ -17,6 +17,10 @@ export const fraudDetectionService = {
     const response = await apiClient.get('/api/video/fraud/flagged');
     return response.data;
   },
+  getAllAnalyses: async () => {
+    const response = await apiClient.get('/api/video/fraud/all');
+    return response.data;
+  },
 };
 
 export default fraudDetectionService;

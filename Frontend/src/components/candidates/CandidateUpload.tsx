@@ -43,6 +43,8 @@ const CandidateUpload: React.FC = () => {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [message, setMessage] = useState<string>('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [fieldTouched, setFieldTouched] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     loadJobs()
@@ -63,35 +65,74 @@ const CandidateUpload: React.FC = () => {
     }
   }
 
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case 'name':
+        if (!value.trim()) return 'Candidate name is required'
+        if (value.trim().length < 2) return 'Name must be at least 2 characters'
+        if (value.trim().length > 100) return 'Name must be less than 100 characters'
+        return ''
+      case 'email':
+        if (!value.trim()) return 'Email is required'
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email address'
+        return ''
+      case 'jobId':
+        if (!value) return 'Please select a job'
+        return ''
+      default:
+        return ''
+    }
+  }
+
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
+    const { name, value } = e.target
+    setFormData({ ...formData, [name]: value })
+    if (fieldTouched[name]) {
+      setFieldErrors(prev => ({ ...prev, [name]: validateField(name, value) }))
+    }
+  }
+
+  const handleBlur = (field: string, value: string) => {
+    setFieldTouched(prev => ({ ...prev, [field]: true }))
+    setFieldErrors(prev => ({ ...prev, [field]: validateField(field, value) }))
   }
 
   const handleSelectChange = (e: any): void => {
-    setFormData({
-      ...formData,
-      jobId: e.target.value
-    })
+    const value = e.target.value
+    setFormData({ ...formData, jobId: value })
+    setFieldTouched(prev => ({ ...prev, jobId: true }))
+    setFieldErrors(prev => ({ ...prev, jobId: validateField('jobId', value) }))
   }
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>): void => {
     const files = e.target.files
-    setResumeFile(files ? files[0] : null)
+    const file = files ? files[0] : null
+    setResumeFile(file)
+    setFieldTouched(prev => ({ ...prev, resume: true }))
+    setFieldErrors(prev => ({ ...prev, resume: file ? '' : 'Please select a resume file' }))
   }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
-    setLoading(true)
     setMessage('')
 
-    if (!resumeFile) {
-      setMessage('Please select a resume file.')
-      setLoading(false)
+    // Validate all fields
+    const newErrors: Record<string, string> = {
+      name: validateField('name', formData.name),
+      email: validateField('email', formData.email),
+      jobId: validateField('jobId', formData.jobId),
+      resume: resumeFile ? '' : 'Please select a resume file',
+    }
+    setFieldErrors(newErrors)
+    setFieldTouched({ name: true, email: true, jobId: true, resume: true })
+
+    const hasErrors = Object.values(newErrors).some(e => e !== '')
+    if (hasErrors) {
+      setMessage('Please fix the errors before submitting.')
       return
     }
+
+    setLoading(true)
 
     try {
       const formDataToSend = new FormData()
@@ -158,9 +199,12 @@ const CandidateUpload: React.FC = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
+                    onBlur={() => handleBlur('name', formData.name)}
                     required
                     placeholder="Enter candidate name"
                     variant="outlined"
+                    error={fieldTouched.name && !!fieldErrors.name}
+                    helperText={fieldTouched.name && fieldErrors.name}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         borderRadius: '8px',
@@ -177,9 +221,12 @@ const CandidateUpload: React.FC = () => {
                     type="email"
                     value={formData.email}
                     onChange={handleInputChange}
+                    onBlur={() => handleBlur('email', formData.email)}
                     required
                     placeholder="Enter candidate email"
                     variant="outlined"
+                    error={fieldTouched.email && !!fieldErrors.email}
+                    helperText={fieldTouched.email && fieldErrors.email}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         borderRadius: '8px',
@@ -194,16 +241,16 @@ const CandidateUpload: React.FC = () => {
                       Resume Upload *
                     </Typography>
                     <Box sx={{
-                      border: '2px dashed #e0e0e0',
+                      border: `2px dashed ${fieldTouched.resume && fieldErrors.resume ? '#d32f2f' : '#e0e0e0'}`,
                       borderRadius: '8px',
                       padding: 3,
                       textAlign: 'center',
-                      backgroundColor: '#fafafa',
+                      backgroundColor: fieldTouched.resume && fieldErrors.resume ? '#fff5f5' : '#fafafa',
                       cursor: 'pointer',
                       transition: 'all 0.3s ease',
                       '&:hover': {
-                        borderColor: '#1976d2',
-                        backgroundColor: '#f0f7ff'
+                        borderColor: fieldTouched.resume && fieldErrors.resume ? '#d32f2f' : '#1976d2',
+                        backgroundColor: fieldTouched.resume && fieldErrors.resume ? '#fff0f0' : '#f0f7ff'
                       }
                     }}>
                       <input
@@ -228,9 +275,14 @@ const CandidateUpload: React.FC = () => {
                         </Typography>
                       </label>
                     </Box>
+                    {fieldTouched.resume && fieldErrors.resume && (
+                      <Typography sx={{ color: '#d32f2f', fontSize: '12px', mt: '4px', ml: '2px' }}>
+                        {fieldErrors.resume}
+                      </Typography>
+                    )}
                   </Box>
-                  
-                  <FormControl fullWidth required>
+
+                  <FormControl fullWidth required error={fieldTouched.jobId && !!fieldErrors.jobId}>
                     <InputLabel id="job-select-label">Associate with Job</InputLabel>
                     <Select
                       labelId="job-select-label"
@@ -252,6 +304,11 @@ const CandidateUpload: React.FC = () => {
                         </MenuItem>
                       ))}
                     </Select>
+                    {fieldTouched.jobId && fieldErrors.jobId && (
+                      <Typography sx={{ color: '#d32f2f', fontSize: '12px', mt: '3px', mx: '14px' }}>
+                        {fieldErrors.jobId}
+                      </Typography>
+                    )}
                   </FormControl>
                   
                   <Box sx={{ display: 'flex', gap: 2, marginTop: 2, flexDirection: { xs: 'column', sm: 'row' } }}>

@@ -209,6 +209,17 @@ try:
 except Exception as e:
     print(f"⚠️ Could not load recruiter flow endpoints: {e}")
 
+
+
+# Import and mount candidate dashboard endpoints
+try:
+    from api.candidates.dashboard.app import router as candidate_dashboard_router
+    app.include_router(candidate_dashboard_router, tags=["Candidate Dashboard"])
+    print("✅ Candidate Dashboard endpoints included")
+except Exception as e:
+    print(f"⚠️ Could not load candidate dashboard endpoints: {e}")
+
+
 # Import and mount GDPR endpoints
 try:
     from api.gdpr.consent.app import router as gdpr_consent_router

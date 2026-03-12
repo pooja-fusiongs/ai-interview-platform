@@ -38,7 +38,7 @@ from schemas import (
 )
 from api.auth.jwt_handler import get_current_active_user, require_any_role
 from services.zoom_service import create_zoom_meeting, delete_zoom_meeting
-from services.email_service import send_interview_notification
+from services.email_service import send_interview_notification, send_interview_result_notification
 from services.groq_service import transcribe_audio_with_groq
 
 router = APIRouter(tags=["Video Interviews"])
@@ -774,6 +774,174 @@ async def join_video_interview(
             "status": vi.status,
             "error": str(e)
         }
+
+
+# ---------------------------------------------------------------------------
+# GUEST (Candidate) Endpoints — No Auth Required
+# Candidates join via email link, no login needed
+# ---------------------------------------------------------------------------
+
+@router.get("/api/video/guest/{video_id}")
+def guest_get_interview(
+    video_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get interview details for guest candidate (no auth)."""
+    vi = db.query(VideoInterview).options(
+        joinedload(VideoInterview.candidate),
+        joinedload(VideoInterview.interviewer),
+        joinedload(VideoInterview.job),
+    ).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+    return _build_response(vi, db)
+
+
+@router.post("/api/video/guest/{video_id}/join")
+async def guest_join_interview(
+    video_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Guest candidate joins interview — no auth required.
+    Sets status to IN_PROGRESS and dispatches AI agent.
+    """
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    if vi.status in [VideoInterviewStatus.COMPLETED.value, VideoInterviewStatus.NO_SHOW.value]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cannot rejoin interview. Status: {vi.status}"
+        )
+
+    # Guest is always the candidate — set to IN_PROGRESS
+    if vi.status in [VideoInterviewStatus.SCHEDULED.value, VideoInterviewStatus.WAITING.value]:
+        vi.status = VideoInterviewStatus.IN_PROGRESS.value
+        if not vi.started_at:
+            vi.started_at = datetime.now(timezone.utc)
+        vi.candidate_joined_at = datetime.now(timezone.utc)
+        print(f"✅ Guest candidate joined, status -> IN_PROGRESS")
+
+    db.commit()
+    db.refresh(vi)
+
+    # Dispatch AI agent and generate token
+    agent_dispatched = False
+    try:
+        from routers.livekit_router import generate_livekit_token, TokenRequest, dispatch_agent, DispatchAgentRequest
+
+        room_name = f"interview_{video_id}"
+
+        # Get candidate name from application or user
+        candidate_name = "Candidate"
+        if vi.candidate:
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email
+            ).first()
+            if application:
+                candidate_name = application.applicant_name or candidate_name
+            else:
+                candidate_name = vi.candidate.full_name or vi.candidate.username or candidate_name
+
+        if not vi.agent_dispatched and vi.status == VideoInterviewStatus.IN_PROGRESS.value:
+            await dispatch_agent(DispatchAgentRequest(room_name=room_name))
+            vi.agent_dispatched = True
+            db.commit()
+            agent_dispatched = True
+            print(f"✅ AI Agent dispatched to room: {room_name}")
+
+        token_data = await generate_livekit_token(TokenRequest(
+            room_name=room_name,
+            participant_name=candidate_name,
+            participant_identity=f"guest_candidate_{video_id}",
+            role="candidate"
+        ))
+
+        return {
+            "success": True,
+            "token": token_data.token,
+            "livekit_url": token_data.livekit_url,
+            "room_name": room_name,
+            "status": vi.status,
+            "agent_dispatched": agent_dispatched
+        }
+
+    except Exception as e:
+        print(f"❌ Error in guest_join_interview: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "message": "Interview started, but agent dispatch/token failed",
+            "video_id": video_id,
+            "status": vi.status,
+            "error": str(e)
+        }
+
+
+@router.patch("/api/video/guest/{video_id}/recording-consent")
+def guest_update_recording_consent(
+    video_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+):
+    """Update recording consent for guest candidate (no auth)."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+    vi.recording_consent = body.get("consent", False)
+    db.commit()
+    db.refresh(vi)
+    return {"message": "Recording consent updated", "recording_consent": vi.recording_consent}
+
+
+@router.post("/api/video/guest/{video_id}/end")
+async def guest_end_interview(
+    video_id: int,
+    db: Session = Depends(get_db),
+):
+    """End interview for guest candidate (no auth)."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+    if vi.status != VideoInterviewStatus.COMPLETED.value:
+        vi.status = VideoInterviewStatus.COMPLETED.value
+        vi.ended_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(vi)
+    return {"message": "Interview ended", "status": vi.status}
+
+
+@router.post("/api/video/guest/{video_id}/upload-recording")
+async def guest_upload_recording(
+    video_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload recording for guest candidate (no auth)."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"interview_{video_id}_{timestamp}.webm"
+    recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "recordings")
+    os.makedirs(recordings_dir, exist_ok=True)
+    file_path = os.path.join(recordings_dir, filename)
+
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    vi.recording_url = f"/uploads/recordings/{filename}"
+    db.commit()
+    db.refresh(vi)
+
+    print(f"🎥 Guest recording saved: {file_path} ({len(contents)} bytes)")
+    return {"message": "Recording uploaded successfully", "recording_url": vi.recording_url}
 
 
 # ---------------------------------------------------------------------------
@@ -1577,7 +1745,28 @@ def generate_interview_score(
         db.refresh(session)
         
         print(f"[generate-score] ✅ Scoring completed: {session.overall_score}/100")
-        
+
+        # Send result email to candidate
+        try:
+            candidate_email = vi.candidate.email if vi.candidate else None
+            candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else "Candidate"
+            job = db.query(Job).filter(Job.id == vi.job_id).first()
+            job_title = job.title if job else "Interview"
+            rec_value = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation)
+
+            if candidate_email:
+                send_interview_result_notification(
+                    candidate_email=candidate_email,
+                    candidate_name=candidate_name,
+                    job_title=job_title,
+                    overall_score=session.overall_score,
+                    recommendation=rec_value,
+                    strengths=session.strengths or "",
+                    weaknesses=session.weaknesses or "",
+                )
+        except Exception as email_err:
+            print(f"[generate-score] ⚠️ Failed to send result email: {email_err}")
+
         return {
             "success": True,
             "message": "Score generated successfully",
@@ -1879,6 +2068,27 @@ def upload_transcript_and_score(
 
     db.commit()
     db.refresh(vi)
+
+    # Send result email to candidate if scoring succeeded
+    if score_result and llm_result:
+        try:
+            candidate_email = vi.candidate.email if vi.candidate else None
+            candidate_name = vi.candidate.full_name or vi.candidate.username if vi.candidate else "Candidate"
+            job = db.query(Job).filter(Job.id == vi.job_id).first()
+            job_title = job.title if job else "Interview"
+
+            if candidate_email:
+                send_interview_result_notification(
+                    candidate_email=candidate_email,
+                    candidate_name=candidate_name,
+                    job_title=job_title,
+                    overall_score=llm_result.get("overall_score", 0),
+                    recommendation=llm_result.get("recommendation", ""),
+                    strengths=llm_result.get("strengths", ""),
+                    weaknesses=llm_result.get("weaknesses", ""),
+                )
+        except Exception as email_err:
+            print(f"[upload-transcript] ⚠️ Failed to send result email: {email_err}")
 
     # Determine appropriate message
     if score_result:

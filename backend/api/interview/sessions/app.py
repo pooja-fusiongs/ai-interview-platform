@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime
+from pydantic import BaseModel as PydanticBase
 
 import sys
 import os
@@ -28,6 +29,7 @@ from schemas import (
 from api.auth.jwt_handler import get_current_active_user
 from services.answer_scorer import score_answer, score_all_answers_with_ai
 from services.recommendation_engine import generate_recommendation
+from services.email_service import send_interview_result_notification
 
 router = APIRouter(tags=["Interview Sessions"])
 
@@ -398,6 +400,25 @@ def complete_session(
 
     db.commit()
     db.refresh(session)
+
+    # Send result email to candidate
+    try:
+        candidate = session.candidate
+        job = session.job
+        if candidate and candidate.email:
+            rec_value = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation)
+            send_interview_result_notification(
+                candidate_email=candidate.email,
+                candidate_name=candidate.full_name or candidate.username,
+                job_title=job.title if job else "Interview",
+                overall_score=session.overall_score,
+                recommendation=rec_value,
+                strengths=session.strengths or "",
+                weaknesses=session.weaknesses or "",
+            )
+    except Exception as email_err:
+        print(f"[complete-session] ⚠️ Failed to send result email: {email_err}")
+
     return _session_response(session)
 
 
@@ -484,3 +505,58 @@ def list_interviews(
             )
         )
     return result
+
+class HiringDecisionRequest(PydanticBase):
+    decision: str  # "hire" or "reject"
+
+@router.post("/api/interview/sessions/{session_id}/hiring-decision")
+def update_hiring_decision(
+    session_id: int,
+    body: HiringDecisionRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Update candidate's application status to Hired/Rejected based on interview results."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role not in ("recruiter", "admin"):
+        raise HTTPException(status_code=403, detail="Only recruiters/admins can make hiring decisions")
+
+    if body.decision not in ("hire", "reject"):
+        raise HTTPException(status_code=400, detail="Decision must be 'hire' or 'reject'")
+
+    session = db.query(InterviewSession).options(
+        joinedload(InterviewSession.candidate),
+    ).filter(InterviewSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    new_status = "Hired" if body.decision == "hire" else "Rejected"
+
+    # Try to update linked application first
+    updated = False
+    if session.application_id:
+        app = db.query(JobApplication).filter(JobApplication.id == session.application_id).first()
+        if app:
+            app.status = new_status
+            updated = True
+
+    # Fallback: find application by candidate email + job_id
+    if not updated and session.candidate:
+        app = db.query(JobApplication).filter(
+            JobApplication.job_id == session.job_id,
+            JobApplication.applicant_email == session.candidate.email,
+        ).first()
+        if app:
+            app.status = new_status
+            updated = True
+
+    db.commit()
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "candidate_id": session.candidate_id,
+        "decision": body.decision,
+        "status": new_status,
+        "application_updated": updated,
+    }

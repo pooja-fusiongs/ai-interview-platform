@@ -67,9 +67,27 @@ def generate_questions_with_groq(
     print(f"[OK] [generate_questions_groq] GROQ_API_KEY found, generating questions...")
 
     skills_str = ", ".join(skills_required) if skills_required else "general software development"
-    experience_level = "senior" if experience_years and experience_years >= 5 else "junior/mid"
+    exp = experience_years or 0
 
-    prompt = f"""You are a technical interview question generator. Based on the job description and candidate resume below, generate exactly {total_questions} interview questions.
+    # Determine experience level and difficulty distribution
+    if exp >= 8:
+        experience_level = "senior/lead"
+        difficulty_guide = "70% advanced, 20% intermediate, 10% basic"
+        depth_note = "Ask architecture design, system design, scalability, team leadership, mentoring, and complex problem-solving questions. Expect deep expertise with trade-off analysis."
+    elif exp >= 5:
+        experience_level = "mid-senior"
+        difficulty_guide = "40% advanced, 40% intermediate, 20% basic"
+        depth_note = "Ask in-depth technical questions, design patterns, optimization, debugging complex issues, and some system design. Expect practical hands-on expertise."
+    elif exp >= 2:
+        experience_level = "mid-level"
+        difficulty_guide = "20% advanced, 50% intermediate, 30% basic"
+        depth_note = "Ask practical implementation questions, core concepts, debugging, and some design questions. Expect solid fundamentals with growing expertise."
+    else:
+        experience_level = "junior/fresher"
+        difficulty_guide = "10% advanced, 30% intermediate, 60% basic"
+        depth_note = "Ask fundamental concepts, basic implementation, simple debugging, and learning aptitude questions. Keep questions approachable but test core understanding."
+
+    prompt = f"""You are a technical interview question generator. Generate exactly {total_questions} interview questions tailored to the candidate's experience level.
 
 JOB DESCRIPTION:
 {job_description or 'Not provided'}
@@ -79,19 +97,28 @@ REQUIRED SKILLS: {skills_str}
 CANDIDATE RESUME:
 {resume_text or 'Not provided'}
 
-CANDIDATE EXPERIENCE: {experience_years or 'Unknown'} years ({experience_level} level)
+CANDIDATE EXPERIENCE: {exp} years ({experience_level} level)
 
-Generate {total_questions} questions with a good mix:
+IMPORTANT - DIFFICULTY DISTRIBUTION based on {exp} years experience:
+{difficulty_guide}
+
+EXPERIENCE-APPROPRIATE DEPTH:
+{depth_note}
+
+Generate {total_questions} questions with this mix:
 - 60% technical/scenario questions testing the required skills
 - 20% conceptual questions about core concepts
 - 20% behavioral questions about teamwork and problem-solving
 
-CRITICAL: For each sample_answer, answer as a senior engineer with deep expertise. Your answer MUST:
-- Explain the core concept clearly
-- Mention specific tools, frameworks, or standards by name
-- Include a real-world example or scenario
-- Mention best practices and edge cases
-- Be 4-6 sentences of actual factual content
+CRITICAL RULES:
+1. Questions MUST match the candidate's experience level — do NOT ask system design to a fresher or basic syntax to a 10-year veteran.
+2. Each question should test a specific skill from the REQUIRED SKILLS list.
+3. For each sample_answer, answer as a senior engineer with deep expertise. Your answer MUST:
+   - Explain the core concept clearly
+   - Mention specific tools, frameworks, or standards by name
+   - Include a real-world example or scenario
+   - Mention best practices and edge cases
+   - Be 4-6 sentences of actual factual content
 
 BAD example (rubric - DO NOT do this):
 "A good answer should explain the core concepts of Python, provide practical examples, and demonstrate understanding."

@@ -348,6 +348,10 @@ const Login = () => {
           <Box sx={{ margin: '10px 0' }}>
             <Button
               type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/forgot-password')
+              }}
               sx={{
                 background: 'none',
                 border: '1px solid #e5e7eb',

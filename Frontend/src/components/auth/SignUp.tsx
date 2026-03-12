@@ -8,10 +8,7 @@ import {
   TextField,
   Button,
   IconButton,
-  InputAdornment,
-  Select,
-  MenuItem,
-  FormControl
+  InputAdornment
 } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 
@@ -313,63 +310,7 @@ const SignUp = () => {
               />
             </Box>
 
-            {/* Role Selector */}
-            <Box sx={{
-              position: 'relative',
-              marginBottom: { xs: '16px', md: '25px' },
-              display: 'flex',
-              alignItems: 'center',
-              gap: { xs: '10px', md: '15px' }
-            }}>
-              <Box sx={{
-                width: { xs: 40, md: 50 },
-                height: { xs: 40, md: 50 },
-                color: '#020291',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#DDE1FF',
-                fontSize: '18px',
-                flexShrink: 0
-              }}>
-                <i className="fas fa-user-tag"></i>
-              </Box>
-              <FormControl fullWidth>
-                <Select
-                  name="role"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  disabled={loading}
-                  displayEmpty
-                  sx={{
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    background: 'white',
-                    '& .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#e5e7eb',
-                      borderWidth: '1px'
-                    },
-                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#d1d5db'
-                    },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'rgba(2, 2, 145, 0.3)',
-                      boxShadow: '0 0 0 3px rgba(2, 2, 145, 0.08)'
-                    },
-                    '& .MuiSelect-select': {
-                      padding: '10px 14px',
-                      color: '#111827'
-                    }
-                  }}
-                >
-                  <MenuItem value="candidate">Candidate</MenuItem>
-                  <MenuItem value="recruiter">Recruiter</MenuItem>
-                  {/* <MenuItem value="domain_expert">Domain Expert</MenuItem>
-                  <MenuItem value="admin">Administrator</MenuItem> */}
-                </Select>
-              </FormControl>
-            </Box>
+           
 
             {/* Password Field */}
             <Box sx={{

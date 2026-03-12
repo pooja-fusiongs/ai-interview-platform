@@ -9,7 +9,7 @@ import { Visibility, PlayArrow, Cancel, Search, FilterList, Close, Refresh } fro
 import { useNavigate } from 'react-router-dom';
 import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
-import { useAuth } from '../../contexts/AuthContext';
+
 
 const getStatusColor = (status: string): 'primary' | 'warning' | 'success' | 'error' | 'default' => {
   const s = status.toLowerCase();
@@ -30,8 +30,6 @@ const VideoInterviewList: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const { user } = useAuth();
-  const isCandidate = user?.role === 'candidate';
   const [interviews, setInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -61,9 +59,7 @@ const VideoInterviewList: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      const data = isCandidate
-        ? await videoInterviewService.getMyInterviews()
-        : await videoInterviewService.getInterviews();
+      const data = await videoInterviewService.getInterviews();
       setInterviews(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load interviews.');
@@ -74,7 +70,7 @@ const VideoInterviewList: React.FC = () => {
 
   useEffect(() => {
     fetchInterviews();
-  }, [isCandidate]);
+  }, []);
 
   const handleCancel = async (id: number) => {
     try {
@@ -417,17 +413,15 @@ const VideoInterviewList: React.FC = () => {
 
                     {/* Action buttons */}
                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', pt: 1.5, mt: 1 }}>
-                      {!isCandidate && (
-                        <Tooltip title="View Details">
-                          <IconButton
-                            size="small"
-                            onClick={() => navigate(`/video-detail/${row.id}`)}
-                            sx={{ backgroundColor: '#f1f5f9', '&:hover': { backgroundColor: '#e2e8f0' } }}
-                          >
-                            <Visibility fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
+                      <Tooltip title="View Details">
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate(`/video-detail/${row.id}`)}
+                          sx={{ backgroundColor: '#f1f5f9', '&:hover': { backgroundColor: '#e2e8f0' } }}
+                        >
+                          <Visibility fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
                         <span>
                           <IconButton
@@ -441,21 +435,19 @@ const VideoInterviewList: React.FC = () => {
                           </IconButton>
                         </span>
                       </Tooltip>
-                      {!isCandidate && (
-                        <Tooltip title="Cancel">
-                          <span>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleCancel(row.id)}
-                              disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
-                              sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
-                            >
-                              <Cancel fontSize="small" />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      )}
+                      <Tooltip title="Cancel">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleCancel(row.id)}
+                            disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                            sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                          >
+                            <Cancel fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Box>
                   </CardContent>
                 </Card>
@@ -551,9 +543,7 @@ const VideoInterviewList: React.FC = () => {
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.duration_minutes} min</TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.flag_count ?? 0}</TableCell>
                         <TableCell>
-                          {!isCandidate && (
-                            <Tooltip title="View Details"><IconButton onClick={() => navigate(`/video-detail/${row.id}`)}><Visibility /></IconButton></Tooltip>
-                          )}
+                          <Tooltip title="View Details"><IconButton onClick={() => navigate(`/video-detail/${row.id}`)}><Visibility /></IconButton></Tooltip>
                           <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
                             <span>
                               <IconButton
@@ -565,19 +555,17 @@ const VideoInterviewList: React.FC = () => {
                               </IconButton>
                             </span>
                           </Tooltip>
-                          {!isCandidate && (
-                            <Tooltip title="Cancel">
-                              <span>
-                                <IconButton
-                                  color="error"
-                                  onClick={() => handleCancel(row.id)}
-                                  disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
-                                >
-                                  <Cancel />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          )}
+                          <Tooltip title="Cancel">
+                            <span>
+                              <IconButton
+                                color="error"
+                                onClick={() => handleCancel(row.id)}
+                                disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                              >
+                                <Cancel />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))

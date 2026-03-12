@@ -3,7 +3,7 @@ Auth Module - Complete Authentication System
 Combines signup, signin, and role-based functionality with organized structure
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, UserRole
@@ -20,6 +20,7 @@ from api.auth.role_manager import RoleManager
 from api.auth.signup.app import router as signup_router
 from api.auth.signIn.app import router as signin_router
 from api.auth.change_password.app import router as change_password_router
+from api.auth.forgot_password.app import router as forgot_password_router
 
 # Create main auth router with prefix
 auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -28,6 +29,7 @@ auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 auth_router.include_router(signup_router)
 auth_router.include_router(signin_router)
 auth_router.include_router(change_password_router)
+auth_router.include_router(forgot_password_router)
 
 # User info endpoint
 @auth_router.get("/me", response_model=UserResponse)

@@ -21,7 +21,6 @@ import {
 import {
     Edit as EditIcon,
     ArrowBack as ArrowBackIcon,
-    Lock as LockIcon,
     CheckCircle as CheckCircleIcon,
     Schedule as ScheduleIcon,
     History as HistoryIcon,

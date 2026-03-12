@@ -246,3 +246,159 @@ def send_review_completed_notification(recruiter_email: str, recruiter_name: str
         print(f"[Email] Failed to send review completed notification: {e}")
         return False
 
+
+def send_interview_result_notification(
+    candidate_email: str,
+    candidate_name: str,
+    job_title: str,
+    overall_score: float,
+    recommendation: str,
+    strengths: str = "",
+    weaknesses: str = "",
+):
+    """Send interview result notification to candidate after scoring is complete."""
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@ai-interview-platform.com")
+
+    print(f"[Email] Sending result notification to {candidate_email}")
+
+    if not SENDGRID_API_KEY:
+        print("[Email] SENDGRID_API_KEY not set, skipping result notification")
+        return False
+
+    try:
+        subject = f"Interview Results: {job_title}"
+
+        # Determine recommendation display
+        rec_lower = (recommendation or "").lower()
+        if rec_lower == "select":
+            rec_label = "Selected"
+            rec_color = "#10b981"
+            rec_icon = "&#10003;"
+        elif rec_lower == "next_round":
+            rec_label = "Next Round"
+            rec_color = "#f59e0b"
+            rec_icon = "&#8594;"
+        else:
+            rec_label = "Under Review"
+            rec_color = "#6b7280"
+            rec_icon = "&#8635;"
+
+        # Score color
+        score_val = float(overall_score) if overall_score else 0
+        if score_val >= 75:
+            score_color = "#10b981"
+        elif score_val >= 50:
+            score_color = "#f59e0b"
+        else:
+            score_color = "#ef4444"
+
+        # Build strengths / improvements HTML
+        detail_rows = ""
+        if strengths:
+            detail_rows += f"""
+                <tr>
+                    <td style="padding:12px 20px; font-size:14px; color:#374151;">
+                        <strong style="color:#10b981;">Strengths:</strong><br>
+                        <span style="color:#4b5563;">{strengths}</span>
+                    </td>
+                </tr>"""
+        if weaknesses:
+            detail_rows += f"""
+                <tr>
+                    <td style="padding:12px 20px; font-size:14px; color:#374151;">
+                        <strong style="color:#f59e0b;">Areas for Improvement:</strong><br>
+                        <span style="color:#4b5563;">{weaknesses}</span>
+                    </td>
+                </tr>"""
+
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Interview Results</title></head>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+        <tr>
+            <td align="center">
+                <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:8px; border:1px solid #e5e7eb;">
+                    <tr>
+                        <td style="padding:40px 40px 35px 40px;">
+                            <h2 style="margin:0 0 25px 0; color:#020291; font-size:24px; font-weight:700;">
+                                Interview Results
+                            </h2>
+                            <p style="margin:0 0 12px 0; color:#374151; font-size:15px;">
+                                Dear <strong>{candidate_name}</strong>,
+                            </p>
+                            <p style="margin:0 0 25px 0; color:#374151; font-size:15px;">
+                                Your interview for the position of <strong>{job_title}</strong> has been evaluated.
+                                Here are your results:
+                            </p>
+
+                            <!-- Score & Recommendation Box -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;">
+                                <tr>
+                                    <td style="padding:20px 25px;">
+                                        <table width="100%">
+                                            <tr>
+                                                <td style="font-size:14px; color:#374151; padding:8px 0;">
+                                                    <strong>Overall Score:</strong>
+                                                    <span style="color:{score_color}; font-weight:700; font-size:18px; margin-left:8px;">
+                                                        {score_val:.1f}/100
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-size:14px; color:#374151; padding:8px 0;">
+                                                    <strong>Status:</strong>
+                                                    <span style="background:{rec_color}; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:13px; font-weight:600; margin-left:8px;">
+                                                        {rec_icon} {rec_label}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                {detail_rows}
+                            </table>
+
+                            <p style="margin:25px 0 0 0; font-size:14px; color:#374151;">
+                                Thank you for participating in the interview process. We appreciate your time and effort.
+                            </p>
+                            <p style="margin:20px 0 0 0; font-size:14px; color:#6b7280;">
+                                - <strong>AI Interview Platform Team</strong>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+
+                <table width="560" cellpadding="0" cellspacing="0" style="margin-top:15px;">
+                    <tr>
+                        <td align="center" style="font-size:12px; color:#9ca3af;">
+                            This is an automated message. Please do not reply.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        """
+
+        message = Mail(
+            from_email=Email(SENDER_EMAIL, "AI Interview Platform"),
+            to_emails=To(candidate_email),
+            subject=subject,
+            html_content=Content("text/html", html_content)
+        )
+
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+
+        print(f"[Email] Result notification sent to {candidate_email}, status: {response.status_code}")
+        return True
+
+    except Exception as e:
+        print(f"[Email] Failed to send result notification: {e}")
+        return False
+

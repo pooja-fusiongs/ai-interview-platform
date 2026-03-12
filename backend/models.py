@@ -134,6 +134,9 @@ class JobApplication(Base):
     current_position = Column(String, nullable=True)
     expected_salary = Column(String, nullable=True)
     availability = Column(String, nullable=True)  # Immediate, 2 weeks, 1 month, etc.
+    location = Column(String, nullable=True)
+    linkedin_url = Column(String, nullable=True)
+    current_ctc = Column(String, nullable=True)
     status = Column(String, default="Applied")  # Applied, Reviewed, Interview, Rejected, Hired
     applied_at = Column(DateTime(timezone=True), server_default=func.now())
 

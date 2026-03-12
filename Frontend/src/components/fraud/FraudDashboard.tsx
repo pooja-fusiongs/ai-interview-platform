@@ -238,10 +238,9 @@ const FraudDashboard: React.FC = () => {
   const fetchData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const [statsData, flaggedData] = await Promise.all([
-        fraudDetectionService.getDashboardStats(),
-        fraudDetectionService.getFlaggedInterviews(),
-      ]);
+      // Fetch stats first (triggers auto-analysis), then flagged
+      const statsData = await fraudDetectionService.getDashboardStats();
+      const flaggedData = await fraudDetectionService.getFlaggedInterviews();
       setStats(statsData);
       setFlagged(flaggedData.flagged_interviews || []);
       setError('');
@@ -265,8 +264,6 @@ const FraudDashboard: React.FC = () => {
           icon: <Security />,
           color: '#3b82f6',
           bgColor: '#eff6ff',
-          trend: '+12%',
-          trendUp: true,
           description: 'Interviews processed',
         },
         {
@@ -275,8 +272,6 @@ const FraudDashboard: React.FC = () => {
           icon: <Flag />,
           color: '#ef4444',
           bgColor: '#fef2f2',
-          trend: stats.flagged_count > 0 ? '+' + stats.flagged_count : '0',
-          trendUp: false,
           description: 'Require attention',
         },
         {
@@ -285,8 +280,6 @@ const FraudDashboard: React.FC = () => {
           icon: <CheckCircle />,
           color: '#22c55e',
           bgColor: '#f0fdf4',
-          trend: '+' + (stats.cleared_count || 0),
-          trendUp: true,
           description: 'Passed all checks',
         },
       ]
@@ -505,7 +498,7 @@ const FraudDashboard: React.FC = () => {
                 >
                   <CardContent sx={{ padding: '22px !important' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                      <CircularTrustScore value={Math.round(stats?.average_trust_score || 0)} size={100} />
+                      <CircularTrustScore value={Math.round((stats?.average_trust_score || 0) * 100)} size={100} />
                       <Box>
                         <Typography
                           sx={{
@@ -520,11 +513,11 @@ const FraudDashboard: React.FC = () => {
                           Average Trust
                         </Typography>
                         <Chip
-                          label={getTrustScoreColor(stats?.average_trust_score || 0).label}
+                          label={getTrustScoreColor(Math.round((stats?.average_trust_score || 0) * 100)).label}
                           size="small"
                           sx={{
                             backgroundColor: '#fff',
-                            color: getTrustScoreColor(stats?.average_trust_score || 0).text,
+                            color: getTrustScoreColor(Math.round((stats?.average_trust_score || 0) * 100)).text,
                             fontWeight: 600,
                             fontSize: '11px',
                             mb: 1,
@@ -648,7 +641,8 @@ const FraudDashboard: React.FC = () => {
                     </TableHead>
                     <TableBody>
                       {flagged.map((row, index) => {
-                        const trustColor = getTrustScoreColor(row.overall_trust_score || 0);
+                        const trustPct = Math.round((row.overall_trust_score || 0) * 100);
+                        const trustColor = getTrustScoreColor(trustPct);
                         const flagSeverity = getFlagSeverity(row.flag_count || 0);
 
                         return (
@@ -716,11 +710,11 @@ const FraudDashboard: React.FC = () => {
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '6px', sm: '12px' } }}>
                                   <Box sx={{ width: { xs: 'auto', sm: 90 } }}>
                                     <Typography sx={{ fontSize: { xs: '13px', sm: '15px' }, fontWeight: 700, color: trustColor.text, mb: { xs: 0, sm: '4px' } }}>
-                                      {row.overall_trust_score || 0}%
+                                      {trustPct}%
                                     </Typography>
                                     <LinearProgress
                                       variant="determinate"
-                                      value={row.overall_trust_score || 0}
+                                      value={trustPct}
                                       sx={{
                                         height: 6,
                                         borderRadius: 3,

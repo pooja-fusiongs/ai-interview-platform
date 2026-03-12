@@ -82,7 +82,7 @@ const PerformanceTracker: React.FC = () => {
         )}
         <Grid container spacing={3}>
           {feedbacks.map(fb => (
-            <Grid item xs={12} md={6} key={fb.id}>
+            <Grid size={{ xs: 12, md: 6 }} key={fb.id}>
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>

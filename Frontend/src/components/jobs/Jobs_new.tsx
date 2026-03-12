@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { jobService } from '../../services/jobService'
-import { jobApplicationService } from '../../services/jobApplicationService'
 import { 
   Box, 
   Typography, 
@@ -21,9 +20,8 @@ import {
 } from '@mui/material'
 import Navigation from '../layout/Sidebar'
 import JobCreationForm from './JobCreationForm'
-import JobApplicationForm from './JobApplicationForm'
 import JobDetails from './JobDetails'
-import { CanCreateJob, CanApplyJobs } from '../common/RoleBasedComponent'
+import { CanCreateJob } from '../common/RoleBasedComponent'
 import Tooltip from '@mui/material/Tooltip'
 
 const Jobs = () => {
@@ -33,11 +31,9 @@ const Jobs = () => {
   const [openAddJobDialog, setOpenAddJobDialog] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
   const [showJobDetails, setShowJobDetails] = useState(false)
-  const [openApplicationForm, setOpenApplicationForm] = useState(false)
   const [openFilterDialog, setOpenFilterDialog] = useState(false)
   const [allJobs, setAllJobs] = useState<any[]>([]) // Store all jobs with proper type
   const [filteredJobs, setFilteredJobs] = useState<any[]>([]) // Store filtered jobs with proper type
-  const [jobApplicationStatus, setJobApplicationStatus] = useState<{[key: number]: boolean}>({}) // Track application status for each job
   
   // Filter states
   const [filters, setFilters] = useState({
@@ -57,39 +53,6 @@ const Jobs = () => {
   useEffect(() => {
     loadJobsFromAPI()
   }, [])
-
-  // Check application status for jobs when user is a candidate
-  useEffect(() => {
-    if (user?.role === 'candidate' && user?.email && allJobs.length > 0) {
-      checkApplicationStatusForJobs()
-    }
-  }, [user, allJobs])
-
-  // Check application status for all jobs
-  const checkApplicationStatusForJobs = async () => {
-    if (!user?.email || user?.role !== 'candidate') return
-
-    const statusMap: {[key: number]: boolean} = {}
-    
-    try {
-      // Check application status for each job
-      for (const job of allJobs) {
-        try {
-          const status = await jobApplicationService.checkApplicationStatus(job.id, user.email!)
-          statusMap[job.id] = status.has_applied
-          console.log(`Job ${job.id} application status:`, status.has_applied)
-        } catch (error) {
-          console.error(`Error checking application status for job ${job.id}:`, error)
-          statusMap[job.id] = false
-        }
-      }
-
-      setJobApplicationStatus(statusMap)
-      console.log('Application status map:', statusMap)
-    } catch (error) {
-      console.error('Error checking application statuses:', error)
-    }
-  }
 
   // Filter jobs when search query or filters change
   useEffect(() => {
@@ -279,7 +242,7 @@ const Jobs = () => {
   }
 
   const handleOpenAddJobDialog = () => {
-    setOpenAddJobDialog(true)
+    navigate('/job-creation')
   }
 
   const handleCloseAddJobDialog = () => {
@@ -296,19 +259,6 @@ const Jobs = () => {
     setSelectedJob(null)
   }
 
-  const handleApplyNow = (job: any) => {
-    setSelectedJob(job)
-    setOpenApplicationForm(true)
-  }
-
-  const handleViewCandidates = (job: any) => {
-    // Navigate to candidate matching page with job ID as query parameter
-    navigate(`/candidate-matching?jobId=${job.id}&jobTitle=${encodeURIComponent(job.title)}`)
-  }
-
-  const handleCloseApplicationForm = () => {
-    setOpenApplicationForm(false)
-  }
 
   // Filter handlers
   const handleOpenFilterDialog = () => {
@@ -491,20 +441,9 @@ const Jobs = () => {
         <JobDetails
           selectedJob={selectedJob}
           onClose={handleCloseJobDetails}
-          onApplyNow={handleApplyNow}
-          onViewCandidates={handleViewCandidates}
           onJobSelect={(job) => {
-            // Update the selected job to show new job details
             setSelectedJob(job)
           }}
-        />
-        
-        {/* Job Application Dialog - Also needed in job details view */}
-        <JobApplicationForm 
-          open={openApplicationForm}
-          onClose={handleCloseApplicationForm}
-          job={selectedJob}
-          onApplicationSubmitted={checkApplicationStatusForJobs}
         />
       </Navigation>
     )
@@ -812,82 +751,6 @@ const Jobs = () => {
                     <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>View Details</Box>
                     <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Details</Box>
                   </Button>
-                  <CanApplyJobs fallback={
-                    <Button 
-                      variant="outlined" 
-                      size="small"
-                      disabled
-                      sx={{
-                        flex: 1,
-                        background: '#f1f5f9',
-                        color: '#94a3b8',
-                        border: '2px solid #e2e8f0',
-                        padding: '10px 16px',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        textTransform: 'none',
-                      }}
-                    >
-                      View Only
-                    </Button>
-                  }>
-                    {jobApplicationStatus[job.id] ? (
-                      // Already Applied Button
-                      <Button 
-                        size="small"
-                        disabled
-                        sx={{
-                          flex: 1,
-                          background: 'rgba(0, 0, 0, 0.26)',
-                          color: 'grey',
-                          // border: '2px solid grey',
-                          // padding: '10px 16px',
-                          borderRadius: '8px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          textTransform: 'none',
-                          cursor: 'not-allowed',
-                          '&:hover': {
-                            background: '#dcfce7',
-                            borderColor: '#bbf7d0',
-                          }
-                        }}
-                      >
-                        <i className="fas fa-check-circle" style={{ marginRight: '6px', fontSize: '12px' }}></i>
-                         Applied
-                      </Button>
-                    ) : (
-                      // Apply Now Button
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => {
-                          console.log('Apply Now clicked for job:', job.id)
-                          console.log('Application status:', jobApplicationStatus[job.id])
-                          handleApplyNow(job)
-                        }}
-                        sx={{
-                          flex: 1,
-                          padding: '10px 16px',
-                          borderRadius: '8px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          textTransform: 'none',
-                          background: 'linear-gradient(135deg, #020291 0%, #01016b 100%)',
-                          color: '#ffffff',
-                          '&:hover': {
-                            background: 'linear-gradient(135deg, #01016b 0%, #010150 100%)',
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 4px 12px rgba(2, 2, 145, 0.3)'
-                          }
-                        }}
-                      >
-                        <i className="fas fa-paper-plane" style={{ marginRight: '6px', fontSize: '12px' }}></i>
-                        Apply Now
-                      </Button>
-                    )}
-                  </CanApplyJobs>
                 </Box>
               </Card>
             </Box>
@@ -1320,13 +1183,6 @@ const Jobs = () => {
           onJobCreate={handleJobCreate}
         />
 
-        {/* Job Application Dialog */}
-        <JobApplicationForm 
-          open={openApplicationForm}
-          onClose={handleCloseApplicationForm}
-          job={selectedJob}
-          onApplicationSubmitted={checkApplicationStatusForJobs}
-        />
       </Box>
     </Navigation>
   )

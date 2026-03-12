@@ -151,7 +151,46 @@ def fraud_dashboard(
     """
     Fraud detection dashboard stats: total interviews, analysed count,
     flagged count, average trust score, and severity breakdown.
+    Auto-analyzes completed interviews that haven't been analyzed yet.
     """
+    # Auto-analyze completed interviews with recordings but no analysis
+    unanalyzed = (
+        db.query(VideoInterview)
+        .filter(
+            VideoInterview.status == "completed",
+            VideoInterview.recording_url.isnot(None),
+            ~VideoInterview.id.in_(
+                db.query(FraudAnalysis.video_interview_id)
+            ),
+        )
+        .all()
+    )
+    for vi in unanalyzed:
+        try:
+            base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+            recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
+            recording_path = os.path.normpath(recording_path)
+            results = run_real_analysis(vi.id, recording_path)
+            fraud = FraudAnalysis(
+                video_interview_id=vi.id,
+                voice_consistency_score=results["voice_consistency_score"],
+                voice_consistency_details=results["voice_consistency_details"],
+                lip_sync_score=results["lip_sync_score"],
+                lip_sync_details=results["lip_sync_details"],
+                body_movement_score=results["body_movement_score"],
+                body_movement_details=results["body_movement_details"],
+                overall_trust_score=results["overall_trust_score"],
+                flags=results["flags"],
+                flag_count=results["flag_count"],
+                analysis_status="completed",
+                analyzed_at=results["analyzed_at"],
+            )
+            db.add(fraud)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[FraudDashboard] Auto-analysis failed for VI {vi.id}: {e}")
+
     total_interviews = db.query(VideoInterview).count()
     analyzed_count = (
         db.query(FraudAnalysis)
@@ -258,6 +297,49 @@ def list_flagged_interviews(
         })
 
     return {"flagged_interviews": results, "total": len(results)}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/video/fraud/all  -- All analyses for live monitor
+# ---------------------------------------------------------------------------
+
+@router.get("/api/video/fraud/all")
+def list_all_analyses(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """All completed fraud analyses with interview context."""
+    analyses = (
+        db.query(FraudAnalysis)
+        .filter(FraudAnalysis.analysis_status == "completed")
+        .order_by(FraudAnalysis.analyzed_at.desc())
+        .all()
+    )
+    results = []
+    for fa in analyses:
+        vi = fa.video_interview
+        candidate_name = ""
+        job_title = ""
+        if vi:
+            if vi.candidate:
+                candidate_name = vi.candidate.full_name or vi.candidate.username or ""
+            if vi.job:
+                job_title = vi.job.title or ""
+        results.append({
+            "fraud_analysis_id": fa.id,
+            "video_interview_id": fa.video_interview_id,
+            "candidate_name": candidate_name,
+            "job_title": job_title,
+            "overall_trust_score": fa.overall_trust_score,
+            "flag_count": fa.flag_count,
+            "flags": fa.flags,
+            "voice_consistency_score": fa.voice_consistency_score,
+            "lip_sync_score": fa.lip_sync_score,
+            "body_movement_score": fa.body_movement_score,
+            "analysis_status": fa.analysis_status,
+            "analyzed_at": fa.analyzed_at.isoformat() if fa.analyzed_at else None,
+        })
+    return {"analyses": results, "total": len(results)}
 
 
 # ---------------------------------------------------------------------------

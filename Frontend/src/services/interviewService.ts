@@ -114,6 +114,13 @@ export const interviewService = {
     const response = await apiClient.get('/api/interviews');
     return response.data;
   },
+
+  /** Update hiring decision for a session (recruiter/admin only) */
+  updateHiringDecision: async (sessionId: number, decision: 'hire' | 'reject') => {
+    const response = await apiClient.post(`/api/interview/sessions/${sessionId}/hiring-decision`, { decision });
+    return response.data;
+  },
+
 };
 
 export default interviewService;

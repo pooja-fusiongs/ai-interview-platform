@@ -5,38 +5,41 @@ from models import PostHireFeedback, InterviewSession, QualityMetric, Recommenda
 
 def compute_prediction_accuracy(db: Session):
     """Compare interview recommendation against actual post-hire performance.
-    Accuracy = % of 'select' candidates with perf >= 7.0 + % of 'reject' never hired."""
-    feedbacks = db.query(PostHireFeedback).join(
-        InterviewSession, PostHireFeedback.session_id == InterviewSession.id
-    ).all()
-    
+    For feedback with session_id: check if recommendation matches performance.
+    For feedback without session_id: use performance score thresholds directly."""
+    feedbacks = db.query(PostHireFeedback).all()
     if not feedbacks:
         return {"accuracy": 0.0, "sample_size": 0}
     
     correct = 0
-    total = len(feedbacks)
-    
+    total = 0
+
     for fb in feedbacks:
-        session = db.query(InterviewSession).filter(InterviewSession.id == fb.session_id).first()
-        if not session:
-            continue
-        if session.recommendation == Recommendation.SELECT and fb.overall_performance_score >= 7.0:
-            correct += 1
-        elif session.recommendation == Recommendation.REJECT and fb.overall_performance_score < 5.0:
-            correct += 1
-        elif session.recommendation == Recommendation.NEXT_ROUND and 5.0 <= fb.overall_performance_score < 7.0:
-            correct += 1
-    
+        if fb.session_id:
+            session = db.query(InterviewSession).filter(InterviewSession.id == fb.session_id).first()
+            if session and session.recommendation:
+                total += 1
+                if session.recommendation == Recommendation.SELECT and fb.overall_performance_score >= 7.0:
+                    correct += 1
+                elif session.recommendation == Recommendation.REJECT and fb.overall_performance_score < 5.0:
+                    correct += 1
+                elif session.recommendation == Recommendation.NEXT_ROUND and 5.0 <= fb.overall_performance_score < 7.0:
+                    correct += 1
+        else:
+            # Without session, count as "accurate" if performance is good (>= 7.0)
+            # since they were hired (implying a positive recommendation)
+            total += 1
+            if fb.overall_performance_score >= 7.0:
+                correct += 1
+
     accuracy = correct / total if total > 0 else 0.0
-    return {"accuracy": round(accuracy, 4), "sample_size": total}
+    return {"accuracy": round(accuracy * 100, 2), "sample_size": total}
 
 def compute_score_correlation(db: Session):
-    """Pearson-like correlation between interview score and post-hire performance."""
+    """Pearson-like correlation between interview score and post-hire performance.
+    Only works with feedback that has linked sessions with scores."""
     feedbacks = db.query(PostHireFeedback).filter(PostHireFeedback.session_id.isnot(None)).all()
-    
-    if len(feedbacks) < 2:
-        return {"correlation": 0.0, "sample_size": len(feedbacks)}
-    
+
     interview_scores = []
     performance_scores = []
     
@@ -64,13 +67,16 @@ def compute_score_correlation(db: Session):
     return {"correlation": round(correlation, 4), "sample_size": n}
 
 def compute_hire_success_rate(db: Session):
-    """% of hired candidates still employed."""
+    """% of hired candidates with good performance (>= 7.0) or still employed."""
     total = db.query(PostHireFeedback).count()
     if total == 0:
         return {"success_rate": 0.0, "total": 0, "still_employed": 0}
+    successful = db.query(PostHireFeedback).filter(
+        (PostHireFeedback.overall_performance_score >= 7.0) | (PostHireFeedback.still_employed == True)
+    ).count()
     still_employed = db.query(PostHireFeedback).filter(PostHireFeedback.still_employed == True).count()
     return {
-        "success_rate": round(still_employed / total, 4),
+        "success_rate": round((successful / total) * 100, 2),
         "total": total,
         "still_employed": still_employed,
     }
@@ -112,26 +118,50 @@ def compute_all_metrics(db: Session):
     db.commit()
     return results
 
+def _categorize_feedback(fb, db):
+    """Categorize feedback into strong_hire/hire/no_hire based on session or performance."""
+    if fb.session_id:
+        session = db.query(InterviewSession).filter(InterviewSession.id == fb.session_id).first()
+        if session and session.recommendation:
+            if session.recommendation == Recommendation.SELECT:
+                return "strong_hire"
+            elif session.recommendation == Recommendation.NEXT_ROUND:
+                return "hire"
+            elif session.recommendation == Recommendation.REJECT:
+                return "no_hire"
+    # Fallback: categorize by performance score
+    if fb.overall_performance_score >= 8.0:
+        return "strong_hire"
+    elif fb.overall_performance_score >= 5.0:
+        return "hire"
+    else:
+        return "no_hire"
+
 def get_dashboard_data(db: Session):
     """Compile all quality metrics into a dashboard response."""
     acc = compute_prediction_accuracy(db)
     corr = compute_score_correlation(db)
     success = compute_hire_success_rate(db)
-    
-    # Average performance by recommendation
+
+    # Average performance by recommendation category
+    all_feedbacks = db.query(PostHireFeedback).all()
+    categories = {"strong_hire": [], "hire": [], "no_hire": []}
+
+    for fb in all_feedbacks:
+        cat = _categorize_feedback(fb, db)
+        categories[cat].append(fb.overall_performance_score)
+
     avg_by_rec = {}
-    for rec in [Recommendation.SELECT, Recommendation.NEXT_ROUND, Recommendation.REJECT]:
-        feedbacks = db.query(PostHireFeedback).join(
-            InterviewSession, PostHireFeedback.session_id == InterviewSession.id
-        ).filter(InterviewSession.recommendation == rec).all()
-        if feedbacks:
-            avg_by_rec[rec.value] = round(
-                sum(f.overall_performance_score for f in feedbacks) / len(feedbacks), 2
-            )
+    for cat, scores in categories.items():
+        if scores:
+            avg_by_rec[cat] = {
+                "count": len(scores),
+                "avg_performance": round(sum(scores) / len(scores), 2),
+            }
         else:
-            avg_by_rec[rec.value] = 0.0
-    
-    # Metrics over time (last 6 months placeholder)
+            avg_by_rec[cat] = {"count": 0, "avg_performance": 0.0}
+
+    # Metrics over time
     metrics_over_time = []
     recent = db.query(QualityMetric).filter(
         QualityMetric.metric_type == "prediction_accuracy"
@@ -144,10 +174,10 @@ def get_dashboard_data(db: Session):
         })
     
     return {
-        "overall_prediction_accuracy": acc["accuracy"],
-        "score_performance_correlation": corr["correlation"],
+        "prediction_accuracy": acc["accuracy"],
+        "correlation": corr["correlation"],
         "total_hires_tracked": success["total"],
-        "hire_success_rate": success["success_rate"],
-        "average_performance_by_recommendation": avg_by_rec,
+        "success_rate": success["success_rate"],
+        "by_recommendation": avg_by_rec,
         "metrics_over_time": metrics_over_time,
     }

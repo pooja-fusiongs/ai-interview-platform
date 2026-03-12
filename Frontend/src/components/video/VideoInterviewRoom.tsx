@@ -7,14 +7,13 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, AccessTime,
-  CallEnd,
   Check, SmartToy,
   FiberManualRecord
 } from '@mui/icons-material';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant, useRemoteParticipants, useTracks, useRoomContext } from '@livekit/components-react';
+import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks, useRoomContext } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
@@ -63,7 +62,6 @@ const InterviewRecorder: React.FC<{
   recordedChunksRef: React.MutableRefObject<Blob[]>;
   onRecordingChange: (recording: boolean) => void;
 }> = ({ shouldRecord, mediaRecorderRef, recordedChunksRef, onRecordingChange }) => {
-  const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   const allTracks = useTracks(
     [
@@ -285,13 +283,15 @@ const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Guest mode: no logged-in user — candidate joining from email link
+  const isGuest = !user;
   const [interview, setInterview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [callJoined, setCallJoined] = useState(false);
-  const [ending, setEnding] = useState(false);
+  const [, setEnding] = useState(false);
   const [showConsentDialog, setShowConsentDialog] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingRecording, setUploadingRecording] = useState(false);
@@ -313,19 +313,15 @@ const VideoInterviewRoom: React.FC = () => {
   useEffect(() => {
     const fetchInterview = async () => {
       try {
-        const data = await videoInterviewService.getInterview(Number(videoId));
+        const data = isGuest
+          ? await videoInterviewService.guestGetInterview(Number(videoId))
+          : await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
 
         // Fetch questions for this interview
         fetchQuestions();
         if (data.status === 'in_progress') {
-          if (user?.role === 'candidate') {
-            // Candidate joining an in-progress interview: show consent dialog first
-            setShowConsentDialog(true);
-          } else {
-            // Recruiter/Admin: auto-join directly
-            setIsActive(true);
-          }
+          setIsActive(true);
           if (data.started_at) {
             // Ensure timestamp is parsed as UTC (append 'Z' if no timezone info)
             const ts = data.started_at;
@@ -463,7 +459,9 @@ const VideoInterviewRoom: React.FC = () => {
       if (isActive && interview && !lkToken) {
         try {
           const roomName = `interview_${videoId}`;
-          const data = await videoInterviewService.joinInterview(Number(videoId));
+          const data = isGuest
+            ? await videoInterviewService.guestJoinInterview(Number(videoId))
+            : await videoInterviewService.joinInterview(Number(videoId));
           setLkToken(data.token);
           console.log('🎥 LiveKit token fetched and Agent dispatched for room:', roomName);
         } catch (err: any) {
@@ -473,7 +471,7 @@ const VideoInterviewRoom: React.FC = () => {
       }
     };
     fetchToken();
-  }, [isActive, interview, videoId, user, lkToken]);
+  }, [isActive, interview, videoId, user, lkToken, isGuest]);
 
   // Removed Jitsi initialization functions as we're moving to declarative LiveKit components
 
@@ -484,14 +482,16 @@ const VideoInterviewRoom: React.FC = () => {
     return `${h}:${m}:${s}`;
   };
 
+  const isUserCandidate = isGuest || user?.role === 'candidate';
+
   const handleStart = () => {
     console.log('🎬 handleStart called, user role:', user?.role);
-    if (user?.role === 'candidate') {
-      console.log('🎬 Showing consent dialog for candidate');
+    if (isUserCandidate) {
+      // Candidate: show consent dialog then join as interviewee
       setShowConsentDialog(true);
     } else {
+      // Recruiter/Admin: join as observer
       console.log('🎬 Recruiter joining as observer (no interview start)');
-      // Recruiter/Admin — join as observer WITHOUT starting the interview
       joinAsObserver();
     }
   };
@@ -507,38 +507,33 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
-  const startInterviewDirectly = async () => {
-    try {
-      await videoInterviewService.joinInterview(Number(videoId));
-      const data = await videoInterviewService.getInterview(Number(videoId));
-      setInterview(data);
-      setIsActive(true);
-      setElapsed(0);
-      toast.success('Interview started! Connecting to video call...');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to start interview');
-    }
-  };
 
   const handleConsentAccept = async () => {
     setShowConsentDialog(false);
     try {
       // Save consent to backend
-      await videoInterviewService.updateRecordingConsent(Number(videoId), true);
+      if (isGuest) {
+        await videoInterviewService.guestUpdateRecordingConsent(Number(videoId), true);
+      } else {
+        await videoInterviewService.updateRecordingConsent(Number(videoId), true);
+      }
 
       // If interview is already in_progress (started by recruiter), just join
       if (interview?.status !== 'in_progress') {
-        await videoInterviewService.joinInterview(Number(videoId));
-        // Refresh interview data to get the meeting URL
-        const data = await videoInterviewService.getInterview(Number(videoId));
-        setInterview(data);
+        if (isGuest) {
+          await videoInterviewService.guestJoinInterview(Number(videoId));
+          const data = await videoInterviewService.guestGetInterview(Number(videoId));
+          setInterview(data);
+        } else {
+          await videoInterviewService.joinInterview(Number(videoId));
+          const data = await videoInterviewService.getInterview(Number(videoId));
+          setInterview(data);
+        }
         setElapsed(0);
       }
 
       setIsActive(true);
       toast.success('Joining interview...');
-      // Recording starts automatically via InterviewRecorder component inside LiveKitRoom
-      // No manual startRecording() needed - no extra browser prompts!
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to join interview');
     }
@@ -579,22 +574,14 @@ const VideoInterviewRoom: React.FC = () => {
         });
         console.log(`🎬 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB, type: ${blob.type}`);
 
-        // Upload to backend (silently for candidates)
-        const isCandidate = user?.role === 'candidate';
         try {
-          if (!isCandidate) {
-            setUploadingRecording(true);
-            toast('Uploading recording...', { icon: '📤' });
-          }
-          await videoInterviewService.uploadRecording(Number(videoId), blob);
-          if (!isCandidate) {
-            toast.success('Recording uploaded successfully!');
-          }
+          setUploadingRecording(true);
+          toast('Uploading recording...', { icon: '📤' });
+          await (isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording)(Number(videoId), blob);
+          toast.success('Recording uploaded successfully!');
         } catch (err) {
           console.error('Failed to upload recording:', err);
-          if (!isCandidate) {
-            toast.error('Failed to upload recording.');
-          }
+          toast.error('Failed to upload recording.');
         } finally {
           setUploadingRecording(false);
           recordedChunksRef.current = [];
@@ -633,11 +620,11 @@ const VideoInterviewRoom: React.FC = () => {
           const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
           console.log(`🎬 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
           try {
-            await videoInterviewService.uploadRecording(Number(videoId), blob);
-            if (user?.role !== 'candidate') toast.success('Recording uploaded successfully!');
+            await (isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording)(Number(videoId), blob);
+            toast.success('Recording uploaded successfully!');
           } catch (err) {
             console.error('Failed to upload recording:', err);
-            if (user?.role !== 'candidate') toast.error('Failed to upload recording.');
+            toast.error('Failed to upload recording.');
           }
           recordedChunksRef.current = [];
           setIsRecording(false);
@@ -652,9 +639,14 @@ const VideoInterviewRoom: React.FC = () => {
       setCallJoined(false);
 
       // Tell backend the interview is completed (send max participant count)
-      const result = await videoInterviewService.endInterview(Number(videoId), {
-        max_participants: maxParticipantsRef.current
-      });
+      let result;
+      if (isGuest) {
+        result = await videoInterviewService.guestEndInterview(Number(videoId));
+      } else {
+        result = await videoInterviewService.endInterview(Number(videoId), {
+          max_participants: maxParticipantsRef.current
+        });
+      }
       setInterview(result);
 
       if (result.status === 'no_show') {
@@ -663,32 +655,17 @@ const VideoInterviewRoom: React.FC = () => {
         toast.success('Interview completed!');
       }
 
-      // Redirect ONLY for recruiters to detail page
-      // Candidates stay on same page to see completion message
-      if (user?.role !== 'candidate') {
+      if (!isGuest) {
         setTimeout(() => {
           navigate(`/video-detail/${videoId}`);
         }, 1500);
       }
+      // Guest stays on the page — will see "Interview Completed" state
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     } finally {
       setEnding(false);
       endingRef.current = false;
-    }
-  };
-
-  const handleCopyMeetingLink = async () => {
-    const meetingUrl = interview?.zoom_meeting_url;
-    if (meetingUrl) {
-      try {
-        await navigator.clipboard.writeText(meetingUrl);
-        toast.success('Meeting link copied! Share with candidate.');
-      } catch (err) {
-        toast.error('Failed to copy link');
-      }
-    } else {
-      toast.error('Meeting link not available yet. Start the interview first.');
     }
   };
 
@@ -708,12 +685,11 @@ const VideoInterviewRoom: React.FC = () => {
 
   const isCompleted = interview?.status === 'completed';
 
-  return (
-    <Navigation>
+  const content = (
       <Box sx={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 64px)',
+        height: isGuest ? '100vh' : 'calc(100vh - 64px)',
         width: '100%',
         overflow: 'hidden',
         backgroundColor: '#f8fafc'
@@ -729,18 +705,20 @@ const VideoInterviewRoom: React.FC = () => {
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton
-              onClick={() => navigate('/video-interviews')}
-              sx={{
-                color: '#64748b',
-                '&:hover': {
-                  background: '#f1f5f9',
-                  color: '#020291'
-                }
-              }}
-            >
-              <ArrowBack />
-            </IconButton>
+            {!isGuest && (
+              <IconButton
+                onClick={() => navigate('/video-interviews')}
+                sx={{
+                  color: '#64748b',
+                  '&:hover': {
+                    background: '#f1f5f9',
+                    color: '#020291'
+                  }
+                }}
+              >
+                <ArrowBack />
+              </IconButton>
+            )}
             <Box>
               <Typography sx={{
                 fontSize: '18px',
@@ -1001,8 +979,8 @@ const VideoInterviewRoom: React.FC = () => {
                   >
                     {lkToken ? (
                       <LiveKitRoom
-                        video={user?.role === 'candidate'} // Only candidate has video
-                        audio={user?.role === 'candidate'} // Only candidate has audio (recruiter is observer)
+                        video={isUserCandidate}
+                        audio={isUserCandidate}
                         token={lkToken}
                         serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
                         connect={true}
@@ -1010,22 +988,19 @@ const VideoInterviewRoom: React.FC = () => {
                           setCallJoined(true);
                           setParticipantCount(1);
                           maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
-                          const role = user?.role === 'candidate' ? 'Connected to interview!' : 'Joined as observer';
-                          toast.success(role);
+                          toast.success(isUserCandidate ? 'Joined interview' : 'Joined as observer');
                         }}
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >
                         <AgentEventsSuppressor />
+                        <InterviewRecorder
+                          shouldRecord={isUserCandidate && callJoined}
+                          mediaRecorderRef={mediaRecorderRef}
+                          recordedChunksRef={recordedChunksRef}
+                          onRecordingChange={setIsRecording}
+                        />
                         <VideoTilesGrid onEndCall={handleEnd} />
                         <RoomAudioRenderer />
-                        {user?.role === 'candidate' && (
-                          <InterviewRecorder
-                            shouldRecord={isActive}
-                            mediaRecorderRef={mediaRecorderRef}
-                            recordedChunksRef={recordedChunksRef}
-                            onRecordingChange={handleRecordingChange}
-                          />
-                        )}
                       </LiveKitRoom>
                     ) : (
                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -1057,20 +1032,9 @@ const VideoInterviewRoom: React.FC = () => {
                     }}>
                       Interview Completed
                     </Typography>
-                    {user?.role === 'candidate' ? (
-                      <>
-                        <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 1.5, lineHeight: 1.6 }}>
-                          Thank you for attending the interview!
-                        </Typography>
-                        <Typography sx={{ color: '#94a3b8', fontSize: '14px', lineHeight: 1.6 }}>
-                          The recruiter will review your interview and get back to you soon.
-                        </Typography>
-                      </>
-                    ) : (
-                      <Typography sx={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>
-                        Interview completed. You can close this window.
-                      </Typography>
-                    )}
+                    <Typography sx={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>
+                      Interview completed. You can close this window.
+                    </Typography>
                   </Box>
                 ) : (
                   <Box sx={{ textAlign: 'center', p: { xs: 3, sm: 5 } }}>
@@ -1103,7 +1067,7 @@ const VideoInterviewRoom: React.FC = () => {
                       maxWidth: '500px',
                       mx: 'auto'
                     }}>
-                      {user?.role === 'candidate'
+                      {isUserCandidate
                         ? 'AI will conduct the interview and automatically score responses'
                         : 'Join as observer to watch the AI interview (mic and camera will be disabled)'}
                     </Typography>
@@ -1128,7 +1092,7 @@ const VideoInterviewRoom: React.FC = () => {
                         }
                       }}
                     >
-                      {user?.role === 'candidate' ? 'Start AI Interview' : 'Join as Observer'}
+                      {isUserCandidate ? 'Start AI Interview' : 'Join as Observer'}
                     </Button>
                   </Box>
                 )}
@@ -1209,8 +1173,9 @@ const VideoInterviewRoom: React.FC = () => {
           </DialogActions>
         </Dialog>
       </Box>
-    </Navigation>
   );
+
+  return isGuest ? content : <Navigation>{content}</Navigation>;
 };
 
 export default VideoInterviewRoom;

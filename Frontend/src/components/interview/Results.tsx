@@ -39,6 +39,8 @@ const Results = () => {
   const [loading, setLoading] = useState(true)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [error, setError] = useState('')
+  const [hiringStatus, setHiringStatus] = useState<string | null>(null)
+  const [hiringLoading, setHiringLoading] = useState(false)
 
   // Search and Filter state
   const [searchTerm, setSearchTerm] = useState('')
@@ -72,6 +74,19 @@ const Results = () => {
       else next.add(id)
       return next
     })
+  }
+
+  const handleHiringDecision = async (decision: 'hire' | 'reject') => {
+    if (!selectedSession) return
+    setHiringLoading(true)
+    try {
+      const result = await interviewService.updateHiringDecision(selectedSession.id, decision)
+      setHiringStatus(result.status)
+    } catch {
+      setError('Failed to update hiring decision')
+    } finally {
+      setHiringLoading(false)
+    }
   }
 
   // Get unique job titles and candidate names for dropdown filters
@@ -139,6 +154,7 @@ const Results = () => {
       setError('')
       const session = await interviewService.getResults(id)
       setSelectedSession(session)
+      setHiringStatus(null)
       setExpandedQuestions(new Set())
       setExpandedExpected(new Set())
     } catch (err: any) {
@@ -376,6 +392,16 @@ const Results = () => {
               }
               sx={{ fontWeight: 700, fontSize: '12px', backgroundColor: rec.bg, color: rec.color, height: '30px' }}
             />
+            {hiringStatus && (
+              <Chip
+                label={hiringStatus === 'Hired' ? 'Hired' : 'Rejected'}
+                sx={{
+                  fontWeight: 700, fontSize: '12px', height: '30px',
+                  backgroundColor: hiringStatus === 'Hired' ? '#dcfce7' : '#fee2e2',
+                  color: hiringStatus === 'Hired' ? '#16a34a' : '#dc2626',
+                }}
+              />
+            )}
           </Box>
 
           <CardContent sx={{ padding: { xs: '16px', md: '24px' } }}>
@@ -451,8 +477,56 @@ const Results = () => {
                 )}
               </Box>
             </Box>
+
+            {/* Hiring Decision */}
+            {selectedSession.status === 'scored' && !hiringStatus && (
+              <Box sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '14px 20px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, #f8fafc 0%, #EEF0FF 100%)',
+                border: '1px solid #e2e8f0',
+              }}>
+                <Box>
+                  <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                    Make your hiring decision
+                  </Typography>
+                  <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                    AI recommends: {rec.label}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: '10px' }}>
+                  <Button
+                    variant="contained"
+                    disabled={hiringLoading}
+                    onClick={() => handleHiringDecision('hire')}
+                    sx={{
+                      textTransform: 'none', fontWeight: 700, fontSize: '13px', borderRadius: '8px',
+                      padding: '8px 24px', backgroundColor: '#16a34a', boxShadow: 'none',
+                      '&:hover': { backgroundColor: '#15803d', boxShadow: '0 2px 8px rgba(22,163,74,0.3)' },
+                    }}
+                  >
+                    <i className="fas fa-check" style={{ marginRight: 8, fontSize: 11 }}></i>
+                    {hiringLoading ? 'Updating...' : 'Hire'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    disabled={hiringLoading}
+                    onClick={() => handleHiringDecision('reject')}
+                    sx={{
+                      textTransform: 'none', fontWeight: 600, fontSize: '13px', borderRadius: '8px',
+                      padding: '8px 24px', borderColor: '#e2e8f0', color: '#dc2626',
+                      '&:hover': { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+                    }}
+                  >
+                    <i className="fas fa-times" style={{ marginRight: 8, fontSize: 11 }}></i>
+                    Reject
+                  </Button>
+                </Box>
+              </Box>
+            )}
           </CardContent>
         </Card>
+
 
         {/* ─── 7. Per-question breakdown (Accordion) ───────────────────────── */}
         {selectedSession.answers && selectedSession.answers.length > 0 && (
@@ -1101,6 +1175,7 @@ const Results = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
     </Navigation>
   )
 }

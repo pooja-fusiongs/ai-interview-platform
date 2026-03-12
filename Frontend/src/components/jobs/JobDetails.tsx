@@ -8,26 +8,31 @@ import {
   Chip,
   TextField,
   Snackbar,
-  Alert
+  Alert,
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  MenuItem,
+  CircularProgress
 } from '@mui/material'
-import { CanApplyJobs, CanViewCandidates } from '../common/RoleBasedComponent'
 import { apiClient } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import { jobApplicationService } from '../../services/jobApplicationService'
 import { jobService } from '../../services/jobService'
+import { recruiterService } from '../../services/recruiterService'
+import { toast as hotToast } from 'react-hot-toast'
 
 interface JobDetailsProps {
   selectedJob: any;
   onClose: () => void;
-  onApplyNow: (job: any) => void;
   onJobSelect?: (job: any) => void;
-  onViewCandidates?: (job: any) => void;
 }
 
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'Open':
-      return { bg: '#e8f5e8', color: '#2e7d32' }
+      return { bg: '#dcfce7', color: '#16a34a' }
     case 'Closed':
       return { bg: '#ffebee', color: '#c62828' }
     case 'Paused':
@@ -39,841 +44,454 @@ const getStatusColor = (status: string) => {
   }
 }
 
+// Collapsible description block to avoid pushing candidates section too far down
+const DescriptionBlock: React.FC<{ text: string; canEdit?: boolean; onEdit?: () => void }> = ({ text, canEdit, onEdit }) => {
+  const [expanded, setExpanded] = useState(false)
+  const MAX_LENGTH = 300
+  const isLong = text.length > MAX_LENGTH
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+      <Box sx={{ flex: 1 }}>
+        <Typography sx={{ fontSize: '14px', color: '#64748b', lineHeight: 1.6 }}>
+          {isLong && !expanded ? text.slice(0, MAX_LENGTH) + '...' : text}
+        </Typography>
+        {isLong && (
+          <Button
+            onClick={() => setExpanded(!expanded)}
+            sx={{
+              textTransform: 'none', fontSize: '13px', fontWeight: 600,
+              color: '#020291', p: 0, minWidth: 'auto', mt: 0.5,
+              '&:hover': { background: 'transparent', textDecoration: 'underline' }
+            }}
+          >
+            {expanded ? 'Show less' : 'Read more'}
+          </Button>
+        )}
+      </Box>
+      {canEdit && (
+        <IconButton size="small" onClick={onEdit}
+          sx={{ color: '#94a3b8', mt: '-4px', '&:hover': { color: '#020291' } }}>
+          <i className="fas fa-pen" style={{ fontSize: 12 }}></i>
+        </IconButton>
+      )}
+    </Box>
+  )
+}
+
 const JobDetails: React.FC<JobDetailsProps> = ({
   selectedJob,
   onClose,
-  onApplyNow,
   onJobSelect,
-  onViewCandidates
 }) => {
-  const [applicationStats, setApplicationStats] = useState({
-    total: 0,
-    applied: 0,
-    interview: 0,
-    selected: 0,
-    rejected: 0
-  })
-  const [loading, setLoading] = useState(true)
+  const [candidates, setCandidates] = useState<any[]>([])
+  const [candidatesLoading, setCandidatesLoading] = useState(true)
   const [similarJobs, setSimilarJobs] = useState<any[]>([])
-  const [otherJobs, setOtherJobs] = useState<any[]>([])
-  const [jobsLoading, setJobsLoading] = useState(true)
-  const [hasApplied, setHasApplied] = useState(false)
+  const [similarJobsLoading, setSimilarJobsLoading] = useState(true)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
   const [editedDescription, setEditedDescription] = useState('')
   const [savingDesc, setSavingDesc] = useState(false)
   const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
+
+  // Question generation & transcript state per candidate
+  const [generatingQuestions, setGeneratingQuestions] = useState<Record<number, boolean>>({})
+  const [candidateQuestionSets, setCandidateQuestionSets] = useState<Record<number, string>>({}) // candidateId -> questionSetId
+  const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false)
+  const [transcriptCandidate, setTranscriptCandidate] = useState<any>(null)
+  const [transcriptText, setTranscriptText] = useState('')
+  const [uploadingTranscript, setUploadingTranscript] = useState(false)
+
+  // Add candidate dialog
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [addForm, setAddForm] = useState({
+    name: '', email: '', phone: '', location: '', linkedin: '',
+    notice_period: '', current_ctc: '', expected_ctc: '',
+    interview_datetime: '', duration_minutes: '30',
+    resume: null as File | null
+  })
+  const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({})
+  const [addFormTouched, setAddFormTouched] = useState<Record<string, boolean>>({})
+
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  // Fetch application statistics for this job
+  // Fetch candidates for this job
   useEffect(() => {
-    const fetchApplicationStats = async () => {
+    const fetchCandidates = async () => {
       try {
-        setLoading(true)
-        console.log('🔍 Fetching applications for job ID:', selectedJob.id)
+        setCandidatesLoading(true)
         const response = await apiClient.get(`/api/job/${selectedJob.id}/applications`)
-        
-        console.log('📡 API Response:', response)
-        console.log('📡 Response status:', response.status)
-        console.log('� Response data:', response.data)
-        
         if (response.status === 200) {
-          const data = response.data
-          const totalApps = data.total_applications || 0
-
-          // Use backend-computed stats (cross-references InterviewSession data)
-          if (data.stats) {
-            const stats = {
-              total: totalApps,
-              applied: data.stats.applied || 0,
-              interview: data.stats.interview || 0,
-              selected: data.stats.selected || 0,
-              rejected: data.stats.rejected || 0
-            }
-            console.log('Stats from backend:', stats)
-            setApplicationStats(stats)
-          } else {
-            // Fallback: all as applied
-            setApplicationStats({
-              total: totalApps,
-              applied: totalApps,
-              interview: 0,
-              selected: 0,
-              rejected: 0
-            })
-          }
+          setCandidates(response.data.applications || [])
         }
-      } catch (error: any) {
-        console.error('❌ Error fetching application stats:', error)
-        console.error('❌ Error details:', error.response?.data)
-        // Keep default values on error
+      } catch (error) {
+        console.error('Error fetching candidates:', error)
       } finally {
-        setLoading(false)
+        setCandidatesLoading(false)
       }
     }
-
-    if (selectedJob?.id) {
-      fetchApplicationStats()
-    }
+    if (selectedJob?.id) fetchCandidates()
   }, [selectedJob?.id])
 
-  // Check if current user has already applied for this job
+  // Fetch existing question sets to know which candidates have questions
   useEffect(() => {
-    const checkApplicationStatus = async () => {
-      if (!selectedJob?.id || !user?.email || user?.role !== 'candidate') {
-        return
-      }
-
+    const fetchQuestionSets = async () => {
       try {
-        const status = await jobApplicationService.checkApplicationStatus(selectedJob.id, user.email)
-        setHasApplied(status.has_applied)
-      } catch (error) {
-        console.error('Error checking application status:', error)
-        setHasApplied(false)
-      }
-    }
-
-    checkApplicationStatus()
-  }, [selectedJob?.id, user?.email, user?.role])
-
-  // Fetch similar jobs and other jobs
-  useEffect(() => {
-    const fetchRelatedJobs = async () => {
-      try {
-        setJobsLoading(true)
-        console.log('🔍 Fetching related jobs for:', selectedJob.title)
-        console.log('🔍 Selected job data:', {
-          id: selectedJob.id,
-          department: selectedJob.department,
-          job_type: selectedJob.job_type || selectedJob.type,
-          experience_level: selectedJob.experience_level || selectedJob.experienceLevel
-        })
-        
-        const response = await apiClient.get('/api/jobs')
-        
-        if (response.status === 200) {
-          const allJobs = response.data
-          console.log('📊 Total jobs from API:', allJobs.length)
-          
-          // Filter out current job
-          const otherJobsList = allJobs.filter((job: any) => job.id !== selectedJob.id)
-          console.log('📊 Jobs after excluding current:', otherJobsList.length)
-          
-          // Similar jobs: same department, job type, or experience level, limit to 3
-          const similar = otherJobsList.filter((job: any) => {
-            const selectedDepartment = selectedJob.department
-            const selectedJobType = selectedJob.job_type || selectedJob.type
-            const selectedExperience = selectedJob.experience_level || selectedJob.experienceLevel
-            
-            const isDepartmentMatch = job.department === selectedDepartment
-            const isTypeMatch = job.job_type === selectedJobType
-            const isExperienceMatch = job.experience_level === selectedExperience
-            
-            console.log(`� hComparing job "${job.title}":`, {
-              department: `${job.department} === ${selectedDepartment} = ${isDepartmentMatch}`,
-              jobType: `${job.job_type} === ${selectedJobType} = ${isTypeMatch}`,
-              experience: `${job.experience_level} === ${selectedExperience} = ${isExperienceMatch}`
-            })
-            
-            return isDepartmentMatch || isTypeMatch || isExperienceMatch
-          }).slice(0, 3)
-          
-          console.log('📊 Similar jobs found:', similar.length)
-          console.log('🔍 Similar jobs:', similar.map((j: any) => ({ id: j.id, title: j.title, department: j.department })))
-          
-          // Other jobs: ALL jobs except current job and similar jobs
-          const otherJobsFiltered = otherJobsList.filter((job: any) => 
-            !similar.some((s: any) => s.id === job.id)
-          ).slice(0, 5)
-          
-          console.log('📊 Other jobs found:', otherJobsFiltered.length)
-          console.log('🔍 Other jobs:', otherJobsFiltered.map((j: any) => ({ id: j.id, title: j.title, department: j.department })))
-          
-          setSimilarJobs(similar)
-          setOtherJobs(otherJobsFiltered)
+        const response = await apiClient.get('/api/interview/question-sets')
+        const sets = response.data || []
+        const mapping: Record<number, string> = {}
+        for (const qs of sets) {
+          if (qs.job_id === selectedJob.id && qs.application_id) {
+            mapping[qs.application_id] = qs.id
+          }
         }
+        setCandidateQuestionSets(mapping)
       } catch (error) {
-        console.error('❌ Error fetching related jobs:', error)
-        // Keep empty arrays on error
-      } finally {
-        setJobsLoading(false)
+        console.error('Error fetching question sets:', error)
       }
     }
+    if (selectedJob?.id) fetchQuestionSets()
+  }, [selectedJob?.id])
 
-    if (selectedJob?.id) {
-      fetchRelatedJobs()
+  // Generate questions for a candidate
+  const handleGenerateQuestions = async (candidateId: number) => {
+    setGeneratingQuestions(prev => ({ ...prev, [candidateId]: true }))
+    try {
+      await recruiterService.generateQuestions(selectedJob.id, candidateId)
+      hotToast.success('Questions generated successfully!')
+      // Refresh question sets to get the session ID
+      const response = await apiClient.get('/api/interview/question-sets')
+      const sets = response.data || []
+      const mapping: Record<number, string> = { ...candidateQuestionSets }
+      for (const qs of sets) {
+        if (qs.job_id === selectedJob.id && qs.application_id) {
+          mapping[qs.application_id] = qs.id
+        }
+      }
+      setCandidateQuestionSets(mapping)
+    } catch (err: any) {
+      hotToast.error(err.response?.data?.detail || 'Failed to generate questions')
+    } finally {
+      setGeneratingQuestions(prev => ({ ...prev, [candidateId]: false }))
     }
-  }, [selectedJob?.id, selectedJob?.department, selectedJob?.job_type, selectedJob?.type, selectedJob?.experience_level, selectedJob?.experienceLevel])
+  }
 
-  // Helper functions for job display
-  const getJobIcon = (department: string) => {
-    const icons: { [key: string]: string } = {
-      'Engineering': 'fas fa-code',
-      'Design': 'fas fa-palette',
-      'Product': 'fas fa-lightbulb',
-      'Marketing': 'fas fa-bullhorn',
-      'Sales': 'fas fa-chart-line',
-      'HR': 'fas fa-users'
+  // Upload transcript and generate score
+  const handleUploadTranscript = async () => {
+    if (!transcriptText.trim() || !transcriptCandidate) return
+    setUploadingTranscript(true)
+    try {
+      // Step 1: Upload transcript
+      await apiClient.post(`/api/candidates/${transcriptCandidate.id}/upload-transcript`, {
+        job_id: selectedJob.id,
+        transcript_text: transcriptText.trim()
+      })
+      // Step 2: Generate score
+      await apiClient.post(`/api/candidates/${transcriptCandidate.id}/generate-score`, {
+        job_id: selectedJob.id
+      })
+      hotToast.success('Score generated successfully!')
+      setTranscriptDialogOpen(false)
+      setTranscriptText('')
+      setTranscriptCandidate(null)
+      // Redirect to results page
+      navigate('/results')
+    } catch (err: any) {
+      hotToast.error(err.response?.data?.detail || 'Failed to upload transcript')
+    } finally {
+      setUploadingTranscript(false)
     }
-    return icons[department] || 'fas fa-briefcase'
   }
 
-  const getJobColor = (department: string) => {
-    const colors: { [key: string]: string } = {
-      'Engineering': '#3b82f6',
-      'Design': '#8b5cf6',
-      'Product': '#059669',
-      'Marketing': '#020291',
-      'Sales': '#ef4444',
-      'HR': '#06b6d4'
+  // Fetch similar jobs (same company or category, excluding current job)
+  useEffect(() => {
+    const fetchSimilarJobs = async () => {
+      try {
+        setSimilarJobsLoading(true)
+        const data = await jobService.getJobs({ limit: 20 })
+        const jobs = Array.isArray(data) ? data : data.jobs || []
+        const filtered = jobs
+          .filter((j: any) => j.id !== selectedJob.id)
+          .slice(0, 5)
+        setSimilarJobs(filtered)
+      } catch (error) {
+        console.error('Error fetching similar jobs:', error)
+      } finally {
+        setSimilarJobsLoading(false)
+      }
     }
-    return colors[department] || '#6366f1'
+    if (selectedJob?.id) fetchSimilarJobs()
+  }, [selectedJob?.id])
+
+  // Helper functions
+  const getExperienceLevel = (job: any) => job.experience_level || job.experienceLevel || 'Not specified'
+  const getNumberOfQuestions = (job: any) => job.number_of_questions || job.numberOfQuestions || 10
+
+  const getFormattedDate = (job: any) => {
+    const dateStr = job.created_at || job.createdAt
+    if (!dateStr) return ''
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    } catch { return '' }
   }
 
-  const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-    
-    if (diffInHours < 1) return 'Just now'
-    if (diffInHours < 24) return `${diffInHours}h ago`
-    const diffInDays = Math.floor(diffInHours / 24)
-    return `${diffInDays}d ago`
+  // Add candidate validation
+  const validateAddField = (field: string, value: string): string => {
+    switch (field) {
+      case 'name':
+        if (!value.trim()) return 'Full name is required'
+        if (value.trim().length < 2) return 'Name must be at least 2 characters'
+        return ''
+      case 'email':
+        if (!value.trim()) return 'Email is required'
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email'
+        return ''
+      case 'linkedin':
+        if (value.trim() && !value.trim().startsWith('http')) return 'Please enter a valid URL'
+        return ''
+      default:
+        return ''
+    }
   }
 
-  // Helper function to get experience level from either field format
-  const getExperienceLevel = (job: any) => {
-    return job.experience_level || job.experienceLevel || 'Not specified'
+  const handleAddFieldChange = (field: string, value: string) => {
+    setAddForm(prev => ({ ...prev, [field]: value }))
+    if (addFormTouched[field]) {
+      setAddFormErrors(prev => ({ ...prev, [field]: validateAddField(field, value) }))
+    }
   }
 
-  // Helper function to get job type from either field format
-  const getJobType = (job: any) => {
-    return job.job_type || job.type || 'Not specified'
+  const handleAddFieldBlur = (field: string, value: string) => {
+    setAddFormTouched(prev => ({ ...prev, [field]: true }))
+    setAddFormErrors(prev => ({ ...prev, [field]: validateAddField(field, value) }))
   }
 
-  // Helper function to get work mode from either field format
-  const getWorkMode = (job: any) => {
-    return job.work_mode || job.workMode || 'On-site'
-  }
+  const handleAddCandidate = async () => {
+    const errors: Record<string, string> = {
+      name: validateAddField('name', addForm.name),
+      email: validateAddField('email', addForm.email),
+      resume: addForm.resume ? '' : 'Resume is required',
+    }
+    if (addForm.linkedin) errors.linkedin = validateAddField('linkedin', addForm.linkedin)
+    setAddFormErrors(errors)
+    setAddFormTouched({ name: true, email: true, resume: true, linkedin: true })
 
-  // Helper function to get number of questions from either field format
-  const getNumberOfQuestions = (job: any) => {
-    return job.number_of_questions || job.numberOfQuestions || 10
-  }
+    if (Object.values(errors).some(e => e !== '')) {
+      hotToast.error('Please fix the errors before submitting')
+      return
+    }
 
-  // Helper function to get interview type from either field format
-  const getInterviewType = (job: any) => {
-    return job.interview_type || job.interviewType || 'AI Video Interview'
+    setSubmitting(true)
+    try {
+      const fd = new FormData()
+      fd.append('name', addForm.name)
+      fd.append('email', addForm.email)
+      fd.append('phone', addForm.phone)
+      fd.append('location', addForm.location)
+      fd.append('linkedin_url', addForm.linkedin)
+      fd.append('notice_period', addForm.notice_period)
+      fd.append('current_ctc', addForm.current_ctc)
+      fd.append('expected_ctc', addForm.expected_ctc)
+      fd.append('interview_datetime', addForm.interview_datetime)
+      fd.append('duration_minutes', addForm.duration_minutes || '30')
+      fd.append('experience_years', '0')
+      fd.append('current_position', '')
+      if (addForm.resume) fd.append('resume', addForm.resume)
+
+      await recruiterService.addCandidate(selectedJob.id, fd)
+      hotToast.success('Candidate added successfully')
+      setAddDialogOpen(false)
+      setAddForm({
+        name: '', email: '', phone: '', location: '', linkedin: '',
+        notice_period: '', current_ctc: '', expected_ctc: '',
+        interview_datetime: '', duration_minutes: '30', resume: null
+      })
+      setAddFormErrors({})
+      setAddFormTouched({})
+      // Refresh candidates
+      const response = await apiClient.get(`/api/job/${selectedJob.id}/applications`)
+      if (response.status === 200) setCandidates(response.data.applications || [])
+    } catch (err: any) {
+      hotToast.error(err.response?.data?.detail || 'Failed to add candidate')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
-    <Box sx={{
-      display: 'flex',
-      flexDirection: { xs: 'column', lg: 'row' },
-      minHeight: '100vh',
-      background: '#f8fafc',
-      overflow: 'hidden',
-      maxWidth: '100vw'
-    }}>
-      {/* Main Content Area */}
+    <Box sx={{ width: '100%', py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
+      {/* Back Button */}
+      <Button
+        onClick={onClose}
+        sx={{
+          textTransform: 'none', fontWeight: 500, fontSize: '14px', color: '#64748b', mb: 3,
+          '&:hover': { color: '#020291', background: 'transparent' },
+        }}
+      >
+        <i className="fas fa-arrow-left" style={{ marginRight: 8, fontSize: 12 }}></i> Back to Jobs
+      </Button>
+
+      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+      {/* Left Column - Job Details + Candidates */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+
+      {/* Job Summary Card */}
       <Box sx={{
-        flex: 1,
-        padding: { xs: '10px', sm: '16px', md: '24px 32px' },
-        overflow: 'auto',
-        maxWidth: { xs: '100%', lg: 'calc(100% - 320px)' },
-        m: { xs: '4px', sm: '12px', md: '20px' },
-        borderRadius: { xs: '8px', md: '20px' },
-        background: '#fff', border: '1px solid #fff',
-        boxSizing: 'border-box',
-        '&::-webkit-scrollbar': {
-          width: '6px'
-        },
-        '&::-webkit-scrollbar-track': {
-          background: 'transparent'
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: '#cbd5e1',
-          borderRadius: '3px',
-          '&:hover': {
-            background: '#94a3b8'
-          }
-        }
+        p: { xs: '16px', md: '24px' },
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0',
+        background: '#fff',
+        mb: 3,
       }}>
-        {/* Header with Back Button */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '16px',
-          background: '#fff',
-          padding: { xs: '10px 0px', sm: '16px 0px' },
-          borderBottom: '1px solid #e2e8f0',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100
-        }}>
-          <Button
-            onClick={onClose}
-            sx={{
-              color: '#64748b',
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: { xs: '14px', sm: '16px' },
-              padding: { xs: '6px 10px', sm: '8px 16px' },
-              borderRadius: '8px',
-              minWidth: 'auto',
-              '&:hover': {
-                background: '#f1f5f9'
-              }
-            }}
-          >
-            <i className="fas fa-arrow-left" style={{ marginRight: '8px' }}></i>
-            Back to Jobs
-          </Button>
-          
-          <Box sx={{ display: 'flex', gap: '12px' }}>
-            <IconButton sx={{ color: '#64748b' }}>
-              <i className="fas fa-bookmark"></i>
-            </IconButton>
-            <IconButton sx={{ color: '#64748b' }}>
-              <i className="fas fa-share"></i>
-            </IconButton>
-          </Box>
-        </Box>
-
-        {/* Job Title and Company */}
-        <Box sx={{ 
-          marginBottom: '16px',
-          background: 'white',
-          borderRadius: '16px'
-        }}>
-          <Typography variant="h3" sx={{
-            fontSize: { xs: '24px', sm: '28px', md: '36px' },
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}>
-            {selectedJob.title}
-          </Typography>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', sm: '16px' }, marginBottom: '20px' }}>
-            <Box sx={{
-              width: { xs: 40, sm: 48 },
-              height: { xs: 40, sm: 48 },
-              borderRadius: '8px',
-              background: selectedJob.color,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <i className={selectedJob.icon} style={{ color: 'white', fontSize: '20px' }}></i>
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontSize: { xs: '16px', sm: '18px' }, fontWeight: 600, color: '#1e293b' }}>
-                {selectedJob.company}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#64748b', wordBreak: 'break-word' }}>
-                {selectedJob.location} • {selectedJob.type} • {selectedJob.postedTime}
-              </Typography>
-            </Box>
-          </Box>
-
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: '8px', sm: '12px' }, alignItems: 'center' }}>
-            <CanApplyJobs fallback={
-              <Button
-                disabled
-                sx={{
-                  background: '#f1f5f9',
-                  color: '#94a3b8',
-                  padding: { xs: '8px 16px', sm: '12px 32px' },
-                  borderRadius: '8px',
-                  fontSize: { xs: '13px', sm: '16px' },
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  cursor: 'not-allowed'
-                }}
-              >
-                View Only
-              </Button>
-            }>
-              {hasApplied ? (
-                // Already Applied state
-                <Button
-                  disabled
-                  sx={{
-                    background: '#dcfce7',
-                    color: '#166534',
-                    border: '2px solid #bbf7d0',
-                    padding: { xs: '8px 16px', sm: '12px 32px' },
-                    borderRadius: '8px',
-                    fontSize: { xs: '13px', sm: '16px' },
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    cursor: 'not-allowed'
-                  }}
-                >
-                  <i className="fas fa-check-circle" style={{ marginRight: '8px' }}></i>
-                   Applied
-                </Button>
-              ) : (
-                // Apply Now state (default)
-                <Button
-                  onClick={() => onApplyNow(selectedJob)}
-                  sx={{
-                    background: 'rgba(2, 2, 145, 0.1)',
-                    color: '#020291',
-                    padding: { xs: '8px 16px', sm: '12px 32px' },
-                    borderRadius: '8px',
-                    fontSize: { xs: '13px', sm: '16px' },
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      background: 'rgba(2, 2, 145, 0.2)'
-                    }
-                  }}
-                >
-                  Apply Now
-                </Button>
-              )}
-            </CanApplyJobs>
-
-            <CanViewCandidates>
-              {onViewCandidates && (
-                <Button
-                  onClick={() => onViewCandidates(selectedJob)}
-                  sx={{
-                    background: 'rgba(139, 92, 246, 0.1)',
-                    color: '#8b5cf6',
-                    padding: { xs: '8px 16px', sm: '12px 32px' },
-                    borderRadius: '8px',
-                    fontSize: { xs: '13px', sm: '16px' },
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      background: 'rgba(139, 92, 246, 0.2)'
-                    }
-                  }}
-                >
-                  <i className="fas fa-users" style={{ marginRight: '8px' }}></i>
-                  View Candidates
-                </Button>
-              )}
-              {(user?.role === 'recruiter' || user?.role === 'admin') && (
-                <Button
-                  onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
-                  sx={{
-                    background: '#EEF0FF',
-                    color: '#020291',
-                    padding: { xs: '8px 16px', sm: '12px 32px' },
-                    borderRadius: '8px',
-                    fontSize: { xs: '13px', sm: '16px' },
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      background: 'rgba(2, 2, 145, 0.2)'
-                    }
-                  }}
-                >
-                  <i className="fas fa-user-plus" style={{ marginRight: '8px' }}></i>
-                  Manage Candidates
-                </Button>
-              )}
-            </CanViewCandidates>
-            <IconButton sx={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0'
-            }}>
-              <i className="fas fa-star" style={{ color: 'primary.light' }}></i>
-            </IconButton>
-            <IconButton sx={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0'
-            }}>
-              <i className="fas fa-share" style={{ color: '#64748b' }}></i>
-            </IconButton>
-          </Box>
-        </Box>
-
-        {/* Job Status and Stats */}
-        <Box sx={{ 
-          marginBottom: '16px',
-          background: 'white',
-          borderRadius: '16px'
-        }}>
-          <Typography variant="h5" sx={{
-            fontSize: '20px',
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}>
-            Job Status & Statistics
-          </Typography>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', sm: '16px' }, marginBottom: '20px', flexWrap: 'wrap' }}>
+        {/* Title + Status + Edit */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Typography sx={{ fontSize: { xs: '20px', md: '24px' }, fontWeight: 700, color: '#1e293b' }}>
+              {selectedJob.title}
+            </Typography>
             <Chip
               label={selectedJob.status}
+              size="small"
               sx={{
                 background: getStatusColor(selectedJob.status).bg,
                 color: getStatusColor(selectedJob.status).color,
-                fontSize: { xs: '12px', sm: '14px' },
-                fontWeight: 600,
-                height: '32px',
-                borderRadius: '8px',
-                padding: '0 12px'
+                fontSize: '12px', fontWeight: 600, height: '24px',
               }}
             />
-            {/* Application Deadline */}
-            {selectedJob.application_deadline && (
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: { xs: '6px 10px', sm: '8px 12px' },
-                backgroundColor: '#EEF0FF',
-                borderRadius: '8px',
-                border: '1px solid #020291'
-              }}>
-                <i className="fas fa-clock" style={{ color: '#020291', fontSize: '12px' }}></i>
-                <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, color: '#020291', fontWeight: 600 }}>
-                  Deadlined: {new Date(selectedJob.application_deadline).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                  })}
-                </Typography>
-              </Box>
-            )}
           </Box>
-
-          <Box sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-            gap: { xs: '8px', sm: '12px', md: '16px' },
-            marginBottom: '20px'
-          }}>
-            <Box sx={{
-              textAlign: 'center',
-              padding: { xs: '10px', sm: '16px' },
-              backgroundColor: '#f8fafc',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0'
-            }}>
-              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#020291' }}>
-                {loading ? '...' : applicationStats.applied}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
-                Applied
-              </Typography>
-            </Box>
-            <Box sx={{
-              textAlign: 'center',
-              padding: { xs: '10px', sm: '16px' },
-              backgroundColor: '#f8fafc',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0'
-            }}>
-              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#8b5cf6' }}>
-                {loading ? '...' : applicationStats.interview}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
-                Interview Pending
-              </Typography>
-            </Box>
-            <Box sx={{
-              textAlign: 'center',
-              padding: { xs: '10px', sm: '16px' },
-              backgroundColor: '#f8fafc',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0'
-            }}>
-              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#10b981' }}>
-                {loading ? '...' : applicationStats.selected}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
-                Selected
-              </Typography>
-            </Box>
-            <Box sx={{
-              textAlign: 'center',
-              padding: { xs: '10px', sm: '16px' },
-              backgroundColor: '#f8fafc',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0'
-            }}>
-              <Typography sx={{ fontSize: { xs: '20px', sm: '24px' }, fontWeight: 700, color: '#ef4444' }}>
-                {loading ? '...' : applicationStats.rejected}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '11px', sm: '12px' }, color: '#64748b', fontWeight: 500 }}>
-                Rejected
-              </Typography>
-            </Box>
-          </Box>
-
-          
-        </Box>
-
-        {/* Interview Configuration */}
-        <Box sx={{
-          marginBottom: '16px',
-          background: 'white',
-          padding: { xs: '12px', sm: '24px' },
-          borderRadius: '16px'
-        }}>
-          <Typography variant="h5" sx={{
-            fontSize: '20px',
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}>
-            Interview Configuration
-          </Typography>
-          
-          <Box sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
-            gap: { xs: '12px', md: '20px' },
-            marginBottom: '20px'
-          }}>
-            <Box>
-              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
-                Experience Level
-              </Typography>
-              <Chip
-                label={getExperienceLevel(selectedJob)}
-                sx={{
-                  background: '#dbeafe',
-                  color: '#1e40af',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  height: '32px'
-                }}
-              />
-            </Box>
-            <Box>
-              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
-                Number of Questions
-              </Typography>
-              <Chip
-                label={`${getNumberOfQuestions(selectedJob)} Questions`}
-                sx={{
-                  background: '#fef3c7',
-                  color: '#92400e',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  height: '32px'
-                }}
-              />
-            </Box>
-            <Box>
-              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
-                Interview Type
-              </Typography>
-              <Chip
-                label={getInterviewType(selectedJob)}
-                sx={{
-                  background: '#dcfce7',
-                  color: '#166534',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  height: '32px'
-                }}
-              />
-            </Box>
-          </Box>
-
-          {/* AI Status Indicators */}
-          <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '12px' }}>
-            AI Status Indicators
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Box sx={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                background: selectedJob.resumeParsingEnabled ? '#10b981' : '#ef4444'
-              }} />
-              <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
-                Resume Parsing {selectedJob.resumeParsingEnabled ? 'Enabled' : 'Disabled'}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Box sx={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                background: selectedJob.questionGenerationReady ? '#10b981' : '#ef4444'
-              }} />
-              <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
-                Question Generation {selectedJob.questionGenerationReady ? 'Ready' : 'Not Ready'}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Box sx={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                background: selectedJob.expertReviewStatus === 'completed' ? '#10b981' : '#020291'
-              }} />
-              <Typography sx={{ fontSize: '14px', color: '#64748b' }}>
-                Expert Review {selectedJob.expertReviewStatus === 'completed' ? 'Completed' : 'Pending'}
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-
-        {/* About This Role */}
-        <Box sx={{
-          marginBottom: '8px',
-          background: 'white',
-          padding: { xs: '10px', sm: '16px' },
-          borderRadius: '16px'
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <Typography variant="h5" sx={{
-              fontSize: '20px',
-              fontWeight: 700,
-              color: '#1e293b',
-            }}>
-              About This Role
-            </Typography>
-            {(user?.role === 'recruiter' || user?.role === 'admin') && !isEditingDesc && (
-              <IconButton
-                onClick={() => {
-                  setEditedDescription(selectedJob.fullDescription || selectedJob.description || '')
-                  setIsEditingDesc(true)
-                }}
-                sx={{ color: '#64748b', '&:hover': { color: '#020291', background: 'rgba(245,158,11,0.1)' } }}
-                size="small"
-              >
-                <i className="fas fa-pen" style={{ fontSize: 14 }}></i>
-              </IconButton>
-            )}
-          </Box>
-          {isEditingDesc ? (
-            <Box>
-              <TextField
-                multiline
-                minRows={4}
-                maxRows={12}
-                fullWidth
-                value={editedDescription}
-                onChange={(e) => setEditedDescription(e.target.value)}
-                sx={{
-                  mb: '12px',
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    '& fieldset': { borderColor: '#e2e8f0' },
-                    '&:hover fieldset': { borderColor: '#020291' },
-                    '&.Mui-focused fieldset': { borderColor: '#020291' },
-                  }
-                }}
-              />
-              <Box sx={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <Button
-                  onClick={() => setIsEditingDesc(false)}
-                  disabled={savingDesc}
-                  sx={{
-                    textTransform: 'none', fontWeight: 600, fontSize: '13px',
-                    color: '#64748b', borderRadius: '8px', padding: '6px 16px',
-                    '&:hover': { background: '#f1f5f9' }
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  disabled={savingDesc}
-                  onClick={async () => {
-                    try {
-                      setSavingDesc(true)
-                      await jobService.updateJob(selectedJob.id, { description: editedDescription })
-                      selectedJob.description = editedDescription
-                      selectedJob.fullDescription = editedDescription
-                      setIsEditingDesc(false)
-                      setToast({ open: true, message: 'Description updated successfully', severity: 'success' })
-                    } catch (err) {
-                      console.error('Error updating description:', err)
-                      setToast({ open: true, message: 'Failed to update description', severity: 'error' })
-                    } finally {
-                      setSavingDesc(false)
-                    }
-                  }}
-                  sx={{
-                    textTransform: 'none', fontWeight: 600, fontSize: '13px',
-                    borderRadius: '8px', padding: '6px 20px',
-                    background: 'linear-gradient(135deg, #020291, #020291)',
-                    '&:hover': { background: '#020291' }
-                  }}
-                >
-                  {savingDesc ? 'Saving...' : 'Save'}
-                </Button>
-              </Box>
-            </Box>
-          ) : (
-            <Typography sx={{
-              fontSize: { xs: '14px', sm: '16px' },
-              color: '#64748b',
-              lineHeight: 1.6,
-              marginBottom: 0,
-              wordBreak: 'break-word'
-            }}>
-              {selectedJob.fullDescription || selectedJob.description}
-            </Typography>
+          {(user?.role === 'recruiter' || user?.role === 'admin') && (
+            <Button
+              onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
+              variant="outlined"
+              sx={{
+                textTransform: 'none', fontWeight: 600, fontSize: '13px',
+                borderRadius: '8px', borderColor: '#e2e8f0', color: '#1e293b',
+                '&:hover': { borderColor: '#020291', background: '#f8fafc' }
+              }}
+            >
+              <i className="fas fa-pen" style={{ marginRight: 6, fontSize: 12 }}></i> Edit
+            </Button>
           )}
         </Box>
 
-        {/* Required Skills */}
-        {selectedJob.skills_required && (() => {
+        {/* Meta info row */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1.5, md: 3 }, mb: 2, color: '#64748b', fontSize: '13px' }}>
+          {selectedJob.company && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <i className="fas fa-building" style={{ fontSize: 12 }}></i>
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{selectedJob.company}</Typography>
+            </Box>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <i className="fas fa-briefcase" style={{ fontSize: 12 }}></i>
+            <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{getExperienceLevel(selectedJob)} experience</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <i className="fas fa-users" style={{ fontSize: 12 }}></i>
+            <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{candidates.length} candidate{candidates.length !== 1 ? 's' : ''}</Typography>
+          </Box>
+          {getFormattedDate(selectedJob) && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <i className="fas fa-clock" style={{ fontSize: 12 }}></i>
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{getFormattedDate(selectedJob)}</Typography>
+            </Box>
+          )}
+        </Box>
+
+        {/* Description - commented out as requested */}
+        {/* <Typography sx={{ fontSize: '14px', color: '#64748b', lineHeight: 1.6 }}>
+          {selectedJob.fullDescription || selectedJob.description}
+        </Typography> */}
+
+        {/* Inline editable description */}
+        {isEditingDesc ? (
+          <Box>
+            <TextField
+              multiline minRows={3} maxRows={10} fullWidth
+              value={editedDescription}
+              onChange={(e) => setEditedDescription(e.target.value)}
+              sx={{
+                mb: '12px',
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px', fontSize: '14px',
+                  '& fieldset': { borderColor: '#e2e8f0' },
+                  '&:hover fieldset': { borderColor: '#020291' },
+                  '&.Mui-focused fieldset': { borderColor: '#020291' },
+                }
+              }}
+            />
+            <Box sx={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <Button onClick={() => setIsEditingDesc(false)} disabled={savingDesc}
+                sx={{ textTransform: 'none', fontWeight: 600, fontSize: '13px', color: '#64748b', borderRadius: '8px', '&:hover': { background: '#f1f5f9' } }}>
+                Cancel
+              </Button>
+              <Button variant="contained" disabled={savingDesc}
+                onClick={async () => {
+                  try {
+                    setSavingDesc(true)
+                    await jobService.updateJob(selectedJob.id, { description: editedDescription })
+                    selectedJob.description = editedDescription
+                    selectedJob.fullDescription = editedDescription
+                    setIsEditingDesc(false)
+                    setToast({ open: true, message: 'Description updated', severity: 'success' })
+                  } catch {
+                    setToast({ open: true, message: 'Failed to update', severity: 'error' })
+                  } finally { setSavingDesc(false) }
+                }}
+                sx={{
+                  textTransform: 'none', fontWeight: 600, fontSize: '13px', borderRadius: '8px',
+                  background: '#020291', '&:hover': { background: '#06109E' }
+                }}>
+                {savingDesc ? 'Saving...' : 'Save'}
+              </Button>
+            </Box>
+          </Box>
+        ) : (
+          (selectedJob.fullDescription || selectedJob.description) && (
+            <DescriptionBlock
+              text={selectedJob.fullDescription || selectedJob.description}
+              canEdit={user?.role === 'recruiter' || user?.role === 'admin'}
+              onEdit={() => {
+                setEditedDescription(selectedJob.fullDescription || selectedJob.description || '')
+                setIsEditingDesc(true)
+              }}
+            />
+          )
+        )}
+
+        {/* Skills */}
+        {(() => {
           let skills: string[] = []
-          try {
-            if (typeof selectedJob.skills_required === 'string') {
-              skills = JSON.parse(selectedJob.skills_required)
-            } else if (Array.isArray(selectedJob.skills_required)) {
-              skills = selectedJob.skills_required
-            }
-          } catch {
-            // Try comma-separated fallback
-            if (typeof selectedJob.skills_required === 'string') {
-              skills = selectedJob.skills_required.split(',').map((s: string) => s.trim()).filter(Boolean)
+          // Try requirements array first (mapped from skills_required)
+          if (Array.isArray(selectedJob.requirements) && selectedJob.requirements.length > 0) {
+            skills = selectedJob.requirements
+          } else if (selectedJob.skills_required) {
+            try {
+              if (typeof selectedJob.skills_required === 'string') {
+                skills = JSON.parse(selectedJob.skills_required)
+              } else if (Array.isArray(selectedJob.skills_required)) {
+                skills = selectedJob.skills_required
+              }
+            } catch {
+              if (typeof selectedJob.skills_required === 'string') {
+                skills = selectedJob.skills_required.split(',').map((s: string) => s.trim()).filter(Boolean)
+              }
             }
           }
           if (!skills.length) return null
           return (
-            <Box sx={{
-              marginBottom: '8px',
-              background: 'white',
-              padding: { xs: '10px', sm: '16px' },
-              borderRadius: '16px'
-            }}>
-              <Typography variant="h5" sx={{
-                fontSize: '20px',
-                fontWeight: 700,
-                color: '#1e293b',
-                marginBottom: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <i className="fas fa-code" style={{ color: '#6366f1', fontSize: '18px' }}></i>
-                Required Skills
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <Box sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {skills.map((skill: string, index: number) => (
-                  <Chip
-                    key={index}
-                    label={skill}
+                  <Chip key={index} label={skill} size="small"
                     sx={{
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      height: '32px',
-                      backgroundColor: '#ede9fe',
-                      color: '#6d28d9',
-                      border: '1px solid #ddd6fe',
-                      '&:hover': { backgroundColor: '#ddd6fe' }
+                      fontSize: '12px', fontWeight: 500, height: '26px',
+                      backgroundColor: '#ede9fe', color: '#6d28d9', border: '1px solid #ddd6fe',
                     }}
                   />
                 ))}
@@ -881,398 +499,535 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             </Box>
           )
         })()}
-
-        {/* Qualifications */}
-        {selectedJob.requirements && (
-          <Box sx={{
-            marginBottom: '8px',
-            background: 'white',
-            padding: { xs: '10px', sm: '16px' },
-            borderRadius: '16px'
-          }}>
-            <Typography variant="h5" sx={{
-              fontSize: '20px',
-              fontWeight: 700,
-              color: '#1e293b',
-              marginBottom: '10px'
-            }}>
-              Skills
-            </Typography>
-            <Box component="ul" sx={{
-              margin: 0,
-              paddingLeft: { xs: '16px', sm: '20px' },
-              '& li': {
-                fontSize: { xs: '14px', sm: '16px' },
-                color: '#64748b',
-                lineHeight: 1.6,
-                marginBottom: '8px',
-                wordBreak: 'break-word'
-              }
-            }}>
-              {selectedJob.requirements.map((req: string, index: number) => (
-                <Typography component="li" key={index}>
-                  {req}
-                </Typography>
-              ))}
-            </Box>
-          </Box>
-        )}
-
-        {/* Responsibilities */}
-        {selectedJob.responsibilities && (
-          <Box sx={{
-            marginBottom: '8px',
-            background: 'white',
-            padding: { xs: '10px', sm: '16px' },
-            borderRadius: '16px'
-          }}>
-            <Typography variant="h5" sx={{
-              fontSize: '20px',
-              fontWeight: 700,
-              color: '#1e293b',
-              marginBottom: '10px'
-            }}>
-              Responsibility
-            </Typography>
-            <Box component="ul" sx={{
-              margin: 0,
-              paddingLeft: { xs: '16px', sm: '20px' },
-              '& li': {
-                fontSize: { xs: '14px', sm: '16px' },
-                color: '#64748b',
-                lineHeight: 1.6,
-                marginBottom: '8px',
-                wordBreak: 'break-word'
-              }
-            }}>
-              {selectedJob.responsibilities.map((resp: string, index: number) => (
-                <Typography component="li" key={index}>
-                  {resp}
-                </Typography>
-              ))}
-            </Box>
-          </Box>
-        )}
-
-        {/* Attachments */}
-        {/* <Box sx={{ 
-          marginBottom: '16px',
-          background: 'white',
-          padding: '24px',
-          borderRadius: '16px'
-        }}>
-          <Typography variant="h5" sx={{
-            fontSize: '20px',
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}>
-            Attachments
-          </Typography>
-          <Box sx={{ display: 'flex', gap: '16px' }}>
-            <Box sx={{
-              width: 120,
-              height: 80,
-              borderRadius: '8px',
-              background: '#1e293b',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '12px',
-              fontWeight: 600,
-              position: 'relative',
-              cursor: 'pointer'
-            }}>
-              Job Description
-              <Box sx={{
-                position: 'absolute',
-                top: '8px',
-                left: '8px',
-                background: '#007bff',
-                borderRadius: '4px',
-                padding: '2px 6px',
-                fontSize: '10px'
-              }}>
-                Job Description
-              </Box>
-            </Box>
-            <Box sx={{
-              width: 120,
-              height: 80,
-              borderRadius: '8px',
-              background: '#f1f5f9',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              cursor: 'pointer',
-              border: '1px solid #e2e8f0'
-            }}>
-              <Typography sx={{ 
-                fontSize: '12px', 
-                fontWeight: 600, 
-                color: '#64748b',
-                textAlign: 'center'
-              }}>
-                Company Brochure
-              </Typography>
-              <Box sx={{
-                position: 'absolute',
-                top: '8px',
-                left: '8px',
-                background: '#10b981',
-                borderRadius: '4px',
-                padding: '2px 6px',
-                fontSize: '10px',
-                color: 'white'
-              }}>
-                Company Brochure
-              </Box>
-            </Box>
-          </Box>
-        </Box> */}
       </Box>
 
-      {/* Right Sidebar */}
-      <Box sx={{
-        width: { xs: 'auto', lg: 320 },
-        background: 'white',
-        borderLeft: { xs: 'none', lg: '1px solid #e2e8f0' },
-        borderTop: { xs: '1px solid #e2e8f0', lg: 'none' },
-        padding: { xs: '12px', sm: '16px', md: '24px' },
-        mt: { xs: '0', lg: '20px' },
-        mb: { xs: '8px', lg: 0 },
-        mx: { xs: '4px', sm: '12px', lg: 0 },
-        overflow: 'hidden',
-        borderRadius: { xs: '8px', lg: '10px' },
-        boxSizing: 'border-box',
-        '&::-webkit-scrollbar': {
-          width: '6px'
-        },
-        '&::-webkit-scrollbar-track': {
-          background: 'transparent'
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: '#cbd5e1',
-          borderRadius: '3px',
-          '&:hover': {
-            background: '#94a3b8'
-          }
-        }
-      }}>
-        {/* Similar Jobs Header */}
-        <Typography variant="h6" sx={{
-          fontSize: '18px',
-          fontWeight: 700,
-          color: '#1e293b',
-          marginBottom: '20px'
-        }}>
-          Similar Jobs
+      {/* Candidates Section */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>
+          Candidates
         </Typography>
-
-        {/* Job Cards */}
-        {jobsLoading ? (
-          <Box sx={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-            Loading similar jobs...
-          </Box>
-        ) : similarJobs.length === 0 ? (
-          <Box sx={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-            No similar jobs found
-          </Box>
-        ) : (
-          similarJobs.map((job) => (
-            <Box
-              key={job.id}
-              onClick={() => onJobSelect && onJobSelect(job)}
-              sx={{
-              padding: { xs: '12px', sm: '16px' },
-              border: '1px solid #e2e8f0',
-              borderRadius: '12px',
-              marginBottom: { xs: '10px', sm: '16px' },
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-              overflow: 'hidden',
-              '&:hover': {
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-                borderColor: getJobColor(job.department || 'Engineering'),
-                transform: 'translateY(-2px)'
-              }
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: '8px', sm: '12px' } }}>
-                <Box sx={{
-                  width: { xs: 32, sm: 40 },
-                  height: { xs: 32, sm: 40 },
-                  borderRadius: '8px',
-                  background: getJobColor(job.department || 'Engineering'),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  <i className={getJobIcon(job.department || 'Engineering')} style={{ color: 'white', fontSize: '14px' }}></i>
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                  <Typography sx={{
-                    fontSize: { xs: '14px', sm: '16px' },
-                    fontWeight: 600,
-                    color: '#1e293b',
-                    marginBottom: '4px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {job.title}
-                  </Typography>
-                  <Typography sx={{
-                    fontSize: { xs: '12px', sm: '14px' },
-                    color: '#64748b',
-                    marginBottom: '8px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {job.company} • {job.location}
-                  </Typography>
-                  <Typography sx={{
-                    fontSize: { xs: '11px', sm: '12px' },
-                    color: '#64748b',
-                    marginBottom: '4px',
-                    wordBreak: 'break-word'
-                  }}>
-                    {getJobType(job)} • {getWorkMode(job)} • {getExperienceLevel(job)}
-                  </Typography>
-                  <Typography sx={{
-                    fontSize: { xs: '11px', sm: '12px' },
-                    color: '#94a3b8'
-                  }}>
-                    {getTimeAgo(job.created_at)} • {job.status}
-                  </Typography>
-                </Box>
-                <IconButton sx={{
-                  color: '#cbd5e1',
-                  padding: '4px',
-                  flexShrink: 0,
-                  '&:hover': { color: 'primary.light' }
-                }}>
-                  <i className="fas fa-bookmark" style={{ fontSize: '14px' }}></i>
-                </IconButton>
-              </Box>
-            </Box>
-          ))
+        {(user?.role === 'recruiter' || user?.role === 'admin') && (
+          <Button
+            onClick={() => setAddDialogOpen(true)}
+            sx={{
+              background: '#020291', color: 'white', borderRadius: '8px',
+              textTransform: 'none', fontWeight: 600, fontSize: '13px', px: 2.5,
+              '&:hover': { background: '#06109E' }
+            }}
+          >
+            <i className="fas fa-plus" style={{ marginRight: 6, fontSize: 11 }}></i> Add candidate
+          </Button>
         )}
+      </Box>
 
-        {/* Other Jobs Section */}
-        <Box sx={{ marginTop: '32px' }}>
-          <Typography variant="h6" sx={{
-            fontSize: '18px',
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '20px'
-          }}>
-            Other Jobs
+      {/* Candidate List */}
+      {candidatesLoading ? (
+        <Box sx={{ textAlign: 'center', py: 4, color: '#64748b' }}>Loading candidates...</Box>
+      ) : candidates.length === 0 ? (
+        <Box sx={{
+          textAlign: 'center', py: 6, borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff'
+        }}>
+          <i className="fas fa-users" style={{ fontSize: 32, color: '#cbd5e1', marginBottom: 12 }}></i>
+          <Typography sx={{ fontSize: '15px', color: '#64748b', mb: 1 }}>No candidates yet</Typography>
+          <Typography sx={{ fontSize: '13px', color: '#94a3b8' }}>Add candidates to get started</Typography>
+        </Box>
+      ) : (() => {
+        const totalPages = Math.ceil(candidates.length / itemsPerPage)
+        const paginatedCandidates = candidates.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+        return (
+          <>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {paginatedCandidates.map((candidate: any) => {
+                const hasQuestions = !!candidateQuestionSets[candidate.id]
+                const questionSetId = candidateQuestionSets[candidate.id]
+                const isGenerating = generatingQuestions[candidate.id]
+                return (
+                <Box key={candidate.id} sx={{
+                  p: '14px 18px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff',
+                  transition: 'all 0.2s',
+                  '&:hover': { borderColor: '#02029140', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }
+                }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{
+                      width: 36, height: 36, fontSize: '14px', fontWeight: 700,
+                      background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', color: '#475569'
+                    }}>
+                      {(candidate.applicant_name || 'U').charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                        {candidate.applicant_name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, md: 2 }, alignItems: 'center' }}>
+                        <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                          <i className="fas fa-envelope" style={{ marginRight: 4, fontSize: 10 }}></i>
+                          {candidate.applicant_email}
+                        </Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                          {candidate.duration_minutes || 30} min
+                        </Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                          <i className="fas fa-list" style={{ marginRight: 4, fontSize: 10 }}></i>
+                          {getNumberOfQuestions(selectedJob)} questions
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Chip
+                      label={candidate.status || 'Applied'}
+                      size="small"
+                      sx={{
+                        fontSize: '11px', fontWeight: 600, height: '22px',
+                        backgroundColor: getStatusColor(candidate.status === 'Added by Recruiter' ? 'Open' : candidate.status || 'Applied').bg,
+                        color: getStatusColor(candidate.status === 'Added by Recruiter' ? 'Open' : candidate.status || 'Applied').color,
+                      }}
+                    />
+                  </Box>
+
+                  {/* Action Buttons */}
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1.5, ml: '52px' }}>
+                    {!hasQuestions ? (
+                      <Button
+                        onClick={() => handleGenerateQuestions(candidate.id)}
+                        disabled={isGenerating}
+                        size="small"
+                        sx={{
+                          textTransform: 'none', fontSize: '12px', fontWeight: 600,
+                          borderRadius: '6px', px: 1.5, py: 0.5, height: '30px',
+                          background: '#020291', color: 'white',
+                          '&:hover': { background: '#06109E' },
+                          '&:disabled': { opacity: 0.6, color: 'white' }
+                        }}
+                      >
+                        {isGenerating ? (
+                          <><CircularProgress size={12} sx={{ mr: 0.5, color: 'white' }} /> Generating...</>
+                        ) : (
+                          <><i className="fas fa-magic" style={{ marginRight: 5, fontSize: 10 }}></i> Generate Questions</>
+                        )}
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
+                          size="small"
+                          sx={{
+                            textTransform: 'none', fontSize: '12px', fontWeight: 600,
+                            borderRadius: '6px', px: 1.5, py: 0.5, height: '30px',
+                            border: '1px solid #020291', color: '#020291', background: 'white',
+                            '&:hover': { background: '#EEF0FF' }
+                          }}
+                        >
+                          <i className="fas fa-eye" style={{ marginRight: 5, fontSize: 10 }}></i> Review
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setTranscriptCandidate(candidate)
+                            setTranscriptText('')
+                            setTranscriptDialogOpen(true)
+                          }}
+                          size="small"
+                          sx={{
+                            textTransform: 'none', fontSize: '12px', fontWeight: 600,
+                            borderRadius: '6px', px: 1.5, py: 0.5, height: '30px',
+                            background: '#16a34a', color: 'white',
+                            '&:hover': { background: '#15803d' }
+                          }}
+                        >
+                          <i className="fas fa-file-upload" style={{ marginRight: 5, fontSize: 10 }}></i> Upload Transcript
+                        </Button>
+                      </>
+                    )}
+                  </Box>
+                </Box>
+                )
+              })}
+            </Box>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Box sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                mt: 2, p: '12px 16px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0'
+              }}>
+                <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                  Showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, candidates.length)} of {candidates.length} candidates
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    sx={{
+                      minWidth: '36px', height: '36px', borderRadius: '8px', p: 0,
+                      color: '#64748b', border: '1px solid #e2e8f0', background: '#fff',
+                      '&:hover': { borderColor: '#020291', color: '#020291' },
+                      '&:disabled': { opacity: 0.4 }
+                    }}
+                  >
+                    <i className="fas fa-chevron-left" style={{ fontSize: 12 }} />
+                  </Button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <Button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      sx={{
+                        minWidth: '36px', height: '36px', borderRadius: '8px', p: 0,
+                        fontWeight: 600, fontSize: '13px',
+                        background: page === currentPage ? '#020291' : '#fff',
+                        color: page === currentPage ? '#fff' : '#64748b',
+                        border: `1px solid ${page === currentPage ? '#020291' : '#e2e8f0'}`,
+                        '&:hover': { borderColor: '#020291', background: page === currentPage ? '#06109E' : '#EEF0FF' }
+                      }}
+                    >
+                      {page}
+                    </Button>
+                  ))}
+                  <Button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    sx={{
+                      minWidth: '36px', height: '36px', borderRadius: '8px', p: 0,
+                      color: '#64748b', border: '1px solid #e2e8f0', background: '#fff',
+                      '&:hover': { borderColor: '#020291', color: '#020291' },
+                      '&:disabled': { opacity: 0.4 }
+                    }}
+                  >
+                    <i className="fas fa-chevron-right" style={{ fontSize: 12 }} />
+                  </Button>
+                </Box>
+              </Box>
+            )}
+          </>
+        )
+      })()}
+
+      </Box>{/* End Left Column */}
+
+      {/* Right Column - Similar Jobs */}
+      <Box sx={{
+        width: { xs: '100%', md: 320 }, flexShrink: 0,
+        display: { xs: 'none', md: 'block' }
+      }}>
+        <Box sx={{
+          p: '20px', borderRadius: '12px', border: '1px solid #e2e8f0',
+          background: '#fff', position: 'sticky', top: 24
+        }}>
+          <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', mb: 2 }}>
+            <i className="fas fa-briefcase" style={{ marginRight: 8, fontSize: 14, color: '#020291' }}></i>
+            Similar Jobs
           </Typography>
 
-          {jobsLoading ? (
-            <Box sx={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-              Loading other jobs...
+          {similarJobsLoading ? (
+            <Box sx={{ textAlign: 'center', py: 3 }}>
+              <CircularProgress size={24} sx={{ color: '#020291' }} />
             </Box>
-          ) : otherJobs.length === 0 ? (
-            <Box sx={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-              No other jobs available
-            </Box>
+          ) : similarJobs.length === 0 ? (
+            <Typography sx={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', py: 3 }}>
+              No similar jobs found
+            </Typography>
           ) : (
-            otherJobs.map((job) => (
-              <Box
-                key={job.id}
-                onClick={() => onJobSelect && onJobSelect(job)}
-                sx={{
-                  padding: { xs: '12px', sm: '16px' },
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '12px',
-                  marginBottom: { xs: '10px', sm: '16px' },
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  overflow: 'hidden',
-                  '&:hover': {
-                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-                    borderColor: getJobColor(job.department || 'Engineering'),
-                    transform: 'translateY(-2px)'
-                  }
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: '8px', sm: '12px' } }}>
-                  <Box sx={{
-                    width: { xs: 32, sm: 40 },
-                    height: { xs: 32, sm: 40 },
-                    borderRadius: '8px',
-                    background: getJobColor(job.department || 'Engineering'),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <i className={getJobIcon(job.department || 'Engineering')} style={{ color: 'white', fontSize: '14px' }}></i>
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                    <Typography sx={{
-                      fontSize: { xs: '14px', sm: '16px' },
-                      fontWeight: 600,
-                      color: '#1e293b',
-                      marginBottom: '4px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {job.title}
-                    </Typography>
-                    <Typography sx={{
-                      fontSize: { xs: '12px', sm: '14px' },
-                      color: '#64748b',
-                      marginBottom: '8px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {job.company} • {job.location}
-                    </Typography>
-                    <Typography sx={{
-                      fontSize: { xs: '11px', sm: '12px' },
-                      color: '#64748b',
-                      marginBottom: '4px',
-                      wordBreak: 'break-word'
-                    }}>
-                      {getJobType(job)} • {getWorkMode(job)} • {getExperienceLevel(job)}
-                    </Typography>
-                    <Typography sx={{
-                      fontSize: { xs: '11px', sm: '12px' },
-                      color: '#94a3b8'
-                    }}>
-                      {getTimeAgo(job.created_at)} • {job.status}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {similarJobs.map((job: any) => (
+                <Box
+                  key={job.id}
+                  onClick={() => onJobSelect?.(job)}
+                  sx={{
+                    p: '12px', borderRadius: '10px', border: '1px solid #f1f5f9',
+                    background: '#f8fafc', cursor: 'pointer', transition: 'all 0.2s',
+                    '&:hover': { borderColor: '#020291', background: '#EEF0FF', transform: 'translateY(-1px)', boxShadow: '0 2px 8px rgba(2,2,145,0.08)' }
+                  }}
+                >
+                  <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', mb: 0.5, lineHeight: 1.3 }}>
+                    {job.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                    {job.company && (
+                      <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                        <i className="fas fa-building" style={{ marginRight: 3, fontSize: 10 }}></i>
+                        {job.company}
+                      </Typography>
+                    )}
+                    <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                      <i className="fas fa-briefcase" style={{ marginRight: 3, fontSize: 10 }}></i>
+                      {job.experience_level || job.experienceLevel || 'N/A'}
                     </Typography>
                   </Box>
-                  <IconButton sx={{
-                    color: '#cbd5e1',
-                    padding: '4px',
-                    flexShrink: 0,
-                    '&:hover': { color: 'primary.light' }
-                  }}>
-                    <i className="fas fa-bookmark" style={{ fontSize: '14px' }}></i>
-                  </IconButton>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <Chip
+                      label={job.status || 'Open'}
+                      size="small"
+                      sx={{
+                        fontSize: '10px', fontWeight: 600, height: '20px',
+                        backgroundColor: getStatusColor(job.status || 'Open').bg,
+                        color: getStatusColor(job.status || 'Open').color,
+                      }}
+                    />
+                    {getFormattedDate(job) && (
+                      <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
+                        {getFormattedDate(job)}
+                      </Typography>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            ))
+              ))}
+            </Box>
           )}
         </Box>
       </Box>
+      </Box>{/* End Two Column Layout */}
 
-      {/* Toast notification */}
-      <Snackbar
-        open={toast.open}
-        autoHideDuration={3000}
-        onClose={() => setToast(prev => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
+      {/* ─── Add Candidate Dialog ─── */}
+      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <Box sx={{
+              width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#020291', color: 'white'
+            }}>
+              <i className="fas fa-user-plus" />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>Add Candidate</Typography>
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Add a new candidate for this position</Typography>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+            {/* Full Name + Email row */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                  Full Name <span style={{ color: '#ef4444' }}>*</span>
+                </Typography>
+                <TextField fullWidth placeholder="Jane Smith" value={addForm.name}
+                  onChange={e => handleAddFieldChange('name', e.target.value)}
+                  onBlur={() => handleAddFieldBlur('name', addForm.name)}
+                  error={addFormTouched.name && !!addFormErrors.name}
+                  helperText={addFormTouched.name && addFormErrors.name}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                  Email <span style={{ color: '#ef4444' }}>*</span>
+                </Typography>
+                <TextField fullWidth placeholder="jane@example.com" type="email" value={addForm.email}
+                  onChange={e => handleAddFieldChange('email', e.target.value)}
+                  onBlur={() => handleAddFieldBlur('email', addForm.email)}
+                  error={addFormTouched.email && !!addFormErrors.email}
+                  helperText={addFormTouched.email && addFormErrors.email}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+            </Box>
+
+            {/* Resume Upload (required) */}
+            <Box>
+              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                Resume <span style={{ color: '#ef4444' }}>*</span>
+              </Typography>
+              <Box sx={{
+                border: `2px dashed ${addFormTouched.resume && addFormErrors.resume ? '#ef4444' : '#cbd5e1'}`,
+                borderRadius: '12px', p: 2.5, textAlign: 'center',
+                background: addForm.resume ? '#f0fdf4' : addFormTouched.resume && addFormErrors.resume ? '#fef2f2' : '#f8fafc',
+                cursor: 'pointer', transition: 'all 0.2s',
+                '&:hover': { borderColor: addForm.resume ? '#16a34a' : '#020291', background: addForm.resume ? '#f0fdf4' : '#EEF0FF' }
+              }}
+                onClick={() => document.getElementById('resume-upload-detail')?.click()}>
+                <input id="resume-upload-detail" type="file" hidden accept=".pdf,.doc,.docx,.txt"
+                  onChange={e => {
+                    const file = e.target.files?.[0] || null
+                    setAddForm(prev => ({ ...prev, resume: file }))
+                    setAddFormTouched(prev => ({ ...prev, resume: true }))
+                    setAddFormErrors(prev => ({ ...prev, resume: file ? '' : 'Resume is required' }))
+                  }} />
+                {addForm.resume ? (
+                  <Box>
+                    <i className="fas fa-check-circle" style={{ fontSize: 22, color: '#16a34a', marginBottom: 6 }} />
+                    <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#16a34a' }}>{addForm.resume.name}</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#64748b' }}>Click to change file</Typography>
+                  </Box>
+                ) : (
+                  <Box>
+                    <i className="fas fa-cloud-upload-alt" style={{ fontSize: 22, color: '#94a3b8', marginBottom: 6 }} />
+                    <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#64748b' }}>Upload resume for personalized questions</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>.pdf, .docx, .txt</Typography>
+                  </Box>
+                )}
+              </Box>
+              {addFormTouched.resume && addFormErrors.resume && (
+                <Typography sx={{ color: '#ef4444', fontSize: '12px', mt: '4px' }}>{addFormErrors.resume}</Typography>
+              )}
+              <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: '4px' }}>
+                Required — AI uses this to generate hyper-personalized interview questions
+              </Typography>
+            </Box>
+
+            {/* Optional Details Divider */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
+              <Box sx={{ height: '1px', flex: 1, background: '#e2e8f0' }} />
+              <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Optional Details
+              </Typography>
+              <Box sx={{ height: '1px', flex: 1, background: '#e2e8f0' }} />
+            </Box>
+
+            {/* Phone + Location */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Phone Number</Typography>
+                <TextField fullWidth placeholder="+91 98765 43210" value={addForm.phone}
+                  onChange={e => handleAddFieldChange('phone', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Current Location</Typography>
+                <TextField fullWidth placeholder="Bangalore, India" value={addForm.location}
+                  onChange={e => handleAddFieldChange('location', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+            </Box>
+
+            {/* LinkedIn + Notice Period */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>LinkedIn</Typography>
+                <TextField fullWidth placeholder="https://linkedin.com/in/janesmith" value={addForm.linkedin}
+                  onChange={e => handleAddFieldChange('linkedin', e.target.value)}
+                  onBlur={() => handleAddFieldBlur('linkedin', addForm.linkedin)}
+                  error={addFormTouched.linkedin && !!addFormErrors.linkedin}
+                  helperText={addFormTouched.linkedin && addFormErrors.linkedin}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Notice Period</Typography>
+                <TextField fullWidth placeholder="30 days" value={addForm.notice_period}
+                  onChange={e => handleAddFieldChange('notice_period', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+            </Box>
+
+            {/* CTC */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Current CTC</Typography>
+                <TextField fullWidth placeholder="12 LPA" value={addForm.current_ctc}
+                  onChange={e => handleAddFieldChange('current_ctc', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Expected CTC</Typography>
+                <TextField fullWidth placeholder="18 LPA" value={addForm.expected_ctc}
+                  onChange={e => handleAddFieldChange('expected_ctc', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+            </Box>
+
+            {/* Interview Date & Duration */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Interview Date & Time</Typography>
+                <TextField fullWidth type="datetime-local" value={addForm.interview_datetime}
+                  onChange={e => handleAddFieldChange('interview_datetime', e.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Duration</Typography>
+                <TextField fullWidth select value={addForm.duration_minutes}
+                  onChange={e => handleAddFieldChange('duration_minutes', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }}>
+                  <MenuItem value="15">15 minutes (5 questions)</MenuItem>
+                  <MenuItem value="30">30 minutes (10 questions)</MenuItem>
+                  <MenuItem value="45">45 minutes (15 questions)</MenuItem>
+                  <MenuItem value="60">60 minutes (20 questions)</MenuItem>
+                </TextField>
+              </Box>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+          <Button onClick={() => setAddDialogOpen(false)} sx={{
+            color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px',
+            '&:hover': { background: '#f1f5f9' }
+          }}>Cancel</Button>
+          <Button onClick={handleAddCandidate} disabled={submitting}
+            sx={{
+              background: '#020291', color: 'white',
+              borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px',
+              '&:hover': { background: '#06109E' },
+              '&:disabled': { opacity: 0.6, color: 'white' }
+            }}>
+            {submitting ? <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Adding...</> : <>Add candidate <i className="fas fa-arrow-right" style={{ marginLeft: 8, fontSize: 12 }} /></>}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ─── Upload Transcript Dialog ─── */}
+      <Dialog open={transcriptDialogOpen} onClose={() => !uploadingTranscript && setTranscriptDialogOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <Box sx={{
+              width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#16a34a', color: 'white'
+            }}>
+              <i className="fas fa-file-alt" />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>Upload Transcript</Typography>
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                {transcriptCandidate?.applicant_name} — Paste the interview transcript below
+              </Typography>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Box sx={{ mt: 1 }}>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+              Interview Transcript <span style={{ color: '#ef4444' }}>*</span>
+            </Typography>
+            <TextField
+              multiline minRows={8} maxRows={16} fullWidth
+              placeholder="Paste the full interview transcript here...&#10;&#10;Interviewer: Tell me about yourself.&#10;Candidate: I am a software developer with 3 years of experience..."
+              value={transcriptText}
+              onChange={(e) => setTranscriptText(e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px', fontSize: '14px',
+                  '& fieldset': { borderColor: '#e2e8f0' },
+                  '&:hover fieldset': { borderColor: '#020291' },
+                  '&.Mui-focused fieldset': { borderColor: '#020291' },
+                }
+              }}
+            />
+            <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: '6px' }}>
+              AI will analyze the transcript, score each answer, and generate a comprehensive report
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+          <Button onClick={() => setTranscriptDialogOpen(false)} disabled={uploadingTranscript}
+            sx={{
+              color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px',
+              '&:hover': { background: '#f1f5f9' }
+            }}>Cancel</Button>
+          <Button onClick={handleUploadTranscript} disabled={uploadingTranscript || !transcriptText.trim()}
+            sx={{
+              background: '#16a34a', color: 'white',
+              borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px',
+              '&:hover': { background: '#15803d' },
+              '&:disabled': { opacity: 0.6, color: 'white' }
+            }}>
+            {uploadingTranscript ? (
+              <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Scoring...</>
+            ) : (
+              <><i className="fas fa-upload" style={{ marginRight: 8, fontSize: 12 }} /> Upload & Score</>
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Toast */}
+      <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={() => setToast(prev => ({ ...prev, open: false }))} severity={toast.severity} sx={{ width: '100%' }}>
           {toast.message}
         </Alert>
@@ -1281,4 +1036,4 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   )
 }
 
-export default JobDetails;
+export default JobDetails

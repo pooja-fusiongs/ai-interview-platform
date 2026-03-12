@@ -104,6 +104,23 @@ const CircularScore: React.FC<{ score: number; size?: number; thickness?: number
   );
 };
 
+const formatDetails = (details: string): string => {
+  if (!details) return '';
+  try {
+    const obj = typeof details === 'string' ? JSON.parse(details) : details;
+    if (typeof obj === 'object' && obj !== null) {
+      return Object.entries(obj)
+        .map(([key, val]) => {
+          const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          const value = typeof val === 'number' ? (val < 1 && val > 0 ? `${Math.round(val * 100)}%` : val) : val;
+          return `${label}: ${value}`;
+        })
+        .join(' • ');
+    }
+  } catch {}
+  return details;
+};
+
 // Score Card Component
 const ScoreCard: React.FC<{
   title: string;
@@ -177,8 +194,8 @@ const ScoreCard: React.FC<{
         />
       </Box>
 
-      <Typography sx={{ fontSize: '13px', color: '#64748b', lineHeight: 1.6 }}>
-        {details || 'No additional details available'}
+      <Typography sx={{ fontSize: '12px', color: '#64748b', lineHeight: 1.8 }}>
+        {formatDetails(details) || 'No additional details available'}
       </Typography>
     </Box>
   );
@@ -248,7 +265,7 @@ const FraudAnalysisPanel: React.FC = () => {
     );
   }
 
-  const overallScore = analysis?.overall_trust_score || 0;
+  const overallScore = Math.round((analysis?.overall_trust_score || 0) * 100);
   // Parse flags - may be JSON string or array
   let flags: any[] = [];
   if (analysis?.flags) {
@@ -274,7 +291,7 @@ const FraudAnalysisPanel: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton
-              onClick={() => navigate(`/video-detail/${videoId}`)}
+              onClick={() => navigate('/fraud-dashboard')}
               sx={{
                 background: 'white',
                 border: '1px solid #e2e8f0',
@@ -424,21 +441,21 @@ const FraudAnalysisPanel: React.FC = () => {
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 3 }}>
                 <ScoreCard
                   title="Voice Consistency"
-                  score={analysis.voice_consistency_score || 0}
+                  score={Math.round((analysis.voice_consistency_score || 0) * 100)}
                   details={analysis.voice_consistency_details}
                   icon={<Mic sx={{ color: '#3b82f6', fontSize: 24 }} />}
                   iconBg="#eff6ff"
                 />
                 <ScoreCard
                   title="Lip-Sync Analysis"
-                  score={analysis.lip_sync_score || 0}
+                  score={Math.round((analysis.lip_sync_score || 0) * 100)}
                   details={analysis.lip_sync_details}
                   icon={<RecordVoiceOver sx={{ color: '#8b5cf6', fontSize: 24 }} />}
                   iconBg="#f5f3ff"
                 />
                 <ScoreCard
                   title="Body Movement"
-                  score={analysis.body_movement_score || 0}
+                  score={Math.round((analysis.body_movement_score || 0) * 100)}
                   details={analysis.body_movement_details}
                   icon={<Accessibility sx={{ color: '#10b981', fontSize: 24 }} />}
                   iconBg="#ecfdf5"
@@ -549,8 +566,8 @@ const FraudAnalysisPanel: React.FC = () => {
                             </Box>
                             <Box sx={{ flex: 1 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
-                                  {flag.type || 'Unknown Flag'}
+                                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', textTransform: 'capitalize' }}>
+                                  {(flag.flag_type || flag.type || 'Unknown Flag').replace(/_/g, ' ')}
                                 </Typography>
                                 <Chip
                                   label={flag.severity?.toUpperCase() || 'INFO'}
@@ -568,9 +585,9 @@ const FraudAnalysisPanel: React.FC = () => {
                               <Typography sx={{ fontSize: '13px', color: '#64748b', lineHeight: 1.6 }}>
                                 {flag.description || 'No description provided'}
                               </Typography>
-                              {flag.timestamp && (
+                              {(flag.timestamp_seconds || flag.timestamp) && (
                                 <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: 1 }}>
-                                  Detected at: {flag.timestamp}
+                                  Detected at: {Math.floor((flag.timestamp_seconds || flag.timestamp) / 60)}m {Math.floor((flag.timestamp_seconds || flag.timestamp) % 60)}s
                                 </Typography>
                               )}
                             </Box>

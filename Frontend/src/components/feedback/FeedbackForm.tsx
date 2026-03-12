@@ -65,13 +65,13 @@ const FeedbackForm: React.FC = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
         <Paper sx={{ p: 3 }}>
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={4}>
+            <Grid size={{ xs: 4 }}>
               <TextField label="Candidate ID" type="number" fullWidth value={candidateId} onChange={e => setCandidateId(Number(e.target.value))} />
             </Grid>
-            <Grid item xs={4}>
+            <Grid size={{ xs: 4 }}>
               <TextField label="Job ID" type="number" fullWidth value={jobId} onChange={e => setJobId(Number(e.target.value))} />
             </Grid>
-            <Grid item xs={4}>
+            <Grid size={{ xs: 4 }}>
               <TextField label="Hire Date" type="date" fullWidth InputLabelProps={{ shrink: true }} value={hireDate} onChange={e => setHireDate(e.target.value)} />
             </Grid>
           </Grid>

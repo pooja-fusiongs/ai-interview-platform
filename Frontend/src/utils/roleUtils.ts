@@ -16,7 +16,6 @@ export const getRolePermissions = (role: UserRole): RolePermissions => {
         canViewCandidates: true,
         canManageUsers: false,
         canEvaluateJobs: false,
-        canApplyJobs: false,
         canViewProfile: true,
       };
     
@@ -28,7 +27,6 @@ export const getRolePermissions = (role: UserRole): RolePermissions => {
         canViewCandidates: true,
         canManageUsers: false,
         canEvaluateJobs: true,
-        canApplyJobs: false,
         canViewProfile: true,
       };
     
@@ -40,19 +38,6 @@ export const getRolePermissions = (role: UserRole): RolePermissions => {
         canViewCandidates: true,
         canManageUsers: true,
         canEvaluateJobs: true,
-        canApplyJobs: false,
-        canViewProfile: true,
-      };
-    
-    case 'candidate':
-      return {
-        canViewDashboard: true,
-        canCreateJob: false,
-        canViewJobs: true,
-        canViewCandidates: false,
-        canManageUsers: false,
-        canEvaluateJobs: false,
-        canApplyJobs: true,
         canViewProfile: true,
       };
     
@@ -64,7 +49,6 @@ export const getRolePermissions = (role: UserRole): RolePermissions => {
         canViewCandidates: false,
         canManageUsers: false,
         canEvaluateJobs: false,
-        canApplyJobs: false,
         canViewProfile: false,
       };
   }
@@ -74,19 +58,19 @@ export const getRolePermissions = (role: UserRole): RolePermissions => {
 export const getRouteAccess = (): RouteAccess[] => [
   {
     path: '/dashboard',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
+    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
     label: 'Dashboard',
     icon: 'fas fa-chart-line'
   },
   {
     path: '/jobs',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
+    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
     label: 'Jobs',
     icon: 'fas fa-briefcase'
   },
   {
     path: '/candidates',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
+    allowedRoles: ['domain_expert', 'admin'],
     label: 'Candidates',
     icon: 'fas fa-users'
   },
@@ -103,21 +87,15 @@ export const getRouteAccess = (): RouteAccess[] => [
     icon: 'fas fa-robot'
   },
   {
-    path: '/interview',
-    allowedRoles: ['candidate'],
-    label: 'Interview',
-    icon: 'fas fa-video'
-  },
-  {
     path: '/results',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
+    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
     label: 'Results',
     icon: 'fas fa-chart-bar'
   },
   // Video Interviews
   {
     path: '/video-interviews',
-    allowedRoles: ['recruiter', 'admin', 'candidate'],
+    allowedRoles: ['recruiter', 'admin'],
     label: 'Video Interviews',
     icon: 'fas fa-video'
   },
@@ -162,14 +140,8 @@ export const getRouteAccess = (): RouteAccess[] => [
   },
   // GDPR / Privacy
   {
-    path: '/consent-manager',
-    allowedRoles: ['candidate'],
-    label: 'Privacy & Consent',
-    icon: 'fas fa-lock'
-  },
-  {
     path: '/privacy-notice',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin', 'candidate'],
+    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
     label: 'Privacy Notice',
     icon: 'fas fa-file-alt'
   },
@@ -213,8 +185,6 @@ export const getRoleDisplayName = (role: UserRole): string => {
       return 'Domain Expert';
     case 'admin':
       return 'Administrator';
-    case 'candidate':
-      return 'Candidate';
     default:
       return 'User';
   }
@@ -229,8 +199,6 @@ export const getRoleColor = (role: UserRole): string => {
       return '#8b5cf6'; // Purple
     case 'admin':
       return '#ef4444'; // Red
-    case 'candidate':
-      return '#10b981'; // Green
     default:
       return '#6b7280'; // Gray
   }
@@ -255,8 +223,6 @@ export const getDefaultRoute = (userRole: UserRole | undefined): string => {
     case 'recruiter':
       return '/dashboard';
     case 'domain_expert':
-      return '/jobs';
-    case 'candidate':
       return '/jobs';
     default:
       return '/login';

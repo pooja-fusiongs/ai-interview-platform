@@ -48,6 +48,13 @@ async def add_candidate_to_job(
     phone: str = Form(""),
     experience_years: int = Form(0),
     current_position: str = Form(""),
+    location: str = Form(""),
+    linkedin_url: str = Form(""),
+    notice_period: str = Form(""),
+    current_ctc: str = Form(""),
+    expected_ctc: str = Form(""),
+    interview_datetime: str = Form(""),
+    duration_minutes: int = Form(30),
     resume: UploadFile = File(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -67,6 +74,14 @@ async def add_candidate_to_job(
     if existing:
         raise HTTPException(status_code=400, detail="Candidate with this email already added to this job")
 
+    # Parse interview datetime if provided
+    parsed_interview_dt = None
+    if interview_datetime:
+        try:
+            parsed_interview_dt = datetime.fromisoformat(interview_datetime.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            pass
+
     # Create application record
     from services.encryption_service import encrypt_pii
     application = JobApplication(
@@ -76,6 +91,13 @@ async def add_candidate_to_job(
         applicant_phone=encrypt_pii(phone) if phone else phone,
         experience_years=experience_years,
         current_position=current_position,
+        location=location or None,
+        linkedin_url=linkedin_url or None,
+        availability=notice_period or None,
+        current_ctc=current_ctc or None,
+        expected_salary=expected_ctc or None,
+        interview_datetime=parsed_interview_dt,
+        duration_minutes=duration_minutes,
         status="Added by Recruiter"
     )
     db.add(application)

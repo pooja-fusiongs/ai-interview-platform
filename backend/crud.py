@@ -95,6 +95,7 @@ def create_job(db: Session, job: JobCreate, user_id: int):
         experience_level=job.experience_level,
         department=job.department,
         skills_required=skills_json,
+        skills_weightage_json=job.skills_weightage if hasattr(job, 'skills_weightage') else None,
         number_of_openings=job.number_of_openings,
         interview_type=job.interview_type,
         number_of_questions=job.number_of_questions,

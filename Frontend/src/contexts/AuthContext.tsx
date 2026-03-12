@@ -104,7 +104,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             name: username,
             email: username,
             company: '',
-            role: role || 'candidate'
+            role: role || 'recruiter'
           })
         }
       }
@@ -149,7 +149,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email: userData.email,
         password: userData.password,
         company: userData.company || '', // Make company optional with empty string default
-        role: userData.role || 'candidate'  // Default role or specified role
+        role: userData.role || 'recruiter'  // Default role or specified role
       })
       
       // Automatically login after successful signup

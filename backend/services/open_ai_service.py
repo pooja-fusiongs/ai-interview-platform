@@ -7,7 +7,8 @@ import traceback
 from typing import Optional
 import re
 from openai import OpenAI
-from app.config import OPENAI_API_KEY
+import config
+OPENAI_API_KEY = config.OPENAI_API_KEY
 
 logger = logging.getLogger("ihire.ai")
 
@@ -472,17 +473,15 @@ GOOD question (personalized): "At [Company from resume], you built [specific pro
                 fallback_index=i,
             )
 
-            # ── Build skill prefix ──
             skill_name = q.get("skill", "").strip() or plan_item.get("skill_focus", "").strip()
-            skill_prefix = f"[{skill_name}] " if skill_name else ""
-
             result.append(
                 {
-                    "question_text": f"{skill_prefix}{q.get('question_text', '').strip()}".strip(),
+                    "question_text": q.get('question_text', '').strip(),
                     "suggested_answer": suggested_answer,
                     "category": plan_item["phase"],
                     "difficulty": difficulty_label,
                     "order_number": i + 1,
+                    "skill_focus": skill_name or None,
                 }
             )
 
@@ -973,9 +972,6 @@ def generate_fallback_questions(
         question_text, expected_answer, strong, red_flags, key_concepts = template
 
         skill_focus = item.get("skill_focus", "").strip()
-        if skill_focus:
-            question_text = f"[{skill_focus}] {question_text}"
-
         suggested = _format_suggested_answer(
             expected_answer=expected_answer,
             strong_indicators=strong.replace("✅ Strong indicators: ", ""),

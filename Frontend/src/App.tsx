@@ -17,24 +17,21 @@ import { getDefaultRoute } from './utils/roleUtils'
 import LandingPage from './components/LandingPage'
 import Login from './components/auth/SignIn'
 import SignUp from './components/auth/SignUp'
+import ForgotPassword from './components/auth/ForgotPassword'
+import ResetPassword from './components/auth/ResetPassword'
 import Dashboard from './components/dashboard/Dashboard'
 import Jobs from './components/jobs/Jobs_new'
 import JobCreation from './components/jobs/JobCreation'
 import CandidateUpload from './components/candidates/CandidateUpload'
 import AIQuestionGeneration from './components/interview/AIQuestionGeneration'
 import InterviewOutline from './components/interview/InterviewOutline'
-import Interview from './components/interview/Interview'
 import Results from './components/interview/Results'
 import Candidates from './components/candidates/Candidates'
-import CandidateMatching from './components/candidates/CandidateMatching'
 import CandidateProfile from './components/candidates/CandidateProfile'
 import RecruiterCandidates from './components/recruiter/RecruiterCandidates'
 import RoleProtectedRoute from './components/common/RoleProtectedRoute'
 
 // GDPR Components
-import ConsentManager from './components/gdpr/ConsentManager'
-import DataExportPage from './components/gdpr/DataExportPage'
-import DeletionRequestPage from './components/gdpr/DeletionRequestPage'
 import PrivacyNotice from './components/gdpr/PrivacyNotice'
 import AdminAuditLog from './components/gdpr/AdminAuditLog'
 import AdminRetentionPolicies from './components/gdpr/AdminRetentionPolicies'
@@ -50,14 +47,12 @@ import VideoInterviewScheduler from './components/video/VideoInterviewScheduler'
 import VideoInterviewList from './components/video/VideoInterviewList'
 import VideoInterviewRoom from './components/video/VideoInterviewRoom'
 import VideoInterviewDetail from './components/video/VideoInterviewDetail'
-import CandidateVideoConsent from './components/video/CandidateVideoConsent'
 import AIInterviewRoom from './components/video/AIInterviewRoom'
 
 // Fraud Detection Components
 import FraudDashboard from './components/fraud/FraudDashboard'
 import FraudAnalysisPanel from './components/fraud/FraudAnalysisPanel'
 import RealTimeFlagMonitor from './components/fraud/RealTimeFlagMonitor'
-
 
 // Post-Hire Feedback Components
 import FeedbackForm from './components/feedback/FeedbackForm'
@@ -92,7 +87,6 @@ function DefaultRedirect() {
 
   return <Navigate to={defaultRoute} replace />
 }
-
 function App(): JSX.Element {
   return (
     <ThemeProvider theme={theme}>
@@ -288,14 +282,15 @@ function App(): JSX.Element {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             {/* Landing page for unauthenticated users, redirect for authenticated */}
             <Route path="/" element={<LandingPage />} />
             
-            {/* Dashboard - All roles */}
             <Route path="/dashboard" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
                   <Dashboard />
                 </RoleProtectedRoute>
               </ProtectedRoute>
@@ -304,7 +299,7 @@ function App(): JSX.Element {
             {/* Jobs - All roles can view, but different access levels */}
             <Route path="/jobs" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
                   <Jobs/>
                 </RoleProtectedRoute>
               </ProtectedRoute>
@@ -322,21 +317,11 @@ function App(): JSX.Element {
             {/* Candidates - Recruiter, Domain Expert, Admin */}
             <Route path="/candidates" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
+                <RoleProtectedRoute allowedRoles={['domain_expert', 'admin']}>
                   <Candidates />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
-            
-            {/* Candidate Matching - Recruiter, Domain Expert, Admin */}
-            <Route path="/candidate-matching" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
-                  <CandidateMatching />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            
             {/* Candidate Upload - Recruiter, Admin */}
             <Route path="/candidate-upload" element={
               <ProtectedRoute>
@@ -375,19 +360,10 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
             
-            {/* Interview - Candidate */}
-            <Route path="/interview" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['candidate']}>
-                  <Interview />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            
             {/* Results - All authenticated roles */}
             <Route path="/results" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
                   <Results />
                 </RoleProtectedRoute>
               </ProtectedRoute>
@@ -397,37 +373,15 @@ function App(): JSX.Element {
             {/* Profile - All roles */}
             <Route path="/candidate-profile" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
                   <CandidateProfile />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
 
-            {/* GDPR Routes */}
-            <Route path="/consent-manager" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['candidate']}>
-                  <ConsentManager />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            <Route path="/data-export" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['candidate']}>
-                  <DataExportPage />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            <Route path="/deletion-request" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['candidate']}>
-                  <DeletionRequestPage />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
             <Route path="/privacy-notice" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'domain_expert', 'admin']}>
                   <PrivacyNotice />
                 </RoleProtectedRoute>
               </ProtectedRoute>
@@ -487,18 +441,12 @@ function App(): JSX.Element {
             } />
             <Route path="/video-interviews" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
                   <VideoInterviewList />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
-            <Route path="/video-room/:videoId" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'admin', 'candidate']}>
-                  <VideoInterviewRoom />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
+            <Route path="/video-room/:videoId" element={<VideoInterviewRoom />} />
             <Route path="/video-detail/:videoId" element={
               <ProtectedRoute>
                 <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
@@ -506,16 +454,9 @@ function App(): JSX.Element {
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
-            <Route path="/video-consent" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['candidate']}>
-                  <CandidateVideoConsent />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
             <Route path="/ai-interview/:videoId" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'admin', 'candidate']}>
+                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
                   <AIInterviewRoom />
                 </RoleProtectedRoute>
               </ProtectedRoute>
@@ -545,6 +486,7 @@ function App(): JSX.Element {
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
+
 
             {/* Post-Hire Feedback Routes */}
             <Route path="/feedback-form" element={
