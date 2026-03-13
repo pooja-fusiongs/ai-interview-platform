@@ -46,6 +46,7 @@ const getStatusColor = (status: string) => {
       return { bg: '#dbeafe', color: '#2563eb' }
     case 'Hired':
       return { bg: '#d1fae5', color: '#059669' }
+    case 'Offer Declined':
     case 'Closed':
     case 'Rejected':
       return { bg: '#ffebee', color: '#c62828' }
@@ -238,6 +239,16 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       hotToast.success(`Status updated to ${newStatus}`)
     } catch (err: any) {
       hotToast.error(err.response?.data?.detail || 'Failed to update status')
+    }
+  }
+
+  const handleSendOffer = async (candidateId: number) => {
+    try {
+      const res = await apiClient.post(`/api/applications/${candidateId}/send-offer`)
+      setCandidates((prev: any[]) => prev.map(c => c.id === candidateId ? { ...c, status: 'Offer Sent' } : c))
+      hotToast.success(res.data.email_sent ? 'Offer sent to candidate email!' : 'Status updated (email delivery pending)')
+    } catch (err: any) {
+      hotToast.error(err.response?.data?.detail || 'Failed to send offer')
     }
   }
 
@@ -656,6 +667,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                 <MenuItem value="Interview Scheduled">Interview Scheduled</MenuItem>
                 <MenuItem value="Interview Completed">Interview Completed</MenuItem>
                 <MenuItem value="Offer Sent">Offer Sent</MenuItem>
+                <MenuItem value="Offer Declined">Offer Declined</MenuItem>
                 <MenuItem value="Hired">Hired</MenuItem>
                 <MenuItem value="Rejected">Rejected</MenuItem>
               </TextField>
@@ -778,10 +790,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                   '&:hover': { background: hoverBg, color: '#fff', borderColor }
                                 })
 
-                                if (st === 'Offer Sent' || st === 'Hired' || st === 'Rejected') {
+                                if (st === 'Offer Sent' || st === 'Offer Declined' || st === 'Hired' || st === 'Rejected') {
                                   return (
                                     <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
-                                      {st === 'Offer Sent' ? 'Awaiting response' : st === 'Hired' ? 'Onboarding' : 'Closed'}
+                                      {st === 'Offer Sent' ? 'Awaiting response' : st === 'Hired' ? 'Onboarding' : st === 'Offer Declined' ? 'Offer declined' : 'Closed'}
                                     </Typography>
                                   )
                                 }
@@ -789,7 +801,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 if (st === 'Interview Completed') {
                                   return (
                                     <>
-                                      <Button onClick={() => handleUpdateStatus(candidate.id, 'Offer Sent')} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
+                                      <Button onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                         <i className="fas fa-paper-plane" style={{ marginRight: 4, fontSize: 10 }}></i>Send Offer
                                       </Button>
                                       <Button onClick={() => handleUpdateStatus(candidate.id, 'Rejected')} size="small" variant="outlined" sx={btnSx('#dc2626', '#dc2626', '#dc2626')}>

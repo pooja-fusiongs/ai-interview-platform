@@ -3,10 +3,11 @@ Job Application Router
 Handles job application endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
+from jose import JWTError, jwt as jose_jwt
 import sys
 import os
 
@@ -274,7 +275,7 @@ def update_application_status(
     valid_statuses = [
         "Applied", "Added by Recruiter", "Questions Generated",
         "Interview Scheduled", "Interview Completed",
-        "Offer Sent", "Hired", "Rejected"
+        "Offer Sent", "Offer Declined", "Hired", "Rejected"
     ]
     if body.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
@@ -287,3 +288,103 @@ def update_application_status(
     db.commit()
     db.refresh(application)
     return {"id": application.id, "status": application.status}
+
+
+@router.post("/api/applications/{application_id}/send-offer")
+def send_offer(
+    application_id: int,
+    db: Session = Depends(get_db)
+):
+    """Send offer email to candidate and update status to 'Offer Sent'."""
+    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    job = db.query(Job).filter(Job.id == application.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Get company name from the recruiter who created the job
+    company_name = "Company"
+    if job.created_by:
+        recruiter = db.query(User).filter(User.id == job.created_by).first()
+        if recruiter and recruiter.company:
+            company_name = recruiter.company
+
+    # Send offer email
+    from services.email_service import send_offer_email
+    email_sent = send_offer_email(
+        candidate_email=application.applicant_email,
+        candidate_name=application.applicant_name,
+        job_title=job.title,
+        company_name=company_name,
+        application_id=application.id,
+    )
+
+    # Update status to Offer Sent
+    application.status = "Offer Sent"
+    db.commit()
+    db.refresh(application)
+
+    return {
+        "id": application.id,
+        "status": application.status,
+        "email_sent": email_sent,
+        "message": "Offer sent successfully" if email_sent else "Status updated but email delivery failed"
+    }
+
+
+@router.post("/api/applications/offer-response")
+def respond_to_offer(
+    token: str = Query(...),
+    action: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """Handle candidate's offer acceptance/rejection from email link."""
+    SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+    ALGORITHM = os.getenv("ALGORITHM", "HS256")
+
+    try:
+        payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        application_id = int(payload.get("sub"))
+        token_type = payload.get("type")
+        token_action = payload.get("action")
+
+        if token_type != "offer_response":
+            raise HTTPException(status_code=400, detail="Invalid token type")
+
+        if token_action != action:
+            raise HTTPException(status_code=400, detail="Token action mismatch")
+
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token. The offer link may have expired.")
+
+    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    if application.status not in ("Offer Sent",):
+        return {
+            "id": application.id,
+            "status": application.status,
+            "message": f"This offer has already been responded to. Current status: {application.status}"
+        }
+
+    if action == "accept":
+        application.status = "Hired"
+        message = "Congratulations! You have accepted the offer. Welcome aboard!"
+    elif action == "reject":
+        application.status = "Offer Declined"
+        message = "You have declined the offer. Thank you for your time."
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action. Must be 'accept' or 'reject'")
+
+    db.commit()
+    db.refresh(application)
+
+    return {
+        "id": application.id,
+        "status": application.status,
+        "action": action,
+        "message": message
+    }

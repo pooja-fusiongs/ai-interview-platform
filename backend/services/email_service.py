@@ -1,6 +1,12 @@
 import os
+from datetime import datetime, timedelta
+from jose import jwt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 def send_interview_notification(candidate_email: str, candidate_name: str, job_title: str, interview_date: str, interview_time: str, meeting_url: str = None):
     """Send interview scheduled notification to candidate"""
@@ -400,5 +406,165 @@ def send_interview_result_notification(
 
     except Exception as e:
         print(f"[Email] Failed to send result notification: {e}")
+        return False
+
+
+def _create_offer_token(application_id: int, action: str) -> str:
+    """Create a JWT token for offer accept/reject."""
+    expire = datetime.utcnow() + timedelta(days=7)
+    payload = {
+        "sub": str(application_id),
+        "type": "offer_response",
+        "action": action,
+        "exp": expire
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def send_offer_email(
+    candidate_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    application_id: int,
+):
+    """Send job offer email to candidate with Accept/Reject buttons."""
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@ai-interview-platform.com")
+
+    print(f"[Email] Sending offer email to {candidate_email} for {job_title}")
+
+    # Generate accept/reject tokens
+    accept_token = _create_offer_token(application_id, "accept")
+    reject_token = _create_offer_token(application_id, "reject")
+
+    accept_url = f"{FRONTEND_URL}/offer-response?token={accept_token}&action=accept"
+    reject_url = f"{FRONTEND_URL}/offer-response?token={reject_token}&action=reject"
+
+    if not SENDGRID_API_KEY:
+        print(f"[Email] SENDGRID_API_KEY not set. Accept URL: {accept_url}")
+        print(f"[Email] Reject URL: {reject_url}")
+        return False
+
+    try:
+        subject = f"Job Offer: {job_title} at {company_name}"
+
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Job Offer</title></head>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+        <tr>
+            <td align="center">
+                <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:8px; border:1px solid #e5e7eb;">
+                    <tr>
+                        <td style="padding:40px 40px 35px 40px;">
+                            <h2 style="margin:0 0 25px 0; color:#020291; font-size:24px; font-weight:700;">
+                                Congratulations! You've Received a Job Offer
+                            </h2>
+                            <p style="margin:0 0 12px 0; color:#374151; font-size:15px;">
+                                Dear <strong>{candidate_name}</strong>,
+                            </p>
+                            <p style="margin:0 0 20px 0; color:#374151; font-size:15px;">
+                                We are pleased to inform you that after careful evaluation, we would like to extend an offer
+                                for the position of <strong>{job_title}</strong> at <strong>{company_name}</strong>.
+                            </p>
+
+                            <!-- Offer Details Box -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; margin-bottom:25px;">
+                                <tr>
+                                    <td style="padding:20px 25px;">
+                                        <table width="100%">
+                                            <tr>
+                                                <td style="font-size:14px; color:#374151; padding:6px 0;">
+                                                    <strong>Position:</strong> {job_title}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-size:14px; color:#374151; padding:6px 0;">
+                                                    <strong>Company:</strong> {company_name}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin:0 0 25px 0; color:#374151; font-size:15px;">
+                                Please respond to this offer by clicking one of the buttons below.
+                                This offer is valid for <strong>7 days</strong>.
+                            </p>
+
+                            <!-- Accept / Reject Buttons -->
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="center" style="padding-bottom:12px;">
+                                        <a href="{accept_url}"
+                                           style="background:#059669; color:#ffffff; text-decoration:none;
+                                                  padding:14px 40px; font-size:15px; font-weight:700;
+                                                  border-radius:6px; display:inline-block;">
+                                            &#10003; Accept Offer
+                                        </a>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center">
+                                        <a href="{reject_url}"
+                                           style="background:#dc2626; color:#ffffff; text-decoration:none;
+                                                  padding:14px 40px; font-size:15px; font-weight:700;
+                                                  border-radius:6px; display:inline-block;">
+                                            &#10007; Decline Offer
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin:25px 0 0 0; font-size:13px; color:#9ca3af;">
+                                If the buttons don't work, you can copy and paste these links into your browser:
+                            </p>
+                            <p style="margin:8px 0 0 0; font-size:12px; color:#6b7280; word-break:break-all;">
+                                Accept: {accept_url}
+                            </p>
+                            <p style="margin:4px 0 0 0; font-size:12px; color:#6b7280; word-break:break-all;">
+                                Decline: {reject_url}
+                            </p>
+
+                            <p style="margin:25px 0 0 0; font-size:14px; color:#6b7280;">
+                                - <strong>AI Interview Platform Team</strong>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+
+                <table width="560" cellpadding="0" cellspacing="0" style="margin-top:15px;">
+                    <tr>
+                        <td align="center" style="font-size:12px; color:#9ca3af;">
+                            This is an automated message. Please do not reply.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        """
+
+        message = Mail(
+            from_email=Email(SENDER_EMAIL, "AI Interview Platform"),
+            to_emails=To(candidate_email),
+            subject=subject,
+            html_content=Content("text/html", html_content)
+        )
+
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+
+        print(f"[Email] Offer email sent to {candidate_email}, status: {response.status_code}")
+        return True
+
+    except Exception as e:
+        print(f"[Email] Failed to send offer email: {e}")
         return False
 

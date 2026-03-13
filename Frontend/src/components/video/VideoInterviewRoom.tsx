@@ -161,7 +161,7 @@ const InterviewRecorder: React.FC<{
 
         const localSource = audioCtx.createMediaStreamSource(new MediaStream([micMediaTrack]));
         localSource.connect(destination);
-        console.log('🎤 Candidate mic connected to audio mixer');
+        console.log('🎤 Local mic connected to audio mixer');
 
         for (const remote of remoteParticipants) {
           const remoteMicPub = remote.getTrackPublication(Track.Source.Microphone);
@@ -170,7 +170,7 @@ const InterviewRecorder: React.FC<{
             const src = audioCtx.createMediaStreamSource(new MediaStream([remoteTrack]));
             src.connect(destination);
             connectedRemotesRef.current.add(remote.identity);
-            console.log(`🤖 AI agent audio connected: ${remote.identity}`);
+            console.log(`🎙️ Remote participant audio connected: ${remote.identity}`);
           }
         }
 
@@ -303,7 +303,7 @@ const InterviewRecorder: React.FC<{
           const src = audioCtx.createMediaStreamSource(new MediaStream([remoteTrack]));
           src.connect(destination);
           connectedRemotesRef.current.add(remote.identity);
-          console.log(`🤖 AI agent audio connected (late join): ${remote.identity}`);
+          console.log(`🎙️ Remote participant audio connected (late join): ${remote.identity}`);
         } catch (err) {
           console.error('Failed to connect remote audio:', err);
         }
@@ -851,9 +851,9 @@ const VideoInterviewRoom: React.FC = () => {
         </Box>
 
         {/* Main Content Area - Split Left/Right */}
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, flex: 1, overflow: 'hidden' }}>
-          {/* LEFT SIDE - Questions Panel (hidden on mobile during active call, shown as collapsible) */}
-          <Box sx={{
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, flex: 1, overflow: 'hidden', minHeight: 0 }}>
+          {/* LEFT SIDE - Questions Panel (recruiter only) */}
+          {!isUserCandidate && <Box sx={{
             width: { xs: '100%', md: '40%' },
             maxHeight: { xs: isActive ? '30vh' : '40vh', md: 'none' },
             backgroundColor: 'white',
@@ -993,13 +993,13 @@ const VideoInterviewRoom: React.FC = () => {
                 </Box>
               )}
             </Box>
-          </Box>
+          </Box>}
 
           {/* RIGHT SIDE - Video Panel */}
           <Box sx={{
             width: { xs: '100%', md: '60%' },
-            flex: { xs: 1, md: 'none' },
-            minHeight: { xs: 0, md: 'auto' },
+            flex: 1,
+            minHeight: 0,
             background: 'white',
             position: 'relative',
             display: 'flex',

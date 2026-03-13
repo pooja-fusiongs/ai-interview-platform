@@ -19,6 +19,7 @@ import Login from './components/auth/SignIn'
 import SignUp from './components/auth/SignUp'
 import ForgotPassword from './components/auth/ForgotPassword'
 import ResetPassword from './components/auth/ResetPassword'
+import OfferResponse from './components/offer/OfferResponse'
 import Dashboard from './components/dashboard/Dashboard'
 import Jobs from './components/jobs/Jobs_new'
 import JobCreation from './components/jobs/JobCreation'
@@ -281,6 +282,7 @@ function App(): JSX.Element {
             <Route path="/signup" element={<SignUp />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/offer-response" element={<OfferResponse />} />
             
             {/* Landing page for unauthenticated users, redirect for authenticated */}
             <Route path="/" element={<LandingPage />} />

@@ -1705,7 +1705,7 @@ def generate_interview_score(
         session.status = InterviewSessionStatus.SCORED
         
         # Save per-question scores
-        per_question_scores = llm_result.get("per_question_scores", [])
+        per_question_scores = llm_result.get("per_question", [])
         for pq in per_question_scores:
             answer = db.query(InterviewAnswer).filter(
                 InterviewAnswer.session_id == session.id,

@@ -304,7 +304,7 @@ SCORING GUIDELINES:
 - 60-80: Good answer with minor gaps
 - 40-60: Adequate but missing key points
 - 20-40: Poor answer with significant gaps
-- 0-20: No relevant answer or question not asked
+- 0: Question was NOT asked in the interview or candidate did NOT answer at all. Use exactly 0 for ALL scores if the question was not asked.
 
 Respond ONLY with valid JSON:
 {{
@@ -357,34 +357,67 @@ Respond ONLY with valid JSON:
         
         # Validate and clamp all per-question scores to 0-100
         for pq in result.get("per_question", []):
+            # If question was not asked/answered, force all scores to 0
+            extracted = str(pq.get("extracted_answer", "")).lower()
+            not_asked = any(phrase in extracted for phrase in [
+                "not asked", "not answered", "no answer", "not covered",
+                "not discussed", "not mentioned", "question was not"
+            ])
+
             for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
-                val = pq.get(key)
-                if val is None or not isinstance(val, (int, float)):
+                if not_asked:
                     pq[key] = 0.0
                 else:
-                    # Auto-detect 0-10 scale and convert to 0-100
-                    val = float(val)
-                    if val <= 10.0 and val > 0:
-                        val = val * 10.0
-                    pq[key] = round(max(0.0, min(100.0, val)), 1)
-            if not pq.get("feedback"):
+                    val = pq.get(key)
+                    if val is None or not isinstance(val, (int, float)):
+                        pq[key] = 0.0
+                    else:
+                        val = float(val)
+                        # Only auto-detect 0-10 scale if ALL scores in this question are <=10
+                        # (avoids false positive when LLM gives a legitimate low score like 5/100)
+                        pq[key] = round(max(0.0, min(100.0, val)), 1)
+
+            if not_asked:
+                pq["feedback"] = pq.get("feedback") or "The question was not asked in the interview."
+            elif not pq.get("feedback"):
                 pq["feedback"] = "Evaluation completed."
 
-        # Validate overall_score
+        # Auto-detect if LLM returned scores on 0-10 scale (all per_question scores <= 10)
+        all_scores = []
+        for pq in result.get("per_question", []):
+            for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                val = pq.get(key, 0.0)
+                if val > 0:
+                    all_scores.append(val)
+        # If all non-zero scores are <= 10, likely 0-10 scale — multiply by 10
+        if all_scores and all(s <= 10.0 for s in all_scores):
+            for pq in result.get("per_question", []):
+                for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                    val = pq.get(key, 0.0)
+                    if val > 0:
+                        pq[key] = round(val * 10.0, 1)
+
+        # Validate overall_score — only count questions that were actually asked
+        asked_scores = [pq.get("score", 0) for pq in result.get("per_question", [])
+                        if not any(phrase in str(pq.get("extracted_answer", "")).lower()
+                                   for phrase in ["not asked", "not answered", "no answer", "not covered"])]
         overall = result.get("overall_score")
-        if overall is None or not isinstance(overall, (int, float)):
-            scores = [pq.get("score", 0) for pq in result.get("per_question", [])]
-            overall = sum(scores) / len(scores) if scores else 0.0
+        if not asked_scores:
+            # No questions were asked — overall score is 0
+            overall = 0.0
+        elif overall is None or not isinstance(overall, (int, float)):
+            overall = sum(asked_scores) / len(asked_scores) if asked_scores else 0.0
         else:
             overall = float(overall)
-            if overall <= 10.0 and overall > 0:
+            # If we detected 0-10 scale above, scale overall too
+            if all_scores and all(s <= 10.0 for s in all_scores) and overall <= 10.0 and overall > 0:
                 overall = overall * 10.0
         result["overall_score"] = round(max(0.0, min(100.0, overall)), 1)
 
         # Normalize recommendation using 0-100 thresholds
+        ov = result["overall_score"]
         rec = result.get("recommendation", "reject").lower()
-        if rec not in {"select", "next_round", "reject"}:
-            ov = result["overall_score"]
+        if rec not in {"select", "next_round", "reject"} or ov < config.SCORE_NEXT_ROUND_THRESHOLD:
             rec = "select" if ov >= config.SCORE_SELECT_THRESHOLD else "next_round" if ov >= config.SCORE_NEXT_ROUND_THRESHOLD else "reject"
         result["recommendation"] = rec
 

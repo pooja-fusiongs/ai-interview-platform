@@ -447,7 +447,7 @@ const Results = () => {
                       {selectedSession.candidate_name || 'Candidate'}
                     </Typography>
                     <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                      {selectedSession.answers?.length || 0} questions answered
+                      {selectedSession.answers?.filter((a: any) => a.score > 0).length || 0} of {selectedSession.answers?.length || 0} questions answered
                     </Typography>
                   </Box>
                 </Box>

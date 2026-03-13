@@ -134,6 +134,60 @@ def create_real_transcript(
         logger.error(f"[create_real_transcript] Failed: {e}")
         raise TranscriptionError(f"Failed to create real transcript: {str(e)}")
 
+def _add_speaker_labels(raw_text: str, questions: Optional[List[Dict]] = None) -> str:
+    """
+    Use Groq LLM to add speaker labels (Recruiter/Candidate) to raw transcript.
+    Uses interview questions to identify who said what.
+    Falls back to raw text if LLM call fails.
+    """
+    if not config.GROQ_API_KEY:
+        return raw_text
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=config.GROQ_API_KEY)
+
+        questions_context = ""
+        if questions:
+            q_list = "\n".join([f"- {q['question_text']}" for q in questions[:10]])
+            questions_context = f"\n\nThese are the interview questions the Recruiter was supposed to ask:\n{q_list}"
+
+        prompt = f"""You are a transcript formatter. Below is a raw speech-to-text transcript from a job interview between a Recruiter and a Candidate. Your job is to add speaker labels.
+
+Rules:
+- Label each dialogue turn as **Recruiter:** or **Candidate:**
+- The Recruiter asks questions, gives instructions, and manages the interview flow
+- The Candidate answers questions and talks about their experience
+- Keep the EXACT original words - do NOT add, remove, or change any words
+- Just add "Recruiter:" or "Candidate:" before each speaker turn
+- Put each speaker turn on a new line with a blank line between turns
+- If you cannot determine the speaker for a part, label it as "Speaker:"{questions_context}
+
+Raw transcript:
+{raw_text}
+
+Formatted transcript with speaker labels:"""
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=4000,
+        )
+
+        labeled_text = response.choices[0].message.content.strip()
+        if len(labeled_text) < len(raw_text) * 0.5:
+            logger.warning("[speaker_labels] LLM output too short, using raw text")
+            return raw_text
+
+        logger.info(f"[speaker_labels] Successfully added speaker labels ({len(labeled_text)} chars)")
+        return labeled_text
+
+    except Exception as e:
+        logger.warning(f"[speaker_labels] Failed to add speaker labels: {e}")
+        return raw_text
+
+
 def _process_transcript_with_timestamps(
     raw_text: str,
     start_time: datetime,
@@ -141,53 +195,90 @@ def _process_transcript_with_timestamps(
     question_timestamps: Optional[List[Dict]] = None
 ) -> Dict[str, Any]:
     """
-    Process raw transcript text with real timestamps.
+    Process raw transcript text into readable format with speaker labels.
+    1. Whisper gives raw text
+    2. Groq LLM adds Recruiter/Candidate labels using question context
     """
-    lines = []
     total_duration = int((end_time - start_time).total_seconds())
-    
-    # Split transcript into sentences for better timestamping
-    sentences = [s.strip() for s in raw_text.split('.') if s.strip()]
-    
-    if not sentences:
-        raise TranscriptionError("No valid sentences found in transcription")
-    
-    # Distribute timestamps across sentences
-    time_per_sentence = total_duration // len(sentences)
-    current_time = 0
-    
-    for i, sentence in enumerate(sentences):
-        # Check if this sentence matches a question
-        speaker = "Interviewer"
-        timestamp = start_time.timestamp() + current_time
-        
-        if question_timestamps:
-            for q_data in question_timestamps:
-                if q_data["question_text"].lower() in sentence.lower():
-                    speaker = "Interviewer"
-                    break
-            else:
-                # If no question match, assume it's candidate
-                speaker = "Candidate"
-        
-        # Format timestamp
-        time_obj = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        formatted_time = time_obj.strftime("%H:%M:%S")
-        
+
+    if not raw_text or not raw_text.strip():
+        raise TranscriptionError("No valid text found in transcription")
+
+    # Add speaker labels using LLM
+    labeled_text = _add_speaker_labels(raw_text.strip(), question_timestamps)
+
+    start_str = start_time.strftime("%H:%M:%S")
+    end_str = end_time.strftime("%H:%M:%S")
+
+    formatted_text = f"[Interview Start: {start_str}]\n\n{labeled_text}\n\n[Interview End: {end_str}]"
+
+    # Parse labeled text into structured lines
+    lines = []
+    current_speaker = "Speaker"
+    current_text = []
+
+    for line in labeled_text.split("\n"):
+        line = line.strip()
+        if not line:
+            if current_text:
+                lines.append({
+                    "timestamp": start_str,
+                    "speaker": current_speaker,
+                    "text": " ".join(current_text)
+                })
+                current_text = []
+            continue
+
+        if line.startswith("Recruiter:"):
+            if current_text:
+                lines.append({
+                    "timestamp": start_str,
+                    "speaker": current_speaker,
+                    "text": " ".join(current_text)
+                })
+                current_text = []
+            current_speaker = "Recruiter"
+            text_after = line[len("Recruiter:"):].strip()
+            if text_after:
+                current_text.append(text_after)
+        elif line.startswith("Candidate:"):
+            if current_text:
+                lines.append({
+                    "timestamp": start_str,
+                    "speaker": current_speaker,
+                    "text": " ".join(current_text)
+                })
+                current_text = []
+            current_speaker = "Candidate"
+            text_after = line[len("Candidate:"):].strip()
+            if text_after:
+                current_text.append(text_after)
+        elif line.startswith("Speaker:"):
+            if current_text:
+                lines.append({
+                    "timestamp": start_str,
+                    "speaker": current_speaker,
+                    "text": " ".join(current_text)
+                })
+                current_text = []
+            current_speaker = "Speaker"
+            text_after = line[len("Speaker:"):].strip()
+            if text_after:
+                current_text.append(text_after)
+        else:
+            current_text.append(line)
+
+    if current_text:
         lines.append({
-            "timestamp": formatted_time,
-            "speaker": speaker,
-            "text": sentence + "."
+            "timestamp": start_str,
+            "speaker": current_speaker,
+            "text": " ".join(current_text)
         })
-        
-        current_time += time_per_sentence
-    
-    # Format as readable text
-    formatted_text = "\n\n".join([
-        f"[{line['timestamp']}] {line['speaker']}:\n{line['text']}"
-        for line in lines
-    ])
-    
+
+    # Fallback if parsing produced no lines
+    if not lines:
+        lines = [{"timestamp": start_str, "speaker": "Transcript", "text": labeled_text}]
+
     return {
         "formatted_text": formatted_text,
         "lines": lines,
