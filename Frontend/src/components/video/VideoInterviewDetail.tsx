@@ -367,13 +367,14 @@ const VideoInterviewDetail: React.FC = () => {
                           try {
                             const result = await videoInterviewService.uploadTranscriptAndScore(Number(videoId), transcript);
                             toast.success('Transcript scored successfully!');
+                            const sr = result.score_result || result;
                             setScoreResult({
-                              overall_score: result.overall_score,
-                              recommendation: result.recommendation || 'next_round',
-                              strengths: result.strengths || '',
-                              weaknesses: result.weaknesses || '',
-                              per_question: result.per_question_scores || [],
-                              interview_session_id: result.interview_session_id
+                              overall_score: sr.overall_score,
+                              recommendation: sr.recommendation || 'next_round',
+                              strengths: sr.strengths || '',
+                              weaknesses: sr.weaknesses || '',
+                              per_question: sr.per_question || sr.per_question_scores || [],
+                              interview_session_id: sr.interview_session_id
                             });
                           } catch (err: any) {
                             toast.error(err.response?.data?.detail || err.message || 'Failed to score transcript');

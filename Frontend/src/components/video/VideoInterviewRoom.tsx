@@ -1000,6 +1000,7 @@ const VideoInterviewRoom: React.FC = () => {
             width: { xs: '100%', md: '60%' },
             flex: 1,
             minHeight: 0,
+            height: '100%',
             background: 'white',
             position: 'relative',
             display: 'flex',
@@ -1092,7 +1093,12 @@ const VideoInterviewRoom: React.FC = () => {
                     </Typography>
                   </Box>
                 ) : (
-                  <Box sx={{ textAlign: 'center', p: { xs: 3, sm: 5 } }}>
+                  <Box sx={{
+                    textAlign: 'center', p: { xs: 3, sm: 5 },
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    width: '100%', height: '100%',
+                    background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 50%, #e0e7ff 100%)',
+                  }}>
                     <Box sx={{
                       width: 120,
                       height: 120,
@@ -1101,7 +1107,7 @@ const VideoInterviewRoom: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      margin: '0 auto 32px',
+                      mb: 4,
                       boxShadow: '0 12px 32px rgba(139, 92, 246, 0.4)'
                     }}>
                       <Videocam sx={{ color: 'white', fontSize: 60 }} />

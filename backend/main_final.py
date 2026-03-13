@@ -19,7 +19,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from database import engine, get_db
-from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis
+from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, InterviewQuestionVersion, InterviewRating, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis, ATSCandidateMapping, PostHireFeedback
 from schemas import (
     JobCreate, JobUpdate, JobResponse,
     CandidateProfileResponse
@@ -1000,22 +1000,40 @@ def delete_candidate(
             ).all()
         ]
 
-        # Delete application-linked records (FK to job_applications.id)
-        db.query(CandidateResume).filter(CandidateResume.candidate_id.in_(app_ids)).delete(synchronize_session=False)
-        db.query(InterviewQuestion).filter(InterviewQuestion.candidate_id.in_(app_ids)).delete(synchronize_session=False)
-        db.query(QuestionGenerationSession).filter(QuestionGenerationSession.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+        # === Step 1: Get all question IDs for these applications ===
+        question_ids = [
+            q.id for q in db.query(InterviewQuestion.id).filter(
+                InterviewQuestion.candidate_id.in_(app_ids)
+            ).all()
+        ]
 
-        # Delete user-linked records (FK to users.id) — InterviewSession, VideoInterview, etc.
+        # === Step 2: Delete all records that FK to interview_questions ===
+        if question_ids:
+            db.query(InterviewRating).filter(InterviewRating.question_id.in_(question_ids)).delete(synchronize_session=False)
+            db.query(InterviewQuestionVersion).filter(InterviewQuestionVersion.question_id.in_(question_ids)).delete(synchronize_session=False)
+            # InterviewAnswer also FKs to interview_questions
+            db.query(InterviewAnswer).filter(InterviewAnswer.question_id.in_(question_ids)).delete(synchronize_session=False)
+
+        # === Step 3: Get all session IDs (via application_id or user) ===
+        session_ids = [
+            s.id for s in db.query(InterviewSession.id).filter(
+                InterviewSession.application_id.in_(app_ids)
+            ).all()
+        ]
         if candidate_user:
-            # Get session IDs for this user to delete answers
-            session_ids = [
+            user_session_ids = [
                 s.id for s in db.query(InterviewSession.id).filter(
                     InterviewSession.candidate_id == candidate_user.id
                 ).all()
             ]
-            if session_ids:
-                db.query(InterviewAnswer).filter(InterviewAnswer.session_id.in_(session_ids)).delete(synchronize_session=False)
+            session_ids = list(set(session_ids + user_session_ids))
 
+        # Delete remaining answers by session_id (in case some weren't caught by question_id)
+        if session_ids:
+            db.query(InterviewAnswer).filter(InterviewAnswer.session_id.in_(session_ids)).delete(synchronize_session=False)
+
+        # === Step 4: Delete user-linked records (FK to users.id) ===
+        if candidate_user:
             # Get video interview IDs to delete fraud analyses
             video_ids = [
                 v.id for v in db.query(VideoInterview.id).filter(
@@ -1025,14 +1043,18 @@ def delete_candidate(
             if video_ids:
                 db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id.in_(video_ids)).delete(synchronize_session=False)
 
-            # Delete video interviews and interview sessions
             db.query(VideoInterview).filter(VideoInterview.candidate_id == candidate_user.id).delete(synchronize_session=False)
+            db.query(PostHireFeedback).filter(PostHireFeedback.candidate_id == candidate_user.id).delete(synchronize_session=False)
             db.query(InterviewSession).filter(InterviewSession.candidate_id == candidate_user.id).delete(synchronize_session=False)
 
-        # Also delete sessions linked via application_id
+        # === Step 5: Delete application-linked records ===
         db.query(InterviewSession).filter(InterviewSession.application_id.in_(app_ids)).delete(synchronize_session=False)
+        db.query(InterviewQuestion).filter(InterviewQuestion.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+        db.query(QuestionGenerationSession).filter(QuestionGenerationSession.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+        db.query(CandidateResume).filter(CandidateResume.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+        db.query(ATSCandidateMapping).filter(ATSCandidateMapping.local_application_id.in_(app_ids)).delete(synchronize_session=False)
 
-        # Now delete the applications
+        # === Step 6: Delete the applications themselves ===
         deleted = db.query(JobApplication).filter(
             JobApplication.id.in_(app_ids)
         ).delete(synchronize_session=False)
