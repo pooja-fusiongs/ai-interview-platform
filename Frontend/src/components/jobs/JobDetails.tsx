@@ -192,6 +192,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   const handleGenerateQuestions = async (candidateId: number) => {
     setGeneratingQuestions(prev => ({ ...prev, [candidateId]: true }))
     try {
+      hotToast('Generating questions... This may take a minute', { icon: '⏳', duration: 5000 })
       const genResult = await recruiterService.generateQuestions(selectedJob.id, candidateId)
       hotToast.success('Questions generated & interview scheduled!')
       const response = await apiClient.get('/api/interview/question-sets')

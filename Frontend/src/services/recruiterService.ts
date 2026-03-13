@@ -75,7 +75,7 @@ export const recruiterService = {
       candidate_id: candidateId,
       generation_mode: 'live',
       total_questions: 10,
-    });
+    }, { timeout: 180000 });
     return response.data;
   },
 

@@ -1050,21 +1050,33 @@ def end_video_interview(
                 ]
                 print(f"[end_interview] Using {len(actual_questions)} questions for transcript generation")
 
-        # --- REAL transcription from recording file (PRIMARY METHOD) ---
+        # --- REAL transcription from recording file ---
         if not vi.recording_url:
-            raise HTTPException(
-                status_code=400,
-                detail="No recording file available. Cannot generate transcript without recording."
-            )
+            print(f"[end_interview] ERROR: No recording_url for video {video_id}")
+            vi.transcript = None
+            vi.transcript_source = "failed"
+            vi.transcript_error = "No recording file available"
+            raise Exception("No recording file available")
         
-        # Validate recording file exists
-        recording_path = vi.recording_url
-        if not os.path.isabs(recording_path):
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            backend_dir = os.path.join(base_dir, '..', '..', '..')
-            recording_path = os.path.normpath(os.path.join(backend_dir, recording_path))
-        
-        print(f"[end_interview] Starting REAL transcription from: {recording_path}")
+        # Resolve recording file path (recording_url is like "/uploads/recordings/file.webm")
+        recording_url = vi.recording_url
+        # Extract just the filename from the URL
+        recording_filename = os.path.basename(recording_url)
+        # Build absolute path using same directory structure as upload endpoint
+        recordings_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"))
+        recording_path = os.path.join(recordings_dir, recording_filename)
+
+        print(f"[end_interview] Recording URL: {recording_url}")
+        print(f"[end_interview] Resolved recording path: {recording_path}")
+        print(f"[end_interview] File exists: {os.path.exists(recording_path)}")
+
+        if not os.path.exists(recording_path):
+            print(f"[end_interview] ERROR: Recording file not found at {recording_path}")
+            print(f"[end_interview] Recordings dir contents: {os.listdir(recordings_dir) if os.path.exists(recordings_dir) else 'DIR NOT FOUND'}")
+            vi.transcript = None
+            vi.transcript_source = "failed"
+            vi.transcript_error = f"Recording file not found: {recording_filename}"
+            raise Exception(f"Recording file not found: {recording_path}")
         
         # Use the new real transcript service
         from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
@@ -1088,13 +1100,11 @@ def end_video_interview(
             
         except TranscriptionError as e:
             print(f"[end_interview] Transcription failed: {e}")
+            import traceback
+            traceback.print_exc()
             vi.transcript = None
             vi.transcript_source = "failed"
             vi.transcript_error = str(e)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to generate transcript: {str(e)}"
-            )
 
         vi.transcript_generated_at = datetime.now(timezone.utc)
         print(f"[end_interview] Transcript saved for video interview {video_id}")
@@ -1229,11 +1239,9 @@ def get_video_transcript(
         
         try:
             # Validate and prepare recording path
-            recording_path = vi.recording_url
-            if not os.path.isabs(recording_path):
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                backend_dir = os.path.join(base_dir, '..', '..', '..')
-                recording_path = os.path.normpath(os.path.join(backend_dir, recording_path))
+            recording_filename = os.path.basename(vi.recording_url)
+            recordings_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"))
+            recording_path = os.path.join(recordings_dir, recording_filename)
             
             validate_recording_file(recording_path)
             
