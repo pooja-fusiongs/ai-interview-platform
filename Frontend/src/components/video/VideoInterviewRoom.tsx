@@ -740,15 +740,17 @@ const VideoInterviewRoom: React.FC = () => {
       }}>
         {/* Top Header Bar */}
         <Box sx={{
-          padding: '16px 24px',
+          padding: { xs: '10px 12px', md: '16px 24px' },
           borderBottom: '1px solid #e2e8f0',
           background: 'white',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+          flexWrap: 'wrap',
+          gap: 1
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, minWidth: 0, flex: 1 }}>
             {!isGuest && (
               <IconButton
                 onClick={() => navigate('/video-interviews')}
@@ -763,17 +765,23 @@ const VideoInterviewRoom: React.FC = () => {
                 <ArrowBack />
               </IconButton>
             )}
-            <Box>
+            <Box sx={{ minWidth: 0 }}>
               <Typography sx={{
-                fontSize: '18px',
+                fontSize: { xs: '14px', md: '18px' },
                 fontWeight: 700,
-                color: '#1e293b'
+                color: '#1e293b',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
               }}>
                 {interview?.job_title || 'Software QA Engineer'}
               </Typography>
               <Typography sx={{
                 color: '#64748b',
-                fontSize: '13px'
+                fontSize: { xs: '11px', md: '13px' },
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
               }}>
                 {interview?.candidate_name || 'pooja Mishra'} • Interview #{videoId}
               </Typography>
@@ -843,12 +851,14 @@ const VideoInterviewRoom: React.FC = () => {
         </Box>
 
         {/* Main Content Area - Split Left/Right */}
-        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* LEFT SIDE - Questions Panel */}
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, flex: 1, overflow: 'hidden' }}>
+          {/* LEFT SIDE - Questions Panel (hidden on mobile during active call, shown as collapsible) */}
           <Box sx={{
             width: { xs: '100%', md: '40%' },
+            maxHeight: { xs: isActive ? '35vh' : '50vh', md: 'none' },
             backgroundColor: 'white',
-            borderRight: '1px solid #e2e8f0',
+            borderRight: { md: '1px solid #e2e8f0' },
+            borderBottom: { xs: '1px solid #e2e8f0', md: 'none' },
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden'
@@ -988,6 +998,8 @@ const VideoInterviewRoom: React.FC = () => {
           {/* RIGHT SIDE - Video Panel */}
           <Box sx={{
             width: { xs: '100%', md: '60%' },
+            flex: { xs: 1, md: 'none' },
+            minHeight: { xs: '50vh', md: 'auto' },
             background: 'white',
             position: 'relative',
             display: 'flex',

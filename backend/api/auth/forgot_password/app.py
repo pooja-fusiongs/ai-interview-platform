@@ -12,7 +12,7 @@ from api.auth.jwt_handler import get_password_hash, SECRET_KEY, ALGORITHM
 router = APIRouter()
 
 RESET_TOKEN_EXPIRE_MINUTES = 15
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
 
 
 class ForgotPasswordRequest(BaseModel):

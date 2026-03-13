@@ -167,7 +167,7 @@ def generate_questions(
 
             try:
                 from services.email_service import send_interview_notification
-                frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+                frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
                 send_interview_notification(
                     candidate_email=candidate.applicant_email,
                     candidate_name=candidate.applicant_name,
