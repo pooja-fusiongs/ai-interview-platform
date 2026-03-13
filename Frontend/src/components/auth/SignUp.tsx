@@ -23,31 +23,46 @@ const SignUp = () => {
     role: 'recruiter' as string
   })
   const [loading, setLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [fieldTouched, setFieldTouched] = useState<Record<string, boolean>>({})
 
   const { signup } = useAuth()
   const navigate = useNavigate()
 
-  // Add global error handler for debugging only
-  React.useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error('🚨 Global error caught:', event.error)
-      if (event.error && event.error.message) {
-        showError(`Error: ${event.error.message}`)
-      }
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case 'username':
+        if (!value.trim()) return 'Full name is required'
+        if (value.trim().length < 2) return 'Name must be at least 2 characters'
+        if (!/^[a-zA-Z\s.'-]+$/.test(value.trim())) return 'Name can only contain letters and spaces'
+        return ''
+      case 'email':
+        if (!value.trim()) return 'Email is required'
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email'
+        return ''
+      case 'password':
+        if (!value) return 'Password is required'
+        if (value.length < 6) return 'Password must be at least 6 characters'
+        return ''
+      case 'confirmPassword':
+        if (!value) return 'Confirm password is required'
+        if (value !== formData.password) return 'Passwords do not match'
+        return ''
+      default:
+        return ''
     }
-
-    window.addEventListener('error', handleError)
-
-    return () => {
-      window.removeEventListener('error', handleError)
-    }
-  }, [])
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    setFieldTouched(prev => ({ ...prev, [name]: true }))
+    setFieldErrors(prev => ({ ...prev, [name]: validateField(name, value) }))
+    // Re-validate confirmPassword when password changes
+    if (name === 'password' && fieldTouched.confirmPassword) {
+      const confirmErr = formData.confirmPassword ? (value !== formData.confirmPassword ? 'Passwords do not match' : '') : 'Confirm password is required'
+      setFieldErrors(prev => ({ ...prev, confirmPassword: confirmErr }))
+    }
   }
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -61,18 +76,16 @@ const SignUp = () => {
       return
     }
 
-    if (!formData.username || !formData.email || !formData.password || !formData.confirmPassword) {
-      showError('Please fill in all fields')
-      return
+    const errors = {
+      username: validateField('username', formData.username),
+      email: validateField('email', formData.email),
+      password: validateField('password', formData.password),
+      confirmPassword: validateField('confirmPassword', formData.confirmPassword),
     }
-
-    if (formData.password !== formData.confirmPassword) {
-      showError('Passwords do not match!')
-      return
-    }
-
-    if (formData.password.length < 6) {
-      showError('Password must be at least 6 characters long!')
+    setFieldErrors(errors)
+    setFieldTouched({ username: true, email: true, password: true, confirmPassword: true })
+    if (Object.values(errors).some(e => e !== '')) {
+      showError('Please fix the errors before signing up')
       return
     }
 
@@ -228,6 +241,8 @@ const SignUp = () => {
                 variant="outlined"
                 fullWidth
                 disabled={loading}
+                error={fieldTouched.username && !!fieldErrors.username}
+                helperText={fieldTouched.username && fieldErrors.username}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: '8px',
@@ -285,6 +300,8 @@ const SignUp = () => {
                 variant="outlined"
                 fullWidth
                 disabled={loading}
+                error={fieldTouched.email && !!fieldErrors.email}
+                helperText={fieldTouched.email && fieldErrors.email}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: '8px',
@@ -344,6 +361,8 @@ const SignUp = () => {
                 variant="outlined"
                 fullWidth
                 disabled={loading}
+                error={fieldTouched.password && !!fieldErrors.password}
+                helperText={fieldTouched.password && fieldErrors.password}
                 slotProps={{
                   input: {
                     endAdornment: (
@@ -424,6 +443,8 @@ const SignUp = () => {
                 variant="outlined"
                 fullWidth
                 disabled={loading}
+                error={fieldTouched.confirmPassword && !!fieldErrors.confirmPassword}
+                helperText={fieldTouched.confirmPassword && fieldErrors.confirmPassword}
                 slotProps={{
                   input: {
                     endAdornment: (

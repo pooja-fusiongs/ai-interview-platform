@@ -7,8 +7,6 @@ import {
   Box,
   Typography,
   Button,
-  Card,
-  CardContent,
   Avatar,
   Chip,
   TextField,
@@ -21,6 +19,7 @@ import {
   DialogContent,
   DialogActions,
   Divider,
+  Drawer,
   Slider,
   Table,
   TableBody,
@@ -34,12 +33,10 @@ import {
   FormControl,
   Tooltip,
   TablePagination,
-  Skeleton,
-  useMediaQuery,
-  useTheme
+  Skeleton
 } from '@mui/material'
 import Navigation from '../layout/Sidebar'
-import { CloudUpload as CloudUploadIcon, Visibility as VisibilityIcon } from '@mui/icons-material'
+import { CloudUpload as CloudUploadIcon } from '@mui/icons-material'
 
 const pastelColors = [
   '#6C7A89', '#7E8C8D', '#5B7FA5', '#6B8E7B', '#8B7B8E',
@@ -57,16 +54,12 @@ const getAvatarColor = (name: string): string => {
 
 const Candidates = () => {
   const navigate = useNavigate()
-  const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCandidate, setMenuCandidate] = useState<Candidate | null>(null)
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false)
   const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
-  const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null)
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [sortField, setSortField] = useState<string>('')
@@ -74,7 +67,7 @@ const Candidates = () => {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [filters, setFilters] = useState<CandidateFilters>({
-    statuses: { active: true, pending: true },
+    statuses: {},
     departments: {},
     minScore: 0,
   })
@@ -194,10 +187,6 @@ const Candidates = () => {
 
   const isMenuOpen = Boolean(menuAnchorEl)
 
-  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>, candidate: Candidate) => {
-    setMenuAnchorEl(event.currentTarget)
-    setMenuCandidate(candidate)
-  }
 
   const handleCloseMenu = () => {
     setMenuAnchorEl(null)
@@ -212,6 +201,18 @@ const Candidates = () => {
   const handleCloseDetails = () => {
     setIsDetailOpen(false)
     setDetailCandidate(null)
+  }
+
+  const handleDeleteCandidate = async (candidate: Candidate) => {
+    if (!window.confirm(`Are you sure you want to delete "${candidate.name}"?`)) return
+    try {
+      await apiClient.delete(`/api/candidates/${candidate.id}`)
+      toast.success('Candidate deleted')
+      setCandidates(prev => prev.filter(c => c.id !== candidate.id))
+    } catch (error) {
+      console.error('Error deleting candidate:', error)
+      toast.error('Failed to delete candidate')
+    }
   }
 
   const handleJobSelectConfirm = async () => {
@@ -323,19 +324,12 @@ const Candidates = () => {
     }
   }
 
-  const isExportOpen = Boolean(exportAnchorEl)
-  const handleOpenExport = (event: React.MouseEvent<HTMLElement>) => setExportAnchorEl(event.currentTarget)
-  const handleCloseExport = () => setExportAnchorEl(null)
-  const handleSetViewMode = (mode: 'card' | 'table') => {
-    setViewMode(mode)
-    handleCloseExport()
-  }
 
   const handleOpenFilter = () => setIsFilterOpen(true)
   const handleCloseFilter = () => setIsFilterOpen(false)
   const handleClearFilter = () => {
     setFilters({
-      statuses: { active: true, pending: true },
+      statuses: {},
       departments: {},
       minScore: 0,
     })
@@ -367,13 +361,14 @@ const Candidates = () => {
     const query = searchQuery.trim().toLowerCase()
     const haystack = [
       candidate.name,
-      candidate.role,
-      candidate.department,
-      candidate.experience,
       candidate.email,
       candidate.phone,
-      candidate.hireDate,
-      candidate.skills.join(' ')
+      candidate.experience,
+      candidate.currentPosition || '',
+      candidate.location || '',
+      candidate.department,
+      candidate.skills.join(' '),
+      (candidate.appliedJobs || []).map(j => j.title).join(' ')
     ]
       .join(' ')
       .toLowerCase()
@@ -445,952 +440,191 @@ const Candidates = () => {
 
   return (
     <Navigation>
-      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', height: '100%' }}>
-        <Box sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          flexWrap: 'wrap',
-          gap: { xs: '12px', md: '16px' },
-          marginBottom: { xs: '16px', md: '20px' },
-          alignItems: { xs: 'stretch', md: 'center' },
-          justifyContent: 'space-between'
-        }}>
-          <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 260 }, maxWidth: { xs: '100%', md: 420 } }}>
+      <Box sx={{ p: { xs: 2, md: 3 }, background: '#f8fafc', minHeight: '100%' }}>
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
+          <Typography sx={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>Candidates</Typography>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <TextField
-              fullWidth
-              placeholder="Search candidates"
+              size="small"
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               sx={{
-                '& .MuiOutlinedInput-root': {
-                  background: 'white',
-                  borderRadius: '12px',
-                  border: '2px solid #e2e8f0',
-                  '&:hover': {
-                    borderColor: '#cbd5e1'
-                  },
-                  '&.Mui-focused': {
-                    borderColor: '#020291'
-                  }
-                },
-                '& .MuiOutlinedInput-input': {
-                  padding: { xs: '12px 14px', md: '14px 16px' },
-                  fontSize: '14px'
-                }
+                width: 220,
+                '& .MuiOutlinedInput-root': { borderRadius: '8px', background: '#fff', fontSize: '13px' },
               }}
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <i className="fas fa-search" style={{ color: '#94a3b8', fontSize: '16px' }}></i>
-                  </InputAdornment>
-                ),
+                startAdornment: <InputAdornment position="start"><i className="fas fa-search" style={{ color: '#94a3b8', fontSize: '13px' }}></i></InputAdornment>,
               }}
             />
-          </Box>
-
-          <Box sx={{ display: 'flex', gap: { xs: '8px', sm: '12px', md: '16px' }, flexWrap: 'wrap', justifyContent: { xs: 'space-between', md: 'flex-end' } }}>
-            <Button
-              onClick={refreshCandidates}
-              sx={{
-                background: 'white',
-                color: '#64748b',
-                border: '2px solid #e2e8f0',
-                padding: { xs: '10px 12px', sm: '10px 16px', md: '12px 20px' },
-                borderRadius: '10px',
-                fontSize: { xs: '12px', sm: '13px', md: '14px' },
-                fontWeight: 600,
-                textTransform: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: { xs: '4px', sm: '8px' },
-                flex: { xs: 1, sm: 'none' },
-                minWidth: { xs: 'auto', sm: 'auto' },
-                '&:hover': {
-                  borderColor: '#10b981',
-                  color: '#10b981',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(16, 185, 129, 0.15)'
-                }
-              }}
-            >
-              <i className="fas fa-sync-alt"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Refresh</Box>
-            </Button>
-            <Button
-              onClick={handleOpenFilter}
-              sx={{
-                background: 'white',
-                color: '#64748b',
-                border: '2px solid #e2e8f0',
-                padding: { xs: '10px 12px', sm: '10px 16px', md: '12px 20px' },
-                borderRadius: '10px',
-                fontSize: { xs: '12px', sm: '13px', md: '14px' },
-                fontWeight: 600,
-                textTransform: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: { xs: '4px', sm: '8px' },
-                flex: { xs: 1, sm: 'none' },
-                '&:hover': {
-                  borderColor: '#020291',
-                  color: '#020291',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(245, 158, 11, 0.15)'
-                }
-              }}
-            >
-              <i className="fas fa-filter"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Filter</Box>
-            </Button>
-            <Button
-              onClick={handleOpenExport}
-              sx={{
-                background: 'white',
-                color: '#64748b',
-                border: '2px solid #e2e8f0',
-                padding: { xs: '10px 12px', sm: '10px 16px', md: '12px 20px' },
-                borderRadius: '10px',
-                fontSize: { xs: '12px', sm: '13px', md: '14px' },
-                fontWeight: 600,
-                textTransform: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: { xs: '4px', sm: '8px' },
-                flex: { xs: 1, sm: 'none' },
-                '&:hover': {
-                  borderColor: '#020291',
-                  color: '#020291',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 25px rgba(245, 158, 11, 0.15)'
-                }
-              }}
-            >
-              <i className="fas fa-download"></i> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>View</Box>
-            </Button>
+            <IconButton onClick={refreshCandidates} size="small" sx={{ color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', '&:hover': { color: '#020291' } }}>
+              <i className="fas fa-sync-alt" style={{ fontSize: '13px' }}></i>
+            </IconButton>
+            <IconButton onClick={handleOpenFilter} size="small" sx={{ color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', '&:hover': { color: '#020291' } }}>
+              <i className="fas fa-filter" style={{ fontSize: '13px' }}></i>
+            </IconButton>
           </Box>
         </Box>
 
-        {/* Candidates Stats */}
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: { xs: '10px', sm: '12px', md: '16px' },
-          marginBottom: { xs: '16px', md: '20px' }
-        }}>
+        {/* Stats Row */}
+        {!loading && (
+          <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Total', count: candidates.length, color: '#334155' },
+              { label: 'Applied', count: candidates.filter(c => c.status === 'Applied').length, color: '#020291' },
+              { label: 'Interview', count: candidates.filter(c => c.status === 'Interview').length, color: '#2563eb' },
+              { label: 'Hired', count: candidates.filter(c => c.status === 'Hired').length, color: '#059669' },
+            ].map((s) => (
+              <Chip
+                key={s.label}
+                label={`${s.label}: ${s.count}`}
+                size="small"
+                sx={{ fontWeight: 600, fontSize: '12px', color: s.color, background: '#fff', border: '1px solid #e2e8f0' }}
+              />
+            ))}
+          </Box>
+        )}
+
+
+        {/* Table */}
+        <Paper elevation={0} sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff' }}>
           {loading ? (
-            Array.from({ length: 4 }).map((_, index) => (
-              <Card key={index} sx={{
-                padding: { xs: '16px', sm: '20px', md: '24px' },
-                borderRadius: '12px',
-                border: '1px solid #e2e8f0',
-                textAlign: 'center',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-              }}>
-                <Skeleton variant="text" width="50%" sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, mx: 'auto', mb: { xs: '4px', md: '8px' } }} />
-                <Skeleton variant="text" width="70%" sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, mx: 'auto' }} />
-              </Card>
-            ))
+            <Box sx={{ p: 2 }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: '1px solid #f1f5f9' }}>
+                  <Skeleton variant="circular" width={32} height={32} />
+                  <Box sx={{ flex: 1 }}>
+                    <Skeleton variant="text" width="30%" sx={{ fontSize: '14px' }} />
+                    <Skeleton variant="text" width="20%" sx={{ fontSize: '12px' }} />
+                  </Box>
+                  <Skeleton variant="text" width={60} />
+                  <Skeleton variant="rounded" width={55} height={22} sx={{ borderRadius: '4px' }} />
+                </Box>
+              ))}
+            </Box>
+          ) : paginatedCandidates.length === 0 ? (
+            <Box sx={{ p: 5, textAlign: 'center' }}>
+              <Typography sx={{ fontSize: '15px', color: '#94a3b8', mb: 1 }}>No candidates found</Typography>
+              <Button onClick={refreshCandidates} size="small" sx={{ textTransform: 'none', color: '#020291' }}>
+                Refresh
+              </Button>
+            </Box>
           ) : (
-            [{
-              number: candidates.length.toString(), label: 'Total Candidates'
-            }, {
-              number: candidates.filter(c => c.status === 'pending').length.toString(), label: 'Pending Review'
-            }, {
-              number: candidates.filter(c => c.score && c.score >= 80).length.toString(), label: 'High Scored'
-            }, {
-              number: candidates.filter(c => c.status === 'active').length.toString(), label: 'Active'
-            }].map((stat, index) => (
-              <Card key={index} sx={{
-                padding: { xs: '16px', sm: '20px', md: '24px' },
-                borderRadius: '12px',
-                border: '1px solid #e2e8f0',
-                textAlign: 'center',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-              }}>
-                <Typography sx={{ fontSize: { xs: '24px', sm: '28px', md: '32px' }, fontWeight: 700, color: '#020291', marginBottom: { xs: '4px', md: '8px' } }}>
-                  {stat.number}
-                </Typography>
-                <Typography sx={{ fontSize: { xs: '11px', sm: '12px', md: '14px' }, color: '#64748b', fontWeight: 500 }}>
-                  {stat.label}
-                </Typography>
-              </Card>
-            ))
-          )}
-        </Box>
-
-        {/* Export menu: view options */}
-        <Menu
-          anchorEl={exportAnchorEl}
-          open={isExportOpen}
-          onClose={handleCloseExport}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          PaperProps={{
-            sx: {
-              borderRadius: '10px',
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.08)'
-            }
-          }}
-        >
-          <MenuItem onClick={() => handleSetViewMode('table')} sx={{ fontSize: '14px', gap: '10px' }}>
-            <i className="fas fa-table" style={{ width: 16, color: '#64748b' }}></i>
-            Table View
-          </MenuItem>
-          <MenuItem onClick={() => handleSetViewMode('card')} sx={{ fontSize: '14px', gap: '10px' }}>
-            <i className="fas fa-th-large" style={{ width: 16, color: '#64748b' }}></i>
-            Card View
-          </MenuItem>
-        </Menu>
-
-        {viewMode === 'card' ? (
-          <>
-            {loading ? (
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: {
-                    xs: '1fr',
-                    sm: 'repeat(2, minmax(0, 1fr))',
-                    md: 'repeat(2, minmax(0, 1fr))',
-                    lg: 'repeat(3, minmax(0, 1fr))',
-                    xl: 'repeat(4, minmax(0, 1fr))'
-                  },
-                  gap: { xs: '12px', sm: '14px', md: '16px' }
-                }}
-              >
-                {Array.from({ length: 8 }).map((_, index) => (
-                  <Card key={index} sx={{
-                    borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
-                    padding: { xs: '14px', sm: '16px', md: '20px' },
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                  }}>
-                    {/* Header skeleton */}
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', mb: '16px' }}>
-                      <Skeleton variant="circular" width={50} height={50} />
-                      <Box sx={{ flex: 1 }}>
-                        <Skeleton variant="text" width="70%" sx={{ fontSize: '16px', mb: '4px' }} />
-                        <Skeleton variant="text" width="40%" sx={{ fontSize: '12px' }} />
-                      </Box>
-                    </Box>
-                    {/* Department skeleton */}
-                    <Box sx={{ mb: '16px', pb: '12px', borderBottom: '1px solid #f1f5f9' }}>
-                      <Skeleton variant="text" width="30%" sx={{ fontSize: '11px', mb: '4px' }} />
-                      <Skeleton variant="text" width="50%" sx={{ fontSize: '13px' }} />
-                    </Box>
-                    {/* Skills skeleton */}
-                    <Box sx={{ display: 'flex', gap: '6px', mb: '16px', flexWrap: 'wrap' }}>
-                      <Skeleton variant="rounded" width={60} height={24} sx={{ borderRadius: '12px' }} />
-                      <Skeleton variant="rounded" width={75} height={24} sx={{ borderRadius: '12px' }} />
-                      <Skeleton variant="rounded" width={50} height={24} sx={{ borderRadius: '12px' }} />
-                    </Box>
-                    {/* Contact skeleton */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', mb: '16px' }}>
-                      <Skeleton variant="text" width="80%" sx={{ fontSize: '12px' }} />
-                      <Skeleton variant="text" width="55%" sx={{ fontSize: '12px' }} />
-                    </Box>
-                    {/* Button skeleton */}
-                    <Skeleton variant="rounded" width={130} height={32} sx={{ borderRadius: '10px' }} />
-                  </Card>
-                ))}
-              </Box>
-            ) : (
-              <>
-                {/* Candidates Grid */}
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns: {
-                      xs: '1fr',
-                      sm: 'repeat(2, minmax(0, 1fr))',
-                      md: 'repeat(2, minmax(0, 1fr))',
-                      lg: 'repeat(3, minmax(0, 1fr))',
-                      xl: 'repeat(4, minmax(0, 1fr))'
-                    },
-                    gap: { xs: '12px', sm: '14px', md: '16px' }
-                  }}
-                >
-                  {sortedCandidates.map((candidate) => (
-                    <Box key={candidate.id}>
-                      <Card sx={{
-                        position: 'relative',
-                        borderRadius: '12px',
-                        border: '1px solid #e2e8f0',
-                        padding: { xs: '14px', sm: '16px', md: '20px' },
-                        transition: 'all 0.3s ease',
-                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                        '&:hover': {
-                          boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)'
-                        }
-                      }}>
-                        {/* 3-dots menu */}
-                        <IconButton
-                          size="small"
-                          aria-label="candidate options"
-                          onClick={(e) => handleOpenMenu(e, candidate)}
-                          sx={{
-                            position: 'absolute',
-                            top: 10,
-                            right: 10,
-                            color: '#94a3b8',
-                            '&:hover': {
-                              background: '#f1f5f9',
-                              color: '#64748b'
-                            }
-                          }}
-                        >
-                          <i className="fas fa-ellipsis-h" style={{ fontSize: '14px' }}></i>
-                        </IconButton>
-
-                        {/* Header */}
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
-                          <Box sx={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar sx={{ width: 50, height: 50, background: getAvatarColor(candidate.name), fontSize: '18px', fontWeight: 700 }}>
-                              {candidate.name.charAt(0).toUpperCase()}
-                            </Avatar>
-                            <Box sx={{
-                              position: 'absolute',
-                              bottom: 2,
-                              right: 2,
-                              width: 12,
-                              height: 12,
-                              borderRadius: '50%',
-                              border: '2px solid white',
-                              background: candidate.isOnline ? '#22c55e' : '#f59e0b'
-                            }} />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography
-                              variant="h6"
-                              sx={{
-                                fontSize: '16px',
-                                fontWeight: 600,
-                                color: '#1e293b',
-                                margin: '0 0 4px 0',
-                                cursor: 'pointer',
-                                '&:hover': { color: '#3b82f6' }
-                              }}
-                              onClick={() => handleViewDetails(candidate)}
-                            >
-                              {candidate.name}
-                            </Typography>
-                            <Typography sx={{ fontSize: '12px', color: '#64748b', margin: '0 0 4px 0' }}>
-                              {candidate.experience}
-                            </Typography>
-                          </Box>
-                        </Box>
-
-                        {/* Details */}
-                        <Box sx={{ display: 'flex', gap: '24px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
-                          <Box>
-                            <Typography sx={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 500 }}>
-                              Department
-                            </Typography>
-                            <Typography sx={{ fontSize: '13px', color: '#1e293b', fontWeight: 500, marginTop: '4px' }}>
-                              {candidate.department}
-                            </Typography>
-                          </Box>
-                        </Box>
-
-                        {/* Skills */}
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
-                          {candidate.skills.map((skill: string, index: number) => (
-                            <Chip
-                              key={index}
-                              label={skill}
-                              size="small"
-                              sx={{
-                                background: '#f1f5f9',
-                                color: '#475569',
-                                fontSize: '11px',
-                                fontWeight: 500,
-                                height: 'auto',
-                                padding: '3px 8px'
-                              }}
-                            />
-                          ))}
-                        </Box>
-
-                        {/* Contact */}
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748b' }}>
-                            <i className="fas fa-envelope" style={{ width: '14px', color: '#94a3b8' }}></i>
-                            <span>{candidate.email}</span>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748b' }}>
-                            <i className="fas fa-phone" style={{ width: '14px', color: '#94a3b8' }}></i>
-                            <span>{candidate.phone}</span>
-                          </Box>
-                        </Box>
-
-
-
-                        {/* Action Buttons */}
-                        <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {/* Review Questions Button */}
-                          {candidateQuestionSessions[candidate.id] && (
-                            <Button
-                              size="small"
-                              onClick={() => navigate(`/interview-outline/${candidateQuestionSessions[candidate.id]}`)}
-                              sx={{
-                                background: '#EEF0FF',
-                                color: '#020291',
-                                border: '2px solid #020291',
-                                borderRadius: '10px',
-                                fontSize: { xs: '12px', sm: '14px' },
-                                fontWeight: 600,
-                                textTransform: 'none',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: { xs: '4px', sm: '8px' },
-                                minWidth: { xs: 'auto', sm: '120px' },
-                                '&:hover': {
-                                  background: '#EEF0FF',
-                                  borderColor: '#020291',
-                                  transform: 'translateY(-2px)',
-                                }
-                              }}
-                            >
-                              <i className="fas fa-list-check" style={{ marginRight: 6, fontSize: '10px' }} />
-                              Review Questions
-                            </Button>
-                          )}
-                        </Box>
-                      </Card>
-                    </Box>
-                  ))}
-                  {sortedCandidates.length === 0 && !loading && (
-                    <Box sx={{ gridColumn: '1 / -1' }}>
-                      <Card sx={{ padding: '48px 24px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', background: 'white' }}>
-                        <i className="fas fa-users" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '16px' }}></i>
-                        <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
-                          No candidates found
-                        </Typography>
-                        <Typography sx={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
-                          {searchQuery ?
-                            'Try adjusting your search or filters to find matching candidates.' :
-                            'No users with candidate role found in the system.'
-                          }
-                        </Typography>
-                        <Button
-                          onClick={refreshCandidates}
-                          sx={{
-                            background: '#020291',
-                            color: 'white',
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            textTransform: 'none',
-                            '&:hover': {
-                              background: '#020291'
-                            }
-                          }}
-                        >
-                          <i className="fas fa-sync-alt" style={{ marginRight: '8px' }}></i>
-                          Refresh List
-                        </Button>
-                      </Card>
-                    </Box>
-                  )}
-                </Box>
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            {loading ? (
-              isMobile ? (
-                /* Mobile skeleton cards */
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Card key={index} sx={{ borderRadius: 2, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
-                      <CardContent sx={{ p: 2 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                            <Skeleton variant="circular" width={40} height={40} />
-                            <Box>
-                              <Skeleton variant="text" width={120} sx={{ fontSize: '14px' }} />
-                              <Skeleton variant="text" width={80} sx={{ fontSize: '12px' }} />
-                            </Box>
-                          </Box>
-                          <Skeleton variant="rounded" width={60} height={22} sx={{ borderRadius: '12px' }} />
-                        </Box>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
-                          <Box>
-                            <Skeleton variant="text" width="50%" sx={{ fontSize: '11px' }} />
-                            <Skeleton variant="text" width="70%" sx={{ fontSize: '13px' }} />
-                          </Box>
-                          <Box>
-                            <Skeleton variant="text" width="40%" sx={{ fontSize: '11px' }} />
-                            <Skeleton variant="text" width="35%" sx={{ fontSize: '13px' }} />
-                          </Box>
-                        </Box>
-                        <Box sx={{ mb: 2 }}>
-                          <Skeleton variant="text" width="30%" sx={{ fontSize: '11px' }} />
-                          <Skeleton variant="text" width="80%" sx={{ fontSize: '13px' }} />
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1, pt: 1, borderTop: '1px solid #f1f5f9' }}>
-                          <Skeleton variant="rounded" width="70%" height={34} sx={{ borderRadius: '8px' }} />
-                          <Skeleton variant="circular" width={34} height={34} />
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </Box>
-              ) : (
-                /* Desktop table skeleton */
-                <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-                  <TableContainer>
-                    <Table size="small" sx={{ minWidth: 800 }}>
-                      <TableHead>
-                        <TableRow sx={{ background: '#f8fafc' }}>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Candidate</TableCell>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Role</TableCell>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Department</TableCell>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Status</TableCell>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Online Status</TableCell>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }} align="right">Score</TableCell>
-                          <TableCell sx={{ fontWeight: 800, color: '#475569' }} align="right">Action</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {Array.from({ length: 8 }).map((_, index) => (
-                          <TableRow key={index}>
-                            <TableCell>
-                              <Skeleton variant="text" width={120} sx={{ fontSize: '14px' }} />
-                              <Skeleton variant="text" width={160} sx={{ fontSize: '12px' }} />
-                            </TableCell>
-                            <TableCell><Skeleton variant="text" width={90} /></TableCell>
-                            <TableCell><Skeleton variant="text" width={80} /></TableCell>
-                            <TableCell><Skeleton variant="rounded" width={60} height={22} sx={{ borderRadius: '12px' }} /></TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Skeleton variant="circular" width={8} height={8} />
-                                <Skeleton variant="text" width={50} sx={{ fontSize: '12px' }} />
-                              </Box>
-                            </TableCell>
-                            <TableCell align="right"><Skeleton variant="text" width={35} sx={{ ml: 'auto' }} /></TableCell>
-                            <TableCell align="right">
-                              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
-                                <Skeleton variant="circular" width={28} height={28} />
-                                <Skeleton variant="circular" width={28} height={28} />
-                              </Box>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Paper>
-              )
-            ) : paginatedCandidates.length === 0 ? (
-              <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-                <i className="fas fa-users" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '16px', display: 'block' }}></i>
-                <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
-                  No candidates found
-                </Typography>
-                <Typography sx={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
-                  {searchQuery ?
-                    'Try adjusting your search or filters to find matching candidates.' :
-                    'No users with candidate role found in the system.'
-                  }
-                </Typography>
-                <Button
-                  onClick={refreshCandidates}
-                  sx={{
-                    background: '#020291',
-                    color: 'white',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      background: '#020291'
-                    }
-                  }}
-                >
-                  <i className="fas fa-sync-alt" style={{ marginRight: '8px' }}></i>
-                  Refresh List
-                </Button>
-              </Paper>
-            ) : isMobile ? (
-              /* Mobile Card View */
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {paginatedCandidates.map((candidate) => (
-                  <Card key={candidate.id} sx={{ borderRadius: 2, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
-                    <CardContent sx={{ p: 2 }}>
-                      {/* Header with Avatar and Status */}
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell
+                      sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5, cursor: 'pointer', '&:hover': { color: '#020291' } }}
+                      onClick={() => handleSort('name')}
+                    >
+                      Name {getSortIcon('name')}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5 }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5 }}>Experience</TableCell>
+                    <TableCell
+                      sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5, cursor: 'pointer', '&:hover': { color: '#020291' } }}
+                      onClick={() => handleSort('status')}
+                    >
+                      Status {getSortIcon('status')}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5 }}>Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedCandidates.map((candidate) => (
+                    <TableRow
+                      key={candidate.id}
+                      onClick={() => handleViewDetails(candidate)}
+                      sx={{
+                        cursor: 'pointer',
+                        '&:hover': { background: '#fafbff' },
+                        '& td': { py: 1.5, borderBottom: '1px solid #f1f5f9' }
+                      }}
+                    >
+                      <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                          <Box sx={{ position: 'relative' }}>
-                            <Avatar sx={{ width: 40, height: 40, backgroundColor: getAvatarColor(candidate.name), color: '#fff', fontSize: '1rem' }}>
-                              {candidate.name.charAt(0).toUpperCase()}
-                            </Avatar>
-                            <Box sx={{
-                              position: 'absolute',
-                              bottom: 0,
-                              right: 0,
-                              width: 10,
-                              height: 10,
-                              borderRadius: '50%',
-                              border: '2px solid white',
-                              background: candidate.isOnline ? '#22c55e' : '#f59e0b'
-                            }} />
-                          </Box>
-                          <Box>
-                            <Typography
-                              sx={{
-                                fontWeight: 600,
-                                color: '#1e293b',
-                                fontSize: '14px',
-                                cursor: 'pointer',
-                                '&:hover': { color: '#3b82f6' }
-                              }}
-                              onClick={() => handleViewDetails(candidate)}
-                            >
-                              {candidate.name}
-                            </Typography>
-                            <Typography sx={{ color: '#020291', fontSize: '12px', fontWeight: 600 }}>
-                              {candidate.role}
-                            </Typography>
-                          </Box>
+                          <Avatar sx={{ width: 32, height: 32, background: getAvatarColor(candidate.name), fontSize: '13px', fontWeight: 600 }}>
+                            {candidate.name.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Typography sx={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>
+                            {candidate.name}
+                          </Typography>
                         </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{candidate.email}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography sx={{ fontSize: '13px', color: '#1e293b' }}>{candidate.experience || '--'}</Typography>
+                      </TableCell>
+                      <TableCell>
                         <Chip
                           size="small"
                           label={candidate.status}
                           sx={{
-                            textTransform: 'capitalize',
-                            background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(2, 2, 145, 0.12)',
-                            color: candidate.status === 'active' ? '#10b981' : '#020291',
-                            fontWeight: 600,
-                            fontSize: '11px'
+                            fontWeight: 600, fontSize: '11px', borderRadius: '4px', height: 22,
+                            background:
+                              candidate.status === 'Hired' ? '#ecfdf5' :
+                              candidate.status === 'Interview' ? '#eff6ff' :
+                              candidate.status === 'Reviewed' ? '#f5f3ff' :
+                              candidate.status === 'Rejected' ? '#fef2f2' : '#f0f0ff',
+                            color:
+                              candidate.status === 'Hired' ? '#059669' :
+                              candidate.status === 'Interview' ? '#2563eb' :
+                              candidate.status === 'Reviewed' ? '#7c3aed' :
+                              candidate.status === 'Rejected' ? '#dc2626' : '#020291',
                           }}
                         />
-                      </Box>
-
-                      {/* Details Grid */}
-                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
-                        <Box>
-                          <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
-                            Department
-                          </Typography>
-                          <Typography sx={{ fontSize: '13px', color: '#1e293b' }}>
-                            {candidate.department}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
-                            Score
-                          </Typography>
-                          <Typography sx={{
-                            fontSize: '13px',
-                            fontWeight: 700,
-                            color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#020291' : '#ef4444'
-                          }}>
-                            {candidate.score}%
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      {/* Email */}
-                      <Box sx={{ mb: 2 }}>
-                        <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
-                          Email
-                        </Typography>
-                        <Typography sx={{ fontSize: '13px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {candidate.email}
-                        </Typography>
-                      </Box>
-
-                      {/* Online Status */}
-                      <Box sx={{ mb: 2 }}>
-                        <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
-                          Online Status
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: 0.5 }}>
-                          <Box sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            background: candidate.isOnline ? '#10b981' : '#94a3b8'
-                          }} />
-                          <Typography sx={{
-                            fontSize: '13px',
-                            color: candidate.isOnline ? '#10b981' : '#94a3b8',
-                            fontWeight: 500,
-                            textTransform: 'capitalize'
-                          }}>
-                            {candidate.onlineStatus || (candidate.isOnline ? 'Active' : 'Inactive')}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      {/* Actions */}
-                      <Box sx={{ display: 'flex', gap: 1, pt: 1, borderTop: '1px solid #f1f5f9' }}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<VisibilityIcon />}
-                          onClick={() => handleViewDetails(candidate)}
-                          sx={{
-                            flex: 1,
-                            textTransform: 'none',
-                            borderColor: '#3b82f6',
-                            color: '#3b82f6',
-                            fontSize: '12px',
-                            '&:hover': {
-                              borderColor: '#2563eb',
-                              backgroundColor: 'rgba(59, 130, 246, 0.05)'
-                            }
-                          }}
-                        >
-                          View Details
-                        </Button>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleOpenMenu(e, candidate)}
-                          sx={{
-                            color: '#64748b',
-                            border: '1px solid #e2e8f0',
-                            '&:hover': {
-                              color: '#020291',
-                              borderColor: '#020291',
-                              background: 'rgba(245,158,11,0.06)'
-                            }
-                          }}
-                        >
-                          <i className="fas fa-ellipsis-h" style={{ fontSize: '14px' }}></i>
-                        </IconButton>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            ) : (
-              /* Desktop Table View */
-              <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-                <TableContainer sx={{ overflowX: 'auto' }}>
-                  <Table size="small" sx={{ minWidth: 800 }}>
-                    <TableHead>
-                      <TableRow sx={{ background: '#f8fafc' }}>
-                        <TableCell
-                          sx={{
-                            fontWeight: 800,
-                            color: '#475569',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            '&:hover': { color: '#020291' }
-                          }}
-                          onClick={() => handleSort('name')}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            Candidate
-                            {getSortIcon('name')}
-                          </Box>
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            fontWeight: 800,
-                            color: '#475569',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            '&:hover': { color: '#020291' }
-                          }}
-                          onClick={() => handleSort('role')}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            Role
-                            {getSortIcon('role')}
-                          </Box>
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            fontWeight: 800,
-                            color: '#475569',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            '&:hover': { color: '#020291' }
-                          }}
-                          onClick={() => handleSort('department')}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            Department
-                            {getSortIcon('department')}
-                          </Box>
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            fontWeight: 800,
-                            color: '#475569',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            '&:hover': { color: '#020291' }
-                          }}
-                          onClick={() => handleSort('status')}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            Status
-                            {getSortIcon('status')}
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 800, color: '#475569' }}>
-                          Online Status
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            fontWeight: 800,
-                            color: '#475569',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            '&:hover': { color: '#020291' }
-                          }}
-                          align="right"
-                          onClick={() => handleSort('score')}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                            Score
-                            {getSortIcon('score')}
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 800, color: '#475569' }} align="right">Action</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {paginatedCandidates.map((candidate) => (
-                        <TableRow key={candidate.id} hover>
-                          <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>
-                            <Typography
-                              sx={{
-                                fontWeight: 700,
-                                color: '#1e293b',
-                                cursor: 'pointer',
-                                '&:hover': { color: '#3b82f6' }
-                              }}
-                              onClick={() => handleViewDetails(candidate)}
-                            >
-                              {candidate.name}
-                            </Typography>
-                            <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-                              {candidate.email}
-                            </Typography>
-                          </TableCell>
-                          <TableCell sx={{ color: '#020291', fontWeight: 700 }}>{candidate.role}</TableCell>
-                          <TableCell sx={{ color: '#1e293b', fontWeight: 600 }}>{candidate.department}</TableCell>
-                          <TableCell>
-                            <Chip
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Tooltip title="View Details">
+                            <IconButton
                               size="small"
-                              label={candidate.status}
-                              sx={{
-                                textTransform: 'capitalize',
-                                background: candidate.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(2, 2, 145, 0.12)',
-                                color: candidate.status === 'active' ? '#10b981' : '#020291',
-                                fontWeight: 800
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <Box sx={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                background: candidate.isOnline ? '#10b981' : '#94a3b8'
-                              }} />
-                              <Typography sx={{
-                                fontSize: '12px',
-                                color: candidate.isOnline ? '#10b981' : '#94a3b8',
-                                fontWeight: 600,
-                                textTransform: 'capitalize'
-                              }}>
-                                {candidate.onlineStatus || (candidate.isOnline ? 'Active' : 'Inactive')}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 800, color: candidate.score >= 90 ? '#10b981' : candidate.score >= 80 ? '#020291' : '#ef4444' }}>
-                            {candidate.score}%
-                          </TableCell>
-                          <TableCell align="right">
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                              <Tooltip title="View Details">
-                                <IconButton
-                                  onClick={() => handleViewDetails(candidate)}
-                                  sx={{
-                                    color: '#3b82f6',
-                                    '&:hover': {
-                                      color: '#2563eb',
-                                      background: 'rgba(59, 130, 246, 0.1)'
-                                    }
-                                  }}
-                                >
-                                  <VisibilityIcon sx={{ fontSize: '18px' }} />
-                                </IconButton>
-                              </Tooltip>
-                              <IconButton
-                                onClick={(e) => handleOpenMenu(e, candidate)}
-                                sx={{
-                                  color: '#64748b',
-                                  '&:hover': {
-                                    color: '#020291',
-                                    background: 'rgba(245,158,11,0.06)'
-                                  }
-                                }}
-                              >
-                                <i className="fas fa-ellipsis-h" style={{ fontSize: '14px' }}></i>
-                              </IconButton>
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            )}
-
-            {/* Pagination for Table View */}
-            {sortedCandidates.length > 0 && (
-              <Paper sx={{ mt: 2, borderRadius: 2, overflow: 'hidden' }}>
-                <TablePagination
-                  rowsPerPageOptions={isMobile ? [5, 10] : [5, 10, 25, 50]}
-                  component="div"
-                  count={sortedCandidates.length}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                  labelRowsPerPage={isMobile ? "Per page:" : "Rows per page:"}
-                  sx={{
-                    flexShrink: 0,
-                    backgroundColor: '#fff',
-                    '.MuiTablePagination-toolbar': {
-                      flexWrap: 'wrap',
-                      justifyContent: isMobile ? 'center' : 'flex-end',
-                      padding: isMobile ? '8px' : '8px 16px',
-                      gap: isMobile ? 1 : 0,
-                    },
-                    '.MuiTablePagination-selectLabel': {
-                      color: '#64748b',
-                      fontWeight: 500,
-                      fontSize: isMobile ? '12px' : '14px',
-                    },
-                    '.MuiTablePagination-displayedRows': {
-                      color: '#64748b',
-                      fontWeight: 500,
-                      fontSize: isMobile ? '12px' : '14px',
-                    },
-                    '.MuiTablePagination-select': {
-                      fontWeight: 500,
-                    },
-                    '.MuiTablePagination-actions': {
-                      marginLeft: isMobile ? 0 : 2,
-                    }
-                  }}
-                />
-              </Paper>
-            )}
-          </>
-        )}
+                              onClick={(e) => { e.stopPropagation(); handleViewDetails(candidate) }}
+                              sx={{ color: '#94a3b8', '&:hover': { color: '#020291', background: 'rgba(2,2,145,0.06)' } }}
+                            >
+                              <i className="fas fa-eye" style={{ fontSize: '13px' }}></i>
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete Candidate">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(candidate) }}
+                              sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626', background: 'rgba(220,38,38,0.06)' } }}
+                            >
+                              <i className="fas fa-trash-alt" style={{ fontSize: '12px' }}></i>
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+          {/* Pagination */}
+          {sortedCandidates.length > 0 && !loading && (
+            <TablePagination
+              rowsPerPageOptions={[10, 25, 50]}
+              component="div"
+              count={sortedCandidates.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              sx={{
+                borderTop: '1px solid #f1f5f9',
+                '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                  color: '#64748b', fontSize: '13px',
+                },
+              }}
+            />
+          )}
+        </Paper>
 
         {/* Professional Job Selection Dialog */}
         <Dialog
@@ -2098,163 +1332,173 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
           </MenuItem>
         </Menu>
 
-        {/* Candidate Details Dialog - Simple & Clean */}
-        <Dialog
+        {/* Candidate Details Panel */}
+        <Drawer
+          anchor="right"
           open={isDetailOpen}
           onClose={handleCloseDetails}
-          maxWidth="sm"
-          fullWidth
+          transitionDuration={300}
+          SlideProps={{ easing: 'cubic-bezier(0.4, 0, 0.2, 1)' }}
           PaperProps={{
             sx: {
-              borderRadius: { xs: '12px', md: '12px' },
-              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.12)',
-              margin: { xs: '12px', md: '32px' },
-              maxHeight: { xs: '90vh', md: '85vh' }
+              width: { xs: 'calc(100% - 32px)', sm: 420 },
+              m: { xs: '16px', sm: '16px' },
+              height: 'calc(100% - 32px)',
+              borderRadius: '16px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
+              overflow: 'hidden',
             }
           }}
         >
           {detailCandidate && (
-            <>
-              <DialogTitle sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '20px 24px',
-                borderBottom: '1px solid #e2e8f0'
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Avatar sx={{ width: 48, height: 48, background: getAvatarColor(detailCandidate.name || 'C'), fontWeight: 600 }}>
-                    {detailCandidate.name?.charAt(0).toUpperCase() || 'C'}
-                  </Avatar>
-                  <Box>
-                    <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#1e293b' }}>
-                      {detailCandidate.name}
-                    </Typography>
-                    <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
-                      {detailCandidate.department} • {detailCandidate.experience}
-                    </Typography>
-                  </Box>
-                </Box>
-                <IconButton onClick={handleCloseDetails} size="small">
-                  <i className="fas fa-times" style={{ fontSize: '14px', color: '#64748b' }}></i>
-                </IconButton>
-              </DialogTitle>
-
-              <DialogContent sx={{ padding: '24px' }}>
-                {/* Contact Info */}
-                <Box sx={{ marginBottom: '20px' }}>
-                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px' }}>
-                    Contact
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <i className="fas fa-envelope" style={{ color: '#94a3b8', width: '16px', fontSize: '13px' }}></i>
-                      <Typography sx={{ fontSize: '14px', color: '#1e293b' }}>{detailCandidate.email}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <i className="fas fa-phone" style={{ color: '#94a3b8', width: '16px', fontSize: '13px' }}></i>
-                      <Typography sx={{ fontSize: '14px', color: '#1e293b' }}>{detailCandidate.phone}</Typography>
+            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              {/* Header */}
+              <Box sx={{ p: 3, pb: 2.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ width: 48, height: 48, background: getAvatarColor(detailCandidate.name), fontSize: '18px', fontWeight: 700 }}>
+                      {detailCandidate.name?.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box>
+                      <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', lineHeight: 1.3 }}>{detailCandidate.name}</Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{detailCandidate.email}</Typography>
                     </Box>
                   </Box>
+                  <IconButton onClick={handleCloseDetails} size="small" sx={{ color: '#94a3b8', alignSelf: 'flex-start' }}>
+                    <i className="fas fa-times" style={{ fontSize: '14px' }}></i>
+                  </IconButton>
                 </Box>
+                {/* Info row with icons */}
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  {detailCandidate.phone && detailCandidate.phone !== '--' && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                      <i className="fas fa-phone" style={{ fontSize: '11px', color: '#94a3b8' }}></i>
+                      <Typography sx={{ fontSize: '12px', color: '#64748b' }}>{detailCandidate.phone}</Typography>
+                    </Box>
+                  )}
+                  {detailCandidate.location && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                      <i className="fas fa-map-marker-alt" style={{ fontSize: '11px', color: '#94a3b8' }}></i>
+                      <Typography sx={{ fontSize: '12px', color: '#64748b' }}>{detailCandidate.location}</Typography>
+                    </Box>
+                  )}
+                  {detailCandidate.experience && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                      <i className="fas fa-briefcase" style={{ fontSize: '11px', color: '#94a3b8' }}></i>
+                      <Typography sx={{ fontSize: '12px', color: '#64748b' }}>{detailCandidate.experience}</Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
 
-                {/* Status Row */}
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: '10px', sm: '16px' }, marginBottom: '20px' }}>
-                  <Box sx={{ flex: 1, background: '#f8fafc', padding: { xs: '10px 14px', md: '12px 16px' }, borderRadius: '8px' }}>
-                    <Typography sx={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Status</Typography>
-                    <Chip
-                      size="small"
-                      label={detailCandidate.status}
-                      sx={{
-                        textTransform: 'capitalize',
-                        background: detailCandidate.status === 'active' ? '#dcfce7' : '#fef3c7',
-                        color: detailCandidate.status === 'active' ? '#16a34a' : '#020291',
-                        fontWeight: 600,
-                        fontSize: '12px'
-                      }}
-                    />
+              <Divider />
+
+              {/* Body */}
+              <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+                {/* Status, Score, Experience cards */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5, mb: 3 }}>
+                  <Box sx={{ p: 1.5, background: '#f8fafc', borderRadius: '10px', textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>Status</Typography>
+                    <Chip size="small" label={detailCandidate.status} sx={{
+                      fontWeight: 600, fontSize: '11px', borderRadius: '4px',
+                      background:
+                        detailCandidate.status === 'Hired' ? '#ecfdf5' :
+                        detailCandidate.status === 'Interview' ? '#eff6ff' :
+                        detailCandidate.status === 'Rejected' ? '#fef2f2' : '#f0f0ff',
+                      color:
+                        detailCandidate.status === 'Hired' ? '#059669' :
+                        detailCandidate.status === 'Interview' ? '#2563eb' :
+                        detailCandidate.status === 'Rejected' ? '#dc2626' : '#020291',
+                    }} />
                   </Box>
-                  <Box sx={{ flex: 1, background: '#f8fafc', padding: '12px 16px', borderRadius: '8px' }}>
-                    <Typography sx={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Score</Typography>
+                  <Box sx={{ p: 1.5, background: '#f8fafc', borderRadius: '10px', textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>Score</Typography>
                     <Typography sx={{
-                      fontSize: '20px',
-                      fontWeight: 700,
-                      color: (detailCandidate.score || 0) >= 80 ? '#16a34a' : (detailCandidate.score || 0) >= 60 ? '#020291' : '#dc2626'
+                      fontSize: '20px', fontWeight: 800, lineHeight: 1,
+                      color: detailCandidate.score >= 75 ? '#059669' : detailCandidate.score >= 50 ? '#2563eb' : detailCandidate.score > 0 ? '#dc2626' : '#cbd5e1'
                     }}>
-                      {detailCandidate.score || 0}%
+                      {detailCandidate.score > 0 ? `${detailCandidate.score}%` : '--'}
                     </Typography>
-                  </Box>
-                  <Box sx={{ flex: 1, background: '#f8fafc', padding: '12px 16px', borderRadius: '8px' }}>
-                    <Typography sx={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Online</Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Box sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: detailCandidate.isOnline ? '#16a34a' : '#94a3b8'
-                      }} />
-                      <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>
-                        {detailCandidate.isOnline ? 'Online' : 'Offline'}
+                    {detailCandidate.recommendation && (
+                      <Typography sx={{ fontSize: '9px', fontWeight: 600, textTransform: 'capitalize', mt: 0.3,
+                        color: detailCandidate.recommendation === 'select' ? '#059669' : detailCandidate.recommendation === 'next_round' ? '#2563eb' : '#dc2626'
+                      }}>
+                        {detailCandidate.recommendation.replace('_', ' ')}
                       </Typography>
-                    </Box>
+                    )}
+                  </Box>
+                  <Box sx={{ p: 1.5, background: '#f8fafc', borderRadius: '10px', textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>Jobs</Typography>
+                    <Typography sx={{ fontSize: '20px', fontWeight: 800, lineHeight: 1, color: '#020291' }}>
+                      {detailCandidate.appliedJobs?.length || 0}
+                    </Typography>
                   </Box>
                 </Box>
 
                 {/* Skills */}
-                <Box>
-                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px' }}>
-                    Skills
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {detailCandidate.skills?.map((skill: string, index: number) => (
-                      <Chip
-                        key={index}
-                        label={skill}
-                        size="small"
-                        sx={{
-                          background: '#f1f5f9',
-                          color: '#475569',
-                          fontSize: '12px',
-                          fontWeight: 500
-                        }}
-                      />
-                    ))}
+                {detailCandidate.skills && detailCandidate.skills.length > 0 && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography sx={{ fontSize: '12px', color: '#334155', fontWeight: 600, mb: 1 }}>Skills</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                      {detailCandidate.skills.map((skill: string, i: number) => (
+                        <Chip key={i} label={skill} size="small" sx={{ fontSize: '12px', fontWeight: 500, background: '#f1f5f9', color: '#475569', borderRadius: '6px' }} />
+                      ))}
+                    </Box>
                   </Box>
-                </Box>
-              </DialogContent>
+                )}
 
-              <DialogActions sx={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', gap: '8px' }}>
-                <Button
-                  onClick={handleCloseDetails}
-                  sx={{
-                    color: '#64748b',
-                    textTransform: 'none',
-                    fontWeight: 500
-                  }}
-                >
-                  Close
-                </Button>
-                {detailCandidate && candidateQuestionSessions[detailCandidate.id] && (
+                {/* Applied Jobs */}
+                <Box>
+                  <Typography sx={{ fontSize: '12px', color: '#334155', fontWeight: 600, mb: 1 }}>
+                    Applied Jobs
+                  </Typography>
+                  {detailCandidate.appliedJobs && detailCandidate.appliedJobs.length > 0 ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {detailCandidate.appliedJobs.map((job, idx) => (
+                        <Box key={idx} sx={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          p: 1.5, border: '1px solid #e2e8f0', borderRadius: '10px',
+                          '&:hover': { background: '#fafbff', borderColor: '#d0d5dd' }
+                        }}>
+                          <Box>
+                            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{job.title}</Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>Application #{job.application_id}</Typography>
+                          </Box>
+                          <Chip size="small" label={job.status} sx={{
+                            fontWeight: 600, fontSize: '10px', height: 22, borderRadius: '4px',
+                            background:
+                              job.status === 'Hired' ? '#ecfdf5' :
+                              job.status === 'Interview' ? '#eff6ff' :
+                              job.status === 'Rejected' ? '#fef2f2' : '#f0f0ff',
+                            color:
+                              job.status === 'Hired' ? '#059669' :
+                              job.status === 'Interview' ? '#2563eb' :
+                              job.status === 'Rejected' ? '#dc2626' : '#020291',
+                          }} />
+                        </Box>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography sx={{ fontSize: '13px', color: '#cbd5e1', py: 2, textAlign: 'center' }}>No applications</Typography>
+                  )}
+                </Box>
+              </Box>
+
+              {/* Footer */}
+              {candidateQuestionSessions[detailCandidate.id] && (
+                <Box sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
                   <Button
-                    onClick={() => {
-                      navigate(`/interview-outline/${candidateQuestionSessions[detailCandidate.id]}`)
-                      handleCloseDetails()
-                    }}
-                    variant="contained"
-                    sx={{
-                      background:'#EEF0FF',
-                      fontWeight: 600,
-                      '&:hover': { background: '#EEF0FF' }
-                    }}
+                    fullWidth
+                    onClick={() => { navigate(`/interview-outline/${candidateQuestionSessions[detailCandidate.id]}`); handleCloseDetails() }}
+                    sx={{ background: '#020291', color: '#fff', textTransform: 'none', fontWeight: 600, borderRadius: '10px', py: 1.2, '&:hover': { background: '#01016e' } }}
                   >
-                    <i className="fas fa-list-check" style={{ marginRight: 8 }} />
                     Review Questions
                   </Button>
-                )}
-              </DialogActions>
-            </>
+                </Box>
+              )}
+            </Box>
           )}
-        </Dialog>
+        </Drawer>
       </Box>
     </Navigation>
   )

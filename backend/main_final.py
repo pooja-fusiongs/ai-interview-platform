@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from typing import List, Optional
 import uvicorn
 import sys
@@ -19,7 +19,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from database import engine, get_db
-from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, QuestionDifficulty, QuestionType
+from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis
 from schemas import (
     JobCreate, JobUpdate, JobResponse,
     CandidateProfileResponse
@@ -66,7 +66,7 @@ def auto_migrate():
         ("users", "internship_company", "VARCHAR"),
         ("users", "internship_position", "VARCHAR"),
         ("users", "internship_duration", "VARCHAR"),
-        ("users", "internship_stipend", "VARCHAR"),
+        ("users", "internship_salary", "VARCHAR"),
         ("users", "languages", "TEXT"),
         ("users", "profile_image", "VARCHAR"),
         ("video_interviews", "transcript_source", "VARCHAR"),
@@ -83,6 +83,7 @@ def auto_migrate():
         ("job_applications", "transcript_text", "TEXT"),
         ("job_applications", "transcript_path", "VARCHAR"),
         ("job_applications", "report_card_json", "TEXT"),
+        ("job_applications", "added_by", "INTEGER REFERENCES users(id)"),
         # Client merge: new fields for interview_questions
         ("interview_questions", "suggested_answer", "TEXT"),
         ("interview_questions", "category", "VARCHAR(100)"),
@@ -785,61 +786,47 @@ def get_candidates(
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Get all users with candidate role including nested questions and transcripts"""
+    """Get all candidates from JobApplications (deduplicated by email)."""
     try:
-        print(f"🔍 Fetching candidates from database...")
-        
-        # Build query to get users with candidate role
-        query = db.query(User).filter(
-            User.role == UserRole.CANDIDATE,
-            User.is_active == True
-        )
-        
-        # Add search functionality
+        print(f"Fetching candidates from job_applications...")
+
+        # Fetch all job applications
+        query = db.query(JobApplication)
+
         if search:
             search_term = f"%{search.lower()}%"
             query = query.filter(
                 or_(
-                    User.username.ilike(search_term),
-                    User.email.ilike(search_term),
-                    User.company.ilike(search_term)
+                    JobApplication.applicant_name.ilike(search_term),
+                    JobApplication.applicant_email.ilike(search_term),
+                    JobApplication.current_position.ilike(search_term),
                 )
             )
-        
-        # Apply pagination
-        candidates = query.offset(skip).limit(limit).all()
 
-        print(f"📊 Found {len(candidates)} candidates in database")
+        all_applications = query.order_by(JobApplication.applied_at.desc()).all()
 
-        if not candidates:
+        if not all_applications:
             return {"success": True, "data": [], "total": 0, "message": "No candidates found"}
 
-        # --- BULK PRE-FETCH all related data (avoid N+1 queries) ---
-        candidate_emails = [c.email for c in candidates]
-
-        # 1. Bulk fetch all job applications for these candidates
-        all_applications = db.query(JobApplication).filter(
-            JobApplication.applicant_email.in_(candidate_emails)
-        ).all()
-
-        # Build email -> [application_ids] map
-        email_to_app_ids = {}
+        # --- Deduplicate by email: keep all applications but group by email ---
+        email_to_apps = {}
         for app in all_applications:
-            email_to_app_ids.setdefault(app.applicant_email, []).append(app.id)
+            email_to_apps.setdefault(app.applicant_email.lower(), []).append(app)
 
         all_app_ids = [app.id for app in all_applications]
 
-        # 2. Bulk fetch all questions for all candidates' applications
-        all_questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.candidate_id.in_(all_app_ids)
+        # --- BULK PRE-FETCH related data ---
+
+        # 1. Resumes (for skills)
+        all_resumes = db.query(CandidateResume).filter(
+            CandidateResume.candidate_id.in_(all_app_ids)
         ).all() if all_app_ids else []
 
-        # Build app_id -> questions map
-        app_id_to_questions = {}
-        for q in all_questions:
-            app_id_to_questions.setdefault(q.candidate_id, []).append(q)
+        app_id_to_resume = {}
+        for r in all_resumes:
+            app_id_to_resume[r.candidate_id] = r
 
-        # 3. Bulk fetch all sessions (without loading full transcript_text for list)
+        # 2. Interview sessions (for scores)
         all_sessions = db.query(
             InterviewSession.id,
             InterviewSession.job_id,
@@ -847,126 +834,219 @@ def get_candidates(
             InterviewSession.overall_score,
             InterviewSession.interview_mode,
             InterviewSession.status,
+            InterviewSession.recommendation,
             InterviewSession.created_at,
         ).filter(
             InterviewSession.application_id.in_(all_app_ids)
         ).all() if all_app_ids else []
 
-        # Build app_id -> sessions map
         app_id_to_sessions = {}
         for s in all_sessions:
             app_id_to_sessions.setdefault(s.application_id, []).append(s)
 
-        # 4. Bulk fetch latest question generation sessions
+        # 3. Question generation sessions
         all_q_sessions = db.query(QuestionGenerationSession).filter(
             QuestionGenerationSession.candidate_id.in_(all_app_ids)
         ).order_by(QuestionGenerationSession.created_at.desc()).all() if all_app_ids else []
 
-        # Build app_id -> latest session map (first match is latest due to ordering)
         app_id_to_q_session = {}
         for qs in all_q_sessions:
             if qs.candidate_id not in app_id_to_q_session:
                 app_id_to_q_session[qs.candidate_id] = qs
 
-        # --- Build response using pre-fetched data ---
-        departments = ["Engineering", "Marketing", "Sales", "HR", "Finance", "Operations"]
-        skills_pool = ["Python", "JavaScript", "React", "Node.js", "SQL", "AWS", "Docker", "Git"]
+        # 4. Jobs (for titles)
+        job_ids = list(set(app.job_id for app in all_applications))
+        all_jobs = db.query(Job).filter(Job.id.in_(job_ids)).all() if job_ids else []
+        job_id_to_title = {j.id: j.title for j in all_jobs}
 
+        # --- Build deduplicated candidate list ---
         candidate_list = []
-        for candidate in candidates:
-            # Skills
-            real_skills = []
-            if candidate.skills:
-                try:
-                    real_skills = json.loads(candidate.skills)
-                except:
-                    pass
-            skills = real_skills if real_skills else skills_pool[:(candidate.id % 5) + 2]
+        seen_emails = set()
 
-            is_online = candidate.is_online if hasattr(candidate, 'is_online') else False
+        for email, apps in email_to_apps.items():
+            if email in seen_emails:
+                continue
+            seen_emails.add(email)
 
-            # Get this candidate's application IDs
-            app_ids = email_to_app_ids.get(candidate.email, [])
+            # Use the most recent application as primary
+            primary_app = apps[0]  # already sorted by applied_at desc
 
-            # Build questions from pre-fetched data
-            interview_questions = []
-            for app_id in app_ids:
-                for q in app_id_to_questions.get(app_id, []):
-                    interview_questions.append({
-                        "id": q.id,
-                        "job_id": q.job_id,
-                        "question_text": q.question_text,
-                        "sample_answer": q.sample_answer,
-                        "question_type": q.question_type,
-                        "difficulty": q.difficulty,
-                        "skill_focus": q.skill_focus,
-                        "is_approved": q.is_approved,
-                        "expert_reviewed": q.expert_reviewed,
-                        "expert_notes": q.expert_notes,
-                        "created_at": q.created_at.isoformat() if q.created_at else None
-                    })
+            # Collect all job titles this candidate applied to
+            applied_jobs = []
+            for a in apps:
+                title = job_id_to_title.get(a.job_id, "Unknown")
+                applied_jobs.append({"job_id": a.job_id, "title": title, "status": a.status, "application_id": a.id})
 
-            # Build transcripts from pre-fetched data (without full transcript_text)
-            interview_transcripts = []
+            # Collect skills from all resumes
+            skills = []
+            for a in apps:
+                resume = app_id_to_resume.get(a.id)
+                if resume and resume.skills:
+                    try:
+                        parsed = json.loads(resume.skills)
+                        if isinstance(parsed, list):
+                            skills.extend(parsed)
+                    except:
+                        pass
+            skills = list(dict.fromkeys(skills))[:10]  # Deduplicate, max 10
+
+            # Best score across all applications
+            best_score = 0.0
+            best_recommendation = None
             has_transcript = False
-            for app_id in app_ids:
-                for s in app_id_to_sessions.get(app_id, []):
+            for a in apps:
+                for s in app_id_to_sessions.get(a.id, []):
                     has_transcript = True
-                    interview_transcripts.append({
-                        "id": s.id,
-                        "job_id": s.job_id,
-                        "session_id": s.id,
-                        "score": s.overall_score,
-                        "interview_mode": s.interview_mode,
-                        "status": s.status,
-                        "created_at": s.created_at.isoformat() if s.created_at else None
-                    })
+                    if s.overall_score and s.overall_score > best_score:
+                        best_score = s.overall_score
+                        best_recommendation = s.recommendation
+                # Also check application-level scores
+                if a.final_score and a.final_score > best_score:
+                    best_score = float(a.final_score)
+                if a.ai_score and float(a.ai_score) > best_score:
+                    best_score = float(a.ai_score)
 
-            # Get latest question session from pre-fetched data
+            # Get latest question session
             question_session_id = None
-            for app_id in app_ids:
-                qs = app_id_to_q_session.get(app_id)
+            for a in apps:
+                qs = app_id_to_q_session.get(a.id)
                 if qs:
                     question_session_id = qs.id
                     break
 
-            from services.encryption_service import safe_decrypt as _sd
+            # Determine overall status
+            statuses = [a.status for a in apps]
+            if "Hired" in statuses:
+                overall_status = "Hired"
+            elif "Interview" in statuses:
+                overall_status = "Interview"
+            elif "Reviewed" in statuses:
+                overall_status = "Reviewed"
+            elif "Rejected" in statuses and len(set(statuses)) == 1:
+                overall_status = "Rejected"
+            else:
+                overall_status = "Applied"
+
             candidate_data = {
-                "id": candidate.id,
-                "name": _sd(candidate.full_name) or candidate.username,
-                "role": "candidate",
-                "experience": f"{candidate.experience_years or (candidate.id % 10) + 1} years",
-                "department": candidate.department or departments[candidate.id % len(departments)],
-                "hireDate": candidate.created_at.strftime("%Y-%m-%d") if candidate.created_at else "2024-01-01",
+                "id": primary_app.id,
+                "name": primary_app.applicant_name,
+                "email": primary_app.applicant_email,
+                "phone": primary_app.applicant_phone or "",
+                "experience": f"{primary_app.experience_years or 0} years" if primary_app.experience_years else "N/A",
+                "currentPosition": primary_app.current_position or "",
+                "location": primary_app.location or "",
                 "skills": skills,
-                "email": candidate.email,
-                "phone": _sd(candidate.phone) or f"+1 (555) {100 + candidate.id:03d}-{1000 + (candidate.id * 7) % 9000:04d}",
-                "score": float(candidate.score) if candidate.score is not None else 0.0,
-                "status": "active" if candidate.is_active else "pending",
-                "onlineStatus": "Active" if is_online else "Inactive",
-                "isOnline": is_online,
-                "has_transcript": has_transcript or getattr(candidate, 'has_transcript', False),
-                "hasTranscript": has_transcript or getattr(candidate, 'has_transcript', False),
-                "lastActivity": candidate.last_activity.isoformat() if candidate.last_activity else None,
+                "score": round(best_score, 1),
+                "recommendation": best_recommendation.value if best_recommendation else None,
+                "status": overall_status,
+                "appliedAt": primary_app.applied_at.isoformat() if primary_app.applied_at else None,
+                "appliedJobs": applied_jobs,
+                "totalApplications": len(apps),
+                "hasTranscript": has_transcript,
                 "questionSessionId": question_session_id,
-                "interview_questions": interview_questions,
-                "interview_transcripts": interview_transcripts
+                # Keep backward compatibility
+                "role": "candidate",
+                "department": primary_app.current_company or "",
+                "hireDate": primary_app.applied_at.strftime("%Y-%m-%d") if primary_app.applied_at else "",
+                "onlineStatus": "Inactive",
+                "isOnline": False,
+                "lastActivity": None,
+                "interview_questions": [],
+                "interview_transcripts": [],
             }
             candidate_list.append(candidate_data)
-        
+
+        # Apply pagination
+        total = len(candidate_list)
+        candidate_list = candidate_list[skip:skip + limit]
+
         return {
             "success": True,
             "data": candidate_list,
-            "total": len(candidate_list),
-            "message": f"Found {len(candidate_list)} candidates"
+            "total": total,
+            "message": f"Found {total} candidates"
         }
-        
+
     except Exception as e:
-        print(f"❌ Error fetching candidates: {e}")
+        print(f"Error fetching candidates: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Database error: {str(e)}"
         )
+
+@app.delete("/api/candidates/{candidate_id}")
+def delete_candidate(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a candidate and all their job applications by email."""
+    try:
+        # Find the primary application
+        primary_app = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
+        if not primary_app:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+
+        email = primary_app.applicant_email.lower()
+
+        # Find the user account by email (for user-linked records)
+        candidate_user = db.query(User).filter(func.lower(User.email) == email).first()
+
+        # Get all application IDs for this email
+        app_ids = [
+            a.id for a in db.query(JobApplication.id).filter(
+                func.lower(JobApplication.applicant_email) == email
+            ).all()
+        ]
+
+        # Delete application-linked records (FK to job_applications.id)
+        db.query(CandidateResume).filter(CandidateResume.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+        db.query(InterviewQuestion).filter(InterviewQuestion.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+        db.query(QuestionGenerationSession).filter(QuestionGenerationSession.candidate_id.in_(app_ids)).delete(synchronize_session=False)
+
+        # Delete user-linked records (FK to users.id) — InterviewSession, VideoInterview, etc.
+        if candidate_user:
+            # Get session IDs for this user to delete answers
+            session_ids = [
+                s.id for s in db.query(InterviewSession.id).filter(
+                    InterviewSession.candidate_id == candidate_user.id
+                ).all()
+            ]
+            if session_ids:
+                db.query(InterviewAnswer).filter(InterviewAnswer.session_id.in_(session_ids)).delete(synchronize_session=False)
+
+            # Get video interview IDs to delete fraud analyses
+            video_ids = [
+                v.id for v in db.query(VideoInterview.id).filter(
+                    VideoInterview.candidate_id == candidate_user.id
+                ).all()
+            ]
+            if video_ids:
+                db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id.in_(video_ids)).delete(synchronize_session=False)
+
+            # Delete video interviews and interview sessions
+            db.query(VideoInterview).filter(VideoInterview.candidate_id == candidate_user.id).delete(synchronize_session=False)
+            db.query(InterviewSession).filter(InterviewSession.candidate_id == candidate_user.id).delete(synchronize_session=False)
+
+        # Also delete sessions linked via application_id
+        db.query(InterviewSession).filter(InterviewSession.application_id.in_(app_ids)).delete(synchronize_session=False)
+
+        # Now delete the applications
+        deleted = db.query(JobApplication).filter(
+            JobApplication.id.in_(app_ids)
+        ).delete(synchronize_session=False)
+
+        db.commit()
+        return {"success": True, "message": f"Deleted {deleted} application(s) and all related data for {email}"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting candidate: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/candidates/{candidate_id}/interviews")
 def get_candidate_interviews(

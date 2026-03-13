@@ -15,6 +15,39 @@ const ResetPassword = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [fieldTouched, setFieldTouched] = useState<Record<string, boolean>>({})
+
+  const validateField = (field: string, value: string, pwd?: string): string => {
+    switch (field) {
+      case 'password':
+        if (!value) return 'Password is required'
+        if (value.length < 6) return 'Password must be at least 6 characters'
+        return ''
+      case 'confirmPassword':
+        if (!value) return 'Confirm password is required'
+        if (value !== (pwd ?? password)) return 'Passwords do not match'
+        return ''
+      default:
+        return ''
+    }
+  }
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value)
+    setFieldTouched(prev => ({ ...prev, password: true }))
+    setFieldErrors(prev => ({ ...prev, password: validateField('password', value) }))
+    // Re-validate confirm if already touched
+    if (fieldTouched.confirmPassword) {
+      setFieldErrors(prev => ({ ...prev, confirmPassword: validateField('confirmPassword', confirmPassword, value) }))
+    }
+  }
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value)
+    setFieldTouched(prev => ({ ...prev, confirmPassword: true }))
+    setFieldErrors(prev => ({ ...prev, confirmPassword: validateField('confirmPassword', value) }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,12 +56,14 @@ const ResetPassword = () => {
       showError('Invalid reset link. Please request a new one.')
       return
     }
-    if (password.length < 6) {
-      showError('Password must be at least 6 characters')
-      return
+    const errors = {
+      password: validateField('password', password),
+      confirmPassword: validateField('confirmPassword', confirmPassword),
     }
-    if (password !== confirmPassword) {
-      showError('Passwords do not match')
+    setFieldErrors(errors)
+    setFieldTouched({ password: true, confirmPassword: true })
+    if (Object.values(errors).some(e => e !== '')) {
+      showError('Please fix the errors')
       return
     }
 
@@ -152,8 +187,10 @@ const ResetPassword = () => {
                 <TextField
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
                   placeholder="New Password"
+                  error={fieldTouched.password && !!fieldErrors.password}
+                  helperText={fieldTouched.password && fieldErrors.password}
                   variant="outlined"
                   fullWidth
                   disabled={loading}
@@ -205,8 +242,10 @@ const ResetPassword = () => {
                 <TextField
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
                   placeholder="Confirm New Password"
+                  error={fieldTouched.confirmPassword && !!fieldErrors.confirmPassword}
+                  helperText={fieldTouched.confirmPassword && fieldErrors.confirmPassword}
                   variant="outlined"
                   fullWidth
                   disabled={loading}
@@ -225,12 +264,6 @@ const ResetPassword = () => {
                   }}
                 />
               </Box>
-
-              {password && password.length < 6 && (
-                <Typography sx={{ color: '#dc2626', fontSize: '12px', textAlign: 'left', mb: 2 }}>
-                  Password must be at least 6 characters
-                </Typography>
-              )}
 
               <Button
                 type="submit"

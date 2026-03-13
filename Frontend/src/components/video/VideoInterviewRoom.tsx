@@ -7,13 +7,13 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, AccessTime,
-  Check, SmartToy,
+  Check, Videocam,
   FiberManualRecord
 } from '@mui/icons-material';
 import videoInterviewService from '../../services/videoInterviewService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks, useRoomContext } from '@livekit/components-react';
+import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
@@ -24,35 +24,10 @@ import Navigation from '../layout/Sidebar';
  * Suppresses "ignoring incoming text stream" console warnings from LiveKit agent events.
  * Registers no-op handlers for known agent text stream topics.
  */
-const AgentEventsSuppressor: React.FC = () => {
-  const room = useRoomContext();
-
-  useEffect(() => {
-    if (!room) return;
-    try {
-      // Register no-op handlers to suppress "ignoring incoming text stream" warnings
-      room.registerTextStreamHandler('lk.agent.events', (_reader, _info) => {});
-      room.registerTextStreamHandler('lk.transcription', (_reader, _info) => {});
-    } catch (err) {
-      // Handler already registered or API not available — ignore
-    }
-    return () => {
-      try {
-        room.unregisterTextStreamHandler('lk.agent.events');
-        room.unregisterTextStreamHandler('lk.transcription');
-      } catch {
-        // ignore cleanup errors
-      }
-    };
-  }, [room]);
-
-  return null;
-};
-
 /**
- * InterviewRecorder - Records candidate camera video + ALL audio automatically.
+ * InterviewRecorder - Records video + ALL audio automatically.
  * Uses useTracks hook for reliable track detection (no polling misses).
- * Uses AudioContext to mix candidate mic + AI agent audio.
+ * Uses AudioContext to mix local mic + remote participant audio.
  * NO extra browser prompts — uses LiveKit tracks directly.
  * Must be placed INSIDE <LiveKitRoom>.
  */
@@ -79,6 +54,8 @@ const InterviewRecorder: React.FC<{
   const animFrameRef = useRef<number>(0);
   const camVideoElRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const remoteCamVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const remoteScreenVideoElRef = useRef<HTMLVideoElement | null>(null);
 
   // Find local tracks via useTracks (reactive)
   const localCamTrackRef = allTracks.find(
@@ -90,10 +67,19 @@ const InterviewRecorder: React.FC<{
   const localScreenTrackRef = allTracks.find(
     t => t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
   );
+  // Find remote tracks (for recording the other participant)
+  const remoteCamTrackRef = allTracks.find(
+    t => !t.participant.isLocal && t.source === Track.Source.Camera && t.publication?.track
+  );
+  const remoteScreenTrackRef = allTracks.find(
+    t => !t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
+  );
 
   const camMediaTrack = localCamTrackRef?.publication?.track?.mediaStreamTrack;
   const micMediaTrack = localMicTrackRef?.publication?.track?.mediaStreamTrack;
   const screenMediaTrack = localScreenTrackRef?.publication?.track?.mediaStreamTrack;
+  const remoteCamMediaTrack = remoteCamTrackRef?.publication?.track?.mediaStreamTrack;
+  const remoteScreenMediaTrack = remoteScreenTrackRef?.publication?.track?.mediaStreamTrack;
 
   // Attach/detach camera video element when track changes
   useEffect(() => {
@@ -124,6 +110,36 @@ const InterviewRecorder: React.FC<{
       screenVideoElRef.current.srcObject = null;
     }
   }, [screenMediaTrack]);
+
+  // Attach/detach remote camera video element
+  useEffect(() => {
+    if (remoteCamMediaTrack) {
+      if (!remoteCamVideoElRef.current) {
+        remoteCamVideoElRef.current = document.createElement('video');
+        remoteCamVideoElRef.current.muted = true;
+        remoteCamVideoElRef.current.playsInline = true;
+      }
+      remoteCamVideoElRef.current.srcObject = new MediaStream([remoteCamMediaTrack]);
+      remoteCamVideoElRef.current.play().catch(() => {});
+    } else if (remoteCamVideoElRef.current) {
+      remoteCamVideoElRef.current.srcObject = null;
+    }
+  }, [remoteCamMediaTrack]);
+
+  // Attach/detach remote screen share video element
+  useEffect(() => {
+    if (remoteScreenMediaTrack) {
+      if (!remoteScreenVideoElRef.current) {
+        remoteScreenVideoElRef.current = document.createElement('video');
+        remoteScreenVideoElRef.current.muted = true;
+        remoteScreenVideoElRef.current.playsInline = true;
+      }
+      remoteScreenVideoElRef.current.srcObject = new MediaStream([remoteScreenMediaTrack]);
+      remoteScreenVideoElRef.current.play().catch(() => {});
+    } else if (remoteScreenVideoElRef.current) {
+      remoteScreenVideoElRef.current.srcObject = null;
+    }
+  }, [remoteScreenMediaTrack]);
 
   // Start recording when mic track becomes available
   useEffect(() => {
@@ -165,41 +181,70 @@ const InterviewRecorder: React.FC<{
         canvasRef.current = canvas;
         const ctx = canvas.getContext('2d')!;
 
-        // Draw loop: composites screen share + camera onto canvas
+        // Draw loop: composites all video tracks onto canvas
         const drawFrame = () => {
-          const screenVid = screenVideoElRef.current;
-          const camVid = camVideoElRef.current;
-          const hasScreen = screenVid?.srcObject && screenVid.readyState >= 2;
-          const hasCam = camVid?.srcObject && camVid.readyState >= 2;
+          const localScreenVid = screenVideoElRef.current;
+          const localCamVid = camVideoElRef.current;
+          const remoteScreenVid = remoteScreenVideoElRef.current;
+          const remoteCamVid = remoteCamVideoElRef.current;
 
-          // Black background
+          const hasLocalScreen = localScreenVid?.srcObject && localScreenVid.readyState >= 2;
+          const hasLocalCam = localCamVid?.srcObject && localCamVid.readyState >= 2;
+          const hasRemoteScreen = remoteScreenVid?.srcObject && remoteScreenVid.readyState >= 2;
+          const hasRemoteCam = remoteCamVid?.srcObject && remoteCamVid.readyState >= 2;
+
+          // Dark background
           ctx.fillStyle = '#1a1a2e';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          if (hasScreen && hasCam) {
+          // Priority: screen share (either side) takes full canvas, cameras as PiP
+          const anyScreen = hasRemoteScreen || hasLocalScreen;
+          const screenVid = hasRemoteScreen ? remoteScreenVid : hasLocalScreen ? localScreenVid : null;
+
+          if (anyScreen && screenVid) {
             // Screen share full canvas
             ctx.drawImage(screenVid, 0, 0, canvas.width, canvas.height);
-            // Camera PiP in bottom-right corner (200x150)
-            const pipW = 200, pipH = 150, pipMargin = 16;
-            const pipX = canvas.width - pipW - pipMargin;
-            const pipY = canvas.height - pipH - pipMargin;
-            // PiP border
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
-            ctx.drawImage(camVid, pipX, pipY, pipW, pipH);
-          } else if (hasScreen) {
-            // Screen share only — full canvas
-            ctx.drawImage(screenVid, 0, 0, canvas.width, canvas.height);
-          } else if (hasCam) {
-            // Camera only — centered with aspect ratio preserved
-            const vw = camVid.videoWidth || 640;
-            const vh = camVid.videoHeight || 480;
+            // Show both cameras as PiP
+            const pipW = 160, pipH = 120, pipMargin = 12;
+            let pipIdx = 0;
+            for (const vid of [remoteCamVid, localCamVid]) {
+              const hasCam = vid?.srcObject && vid.readyState >= 2;
+              if (hasCam) {
+                const pipX = canvas.width - pipW - pipMargin;
+                const pipY = canvas.height - pipH - pipMargin - pipIdx * (pipH + pipMargin);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
+                ctx.drawImage(vid!, pipX, pipY, pipW, pipH);
+                pipIdx++;
+              }
+            }
+          } else if (hasRemoteCam && hasLocalCam) {
+            // Side-by-side: remote left, local right
+            const halfW = canvas.width / 2;
+            ctx.drawImage(remoteCamVid!, 0, 0, halfW, canvas.height);
+            ctx.drawImage(localCamVid!, halfW, 0, halfW, canvas.height);
+            // Divider line
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(halfW, 0);
+            ctx.lineTo(halfW, canvas.height);
+            ctx.stroke();
+          } else if (hasRemoteCam) {
+            // Only remote camera
+            const vw = remoteCamVid!.videoWidth || 640;
+            const vh = remoteCamVid!.videoHeight || 480;
             const scale = Math.min(canvas.width / vw, canvas.height / vh);
-            const dw = vw * scale;
-            const dh = vh * scale;
-            ctx.drawImage(camVid, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+            const dw = vw * scale, dh = vh * scale;
+            ctx.drawImage(remoteCamVid!, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+          } else if (hasLocalCam) {
+            // Only local camera
+            const vw = localCamVid!.videoWidth || 640;
+            const vh = localCamVid!.videoHeight || 480;
+            const scale = Math.min(canvas.width / vw, canvas.height / vh);
+            const dw = vw * scale, dh = vh * scale;
+            ctx.drawImage(localCamVid!, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
           }
-          // When both camera and screen share are off, just dark background (already drawn above)
 
           animFrameRef.current = requestAnimationFrame(drawFrame);
         };
@@ -453,7 +498,7 @@ const VideoInterviewRoom: React.FC = () => {
     };
   }, [isActive]);
 
-  // Fetch LiveKit token and dispatch agent when interview is active
+  // Fetch LiveKit token when interview is active
   useEffect(() => {
     const fetchToken = async () => {
       if (isActive && interview && !lkToken) {
@@ -463,7 +508,7 @@ const VideoInterviewRoom: React.FC = () => {
             ? await videoInterviewService.guestJoinInterview(Number(videoId))
             : await videoInterviewService.joinInterview(Number(videoId));
           setLkToken(data.token);
-          console.log('🎥 LiveKit token fetched and Agent dispatched for room:', roomName);
+          console.log('🎥 LiveKit token fetched for room:', roomName);
         } catch (err: any) {
           toast.error('Failed to get video token. Please refresh.');
           console.error('LiveKit token error:', err);
@@ -487,23 +532,22 @@ const VideoInterviewRoom: React.FC = () => {
   const handleStart = () => {
     console.log('🎬 handleStart called, user role:', user?.role);
     if (isUserCandidate) {
-      // Candidate: show consent dialog then join as interviewee
+      // Candidate: show consent dialog then join
       setShowConsentDialog(true);
     } else {
-      // Recruiter/Admin: join as observer
-      console.log('🎬 Recruiter joining as observer (no interview start)');
-      joinAsObserver();
+      // Recruiter/Admin: join interview directly as interviewer
+      console.log('🎬 Recruiter joining as interviewer');
+      joinAsInterviewer();
     }
   };
 
-  const joinAsObserver = async () => {
+  const joinAsInterviewer = async () => {
     try {
-      // Recruiter joins as observer - does NOT start the interview
-      // Just fetch token and join the room
+      // Recruiter joins as interviewer with full audio/video
       setIsActive(true);
-      toast.success('Joining as observer...');
+      toast.success('Joining interview...');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to join as observer');
+      toast.error(err.response?.data?.detail || 'Failed to join interview');
     }
   };
 
@@ -932,7 +976,7 @@ const VideoInterviewRoom: React.FC = () => {
                 ))
               ) : (
                 <Box sx={{ textAlign: 'center', py: 6 }}>
-                  <SmartToy sx={{ fontSize: 48, color: '#cbd5e1', mb: 2 }} />
+                  <Videocam sx={{ fontSize: 48, color: '#cbd5e1', mb: 2 }} />
                   <Typography sx={{ color: '#64748b', fontSize: '14px' }}>
                     Questions will be loaded when interview starts
                   </Typography>
@@ -941,7 +985,7 @@ const VideoInterviewRoom: React.FC = () => {
             </Box>
           </Box>
 
-          {/* RIGHT SIDE - Video Panel - Always 60% width */}
+          {/* RIGHT SIDE - Video Panel */}
           <Box sx={{
             width: { xs: '100%', md: '60%' },
             background: 'white',
@@ -979,8 +1023,8 @@ const VideoInterviewRoom: React.FC = () => {
                   >
                     {lkToken ? (
                       <LiveKitRoom
-                        video={isUserCandidate}
-                        audio={isUserCandidate}
+                        video={true}
+                        audio={true}
                         token={lkToken}
                         serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
                         connect={true}
@@ -988,13 +1032,12 @@ const VideoInterviewRoom: React.FC = () => {
                           setCallJoined(true);
                           setParticipantCount(1);
                           maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
-                          toast.success(isUserCandidate ? 'Joined interview' : 'Joined as observer');
+                          toast.success('Joined interview');
                         }}
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >
-                        <AgentEventsSuppressor />
                         <InterviewRecorder
-                          shouldRecord={isUserCandidate && callJoined}
+                          shouldRecord={!isUserCandidate && callJoined}
                           mediaRecorderRef={mediaRecorderRef}
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
@@ -1049,7 +1092,7 @@ const VideoInterviewRoom: React.FC = () => {
                       margin: '0 auto 32px',
                       boxShadow: '0 12px 32px rgba(139, 92, 246, 0.4)'
                     }}>
-                      <SmartToy sx={{ color: 'white', fontSize: 60 }} />
+                      <Videocam sx={{ color: 'white', fontSize: 60 }} />
                     </Box>
                     <Typography sx={{
                       color: '#1e293b',
@@ -1057,7 +1100,7 @@ const VideoInterviewRoom: React.FC = () => {
                       fontWeight: 700,
                       mb: 2
                     }}>
-                      AI Interview Ready
+                      Interview Ready
                     </Typography>
                     <Typography sx={{
                       color: '#64748b',
@@ -1068,13 +1111,13 @@ const VideoInterviewRoom: React.FC = () => {
                       mx: 'auto'
                     }}>
                       {isUserCandidate
-                        ? 'AI will conduct the interview and automatically score responses'
-                        : 'Join as observer to watch the AI interview (mic and camera will be disabled)'}
+                        ? 'Your interview is ready. Click below to begin.'
+                        : 'Join the interview room to conduct the interview with the candidate.'}
                     </Typography>
                     <Button
                       variant="contained"
                       size="large"
-                      startIcon={<SmartToy />}
+                      startIcon={<Videocam />}
                       onClick={handleStart}
                       sx={{
                         background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
@@ -1092,7 +1135,7 @@ const VideoInterviewRoom: React.FC = () => {
                         }
                       }}
                     >
-                      {isUserCandidate ? 'Start AI Interview' : 'Join as Observer'}
+                      {isUserCandidate ? 'Start Interview' : 'Join Interview'}
                     </Button>
                   </Box>
                 )}

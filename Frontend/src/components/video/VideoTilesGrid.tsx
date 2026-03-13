@@ -13,7 +13,7 @@ import {
   Mic,
   MicOff,
   CallEnd,
-  SmartToy,
+  Person,
   ScreenShare,
   StopScreenShare,
   Fullscreen,
@@ -69,18 +69,47 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
 
-  const agent = useMemo(() =>
-    remoteParticipants.find(p =>
-      p.identity.toLowerCase().includes('agent') ||
-      p.name?.toLowerCase().includes('ai')
-    ), [remoteParticipants]);
+  // Find the remote participant (recruiter or candidate depending on who's viewing)
+  const remoteParticipant = remoteParticipants[0] || null;
 
-  const screenShareTrack = useMemo(() =>
-    tracks.find(t => t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication),
+  // Find remote participant's camera track
+  const remoteCameraTrack = useMemo(() =>
+    tracks.find(t => !t.participant.isLocal && t.source === Track.Source.Camera && t.publication),
     [tracks]
   );
 
-  useEffect(() => { setIsScreenSharing(!!screenShareTrack); }, [screenShareTrack]);
+  // Detect ANY active screen share (local or remote)
+  const screenShareTrackRaw = useMemo(() =>
+    tracks.find(t =>
+      t.source === Track.Source.ScreenShare &&
+      t.publication &&
+      t.publication.track
+    ),
+    [tracks]
+  );
+
+  // Track screen share ended state (track might exist but be ended)
+  const [screenShareEnded, setScreenShareEnded] = useState(false);
+  useEffect(() => {
+    if (!screenShareTrackRaw?.publication?.track) {
+      setScreenShareEnded(false);
+      return;
+    }
+    const mediaTrack = screenShareTrackRaw.publication.track.mediaStreamTrack;
+    if (!mediaTrack || mediaTrack.readyState === 'ended') {
+      setScreenShareEnded(true);
+      return;
+    }
+    setScreenShareEnded(false);
+    const handleEnded = () => setScreenShareEnded(true);
+    mediaTrack.addEventListener('ended', handleEnded);
+    return () => mediaTrack.removeEventListener('ended', handleEnded);
+  }, [screenShareTrackRaw]);
+
+  const screenShareTrack = screenShareEnded ? undefined : screenShareTrackRaw;
+  const isLocalScreenShare = screenShareTrack?.participant.isLocal ?? false;
+
+  useEffect(() => { setIsScreenSharing(isLocalScreenShare); }, [isLocalScreenShare]);
 
   // Auto-hide controls after 4s
   useEffect(() => {
@@ -189,26 +218,17 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
   }, []);
 
   const copyMeetingInfo = () => {
-    const info = `AI Interview Room\nRoom: interview_${window.location.pathname.split('/').pop()}\nLink: ${window.location.href}`;
+    const info = `Interview Room\nRoom: interview_${window.location.pathname.split('/').pop()}\nLink: ${window.location.href}`;
     navigator.clipboard.writeText(info).catch(() => {});
   };
 
   const localCameraTrack = tracks.find(t => t.participant.isLocal && t.source === Track.Source.Camera);
-  const candidateName = localParticipant.name || localParticipant.identity || 'You';
-  const candidateInitial = candidateName.charAt(0).toUpperCase();
-  const agentName = 'AI Interviewer';
-  const agentInitial = agentName.charAt(0).toUpperCase();
+  const localName = localParticipant.name || localParticipant.identity || 'You';
+  const localInitial = localName.charAt(0).toUpperCase();
+  const remoteName = remoteParticipant?.name || remoteParticipant?.identity || 'Participant';
+  const remoteInitial = remoteName.charAt(0).toUpperCase();
   const participantCount = 1 + remoteParticipants.length;
   const panelOpen = showParticipants || showMeetingInfo;
-
-  const speakingRipple = agent?.isSpeaking ? {
-    '@keyframes speakRipple': {
-      '0%': { boxShadow: '0 0 0 0px rgba(96, 165, 250, 0.4)' },
-      '50%': { boxShadow: '0 0 0 14px rgba(96, 165, 250, 0)' },
-      '100%': { boxShadow: '0 0 0 0px rgba(96, 165, 250, 0)' },
-    },
-    animation: 'speakRipple 1.5s ease-out infinite',
-  } : {};
 
   const ctrlBtn = (active: boolean, danger?: boolean) => ({
     width: 48, height: 48,
@@ -251,7 +271,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
           flex: 1, position: 'relative',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           m: '4px', borderRadius: '8px', overflow: 'hidden',
-          background: screenShareTrack ? '#000' : agent ? '#3c3836' : '#292a2d',
+          background: screenShareTrack ? '#000' : '#292a2d',
           transition: 'all 0.3s ease',
         }}>
           {screenShareTrack ? (
@@ -268,46 +288,35 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
                 opacity: showControls ? 1 : 0, transition: 'opacity 0.3s',
               }}>
                 <ScreenShare sx={{ color: '#34a853', fontSize: 20 }} />
-                <Typography sx={{ color: '#e8eaed', fontSize: '14px' }}>You are presenting to everyone</Typography>
-                <Typography onClick={toggleScreenShare} sx={{
-                  color: '#8ab4f8', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
-                  px: 1, py: 0.3, borderRadius: '4px', '&:hover': { bgcolor: 'rgba(138,180,248,0.1)' },
-                }}>Stop presenting</Typography>
-              </Box>
-            </>
-          ) : (
-            <>
-              {/* AI Agent avatar */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <Box sx={{
-                  width: agent ? 100 : 80, height: agent ? 100 : 80, borderRadius: '50%',
-                  background: agent ? '#e8710a' : 'rgba(255,255,255,0.08)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 0.4s ease', ...speakingRipple,
-                }}>
-                  {agent ? (
-                    <Typography sx={{ color: 'white', fontSize: 40, fontWeight: 400 }}>{agentInitial}</Typography>
-                  ) : (
-                    <SmartToy sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 40 }} />
-                  )}
-                </Box>
-                {!agent && (
-                  <Typography sx={{ color: '#9aa0a6', fontSize: '14px' }}>Waiting for AI Interviewer to join...</Typography>
+                <Typography sx={{ color: '#e8eaed', fontSize: '14px' }}>
+                  {isLocalScreenShare ? 'You are presenting to everyone' : `${screenShareTrack?.participant.name || 'Participant'} is presenting`}
+                </Typography>
+                {isLocalScreenShare && (
+                  <Typography onClick={toggleScreenShare} sx={{
+                    color: '#8ab4f8', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                    px: 1, py: 0.3, borderRadius: '4px', '&:hover': { bgcolor: 'rgba(138,180,248,0.1)' },
+                  }}>Stop presenting</Typography>
                 )}
               </Box>
-
-              {/* Agent name bottom-left */}
-              {agent && (
-                <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
-                  <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-                    {agentName}
-                  </Typography>
-                </Box>
-              )}
-
-              {/* Speaking equalizer bars */}
-              {agent?.isSpeaking && (
-                <Box sx={{ position: 'absolute', bottom: 12, right: 14, display: 'flex', gap: 0.5, alignItems: 'flex-end' }}>
+            </>
+          ) : remoteCameraTrack ? (
+            <>
+              {/* Remote participant's video (main view) */}
+              <VideoTrack
+                trackRef={{ participant: remoteCameraTrack.participant, source: remoteCameraTrack.source, publication: remoteCameraTrack.publication! }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              {/* Remote name bottom-left */}
+              <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
+                <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+                  {remoteName}
+                </Typography>
+              </Box>
+              {/* Speaking indicator */}
+              {remoteParticipant?.isSpeaking && (
+                <Box sx={{
+                  position: 'absolute', bottom: 12, right: 14, display: 'flex', gap: 0.5, alignItems: 'flex-end'
+                }}>
                   {[0, 1, 2].map(i => (
                     <Box key={i} sx={{
                       width: 3, height: 14, borderRadius: '2px', bgcolor: '#8ab4f8',
@@ -315,6 +324,42 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
                       animation: `eqBar 0.6s ease-in-out ${i * 0.15}s infinite`, transformOrigin: 'bottom',
                     }} />
                   ))}
+                </Box>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Waiting for other participant */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                {remoteParticipant ? (
+                  /* Remote participant joined but camera off — show avatar */
+                  <Box sx={{
+                    width: 100, height: 100, borderRadius: '50%',
+                    background: '#5f6368',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Typography sx={{ color: 'white', fontSize: 40, fontWeight: 400 }}>{remoteInitial}</Typography>
+                  </Box>
+                ) : (
+                  /* No remote participant yet */
+                  <>
+                    <Box sx={{
+                      width: 80, height: 80, borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.08)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Person sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 40 }} />
+                    </Box>
+                    <Typography sx={{ color: '#9aa0a6', fontSize: '14px' }}>Waiting for participant to join...</Typography>
+                  </>
+                )}
+              </Box>
+              {/* Remote name bottom-left when camera off */}
+              {remoteParticipant && (
+                <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
+                  <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+                    {remoteName}
+                  </Typography>
                 </Box>
               )}
             </>
@@ -338,9 +383,9 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
             <Box sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: '8px', '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
                 <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: '#673ab7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Typography sx={{ color: 'white', fontSize: 14 }}>{candidateInitial}</Typography>
+                  <Typography sx={{ color: 'white', fontSize: 14 }}>{localInitial}</Typography>
                 </Box>
-                <Typography sx={{ color: '#e8eaed', fontSize: '13px', flex: 1 }}>{candidateName} (You)</Typography>
+                <Typography sx={{ color: '#e8eaed', fontSize: '13px', flex: 1 }}>{localName} (You)</Typography>
                 {!isMicOn && <MicOff sx={{ color: '#ea4335', fontSize: 16 }} />}
                 {!isCamOn && <VideocamOff sx={{ color: '#ea4335', fontSize: 16 }} />}
               </Box>
@@ -383,7 +428,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
             <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
               <Box>
                 <Typography sx={{ color: '#9aa0a6', fontSize: '12px', mb: 0.5 }}>Meeting</Typography>
-                <Typography sx={{ color: '#e8eaed', fontSize: '14px', fontWeight: 500 }}>AI Interview Session</Typography>
+                <Typography sx={{ color: '#e8eaed', fontSize: '14px', fontWeight: 500 }}>Interview Session</Typography>
               </Box>
               <Box>
                 <Typography sx={{ color: '#9aa0a6', fontSize: '12px', mb: 0.5 }}>Room</Typography>
@@ -437,15 +482,15 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
               style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirrorSelfView ? 'scaleX(-1)' : 'none' }}
             />
             <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.6))', padding: '16px 10px 6px' }}>
-              <Typography sx={{ color: 'white', fontSize: '12px' }}>{candidateName}</Typography>
+              <Typography sx={{ color: 'white', fontSize: '12px' }}>{localName}</Typography>
             </Box>
           </Box>
         ) : (
           <Box sx={{ width: '100%', height: '100%', background: '#3c4043', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <Box sx={{ width: 56, height: 56, borderRadius: '50%', background: '#673ab7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Typography sx={{ color: 'white', fontSize: 24 }}>{candidateInitial}</Typography>
+              <Typography sx={{ color: 'white', fontSize: 24 }}>{localInitial}</Typography>
             </Box>
-            <Typography sx={{ color: '#e8eaed', fontSize: '12px', mt: 0.8 }}>{candidateName}</Typography>
+            <Typography sx={{ color: '#e8eaed', fontSize: '12px', mt: 0.8 }}>{localName}</Typography>
           </Box>
         )}
         {!isMicOn && (

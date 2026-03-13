@@ -6,6 +6,7 @@ Handles job application endpoints
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from pydantic import BaseModel
 import sys
 import os
 
@@ -157,10 +158,41 @@ def get_job_applications(job_id: int, db: Session = Depends(get_db)):
             else:
                 applied_count += 1
 
+        recruiter_ids = [a.added_by for a in applications if a.added_by]
+        recruiter_map = {}
+        if recruiter_ids:
+            from models import User
+            recruiters = db.query(User).filter(User.id.in_(recruiter_ids)).all()
+            for r in recruiters:
+                recruiter_map[r.id] = r.username or r.email
+
+        app_list = []
+        for a in applications:
+            app_dict = {
+                "id": a.id,
+                "job_id": a.job_id,
+                "applicant_name": a.applicant_name,
+                "applicant_email": a.applicant_email,
+                "applicant_phone": a.applicant_phone,
+                "experience_years": a.experience_years,
+                "current_position": a.current_position,
+                "location": a.location,
+                "status": a.status,
+                "applied_at": a.applied_at.isoformat() if a.applied_at else None,
+                "interview_datetime": a.interview_datetime.isoformat() if a.interview_datetime else None,
+                "duration_minutes": a.duration_minutes,
+                "overall_score": a.overall_score,
+                "ai_score": a.ai_score,
+                "final_score": a.final_score,
+                "added_by": a.added_by,
+                "recruiter_name": recruiter_map.get(a.added_by, None),
+            }
+            app_list.append(app_dict)
+
         return {
             "job_id": job_id,
             "job_title": "",
-            "applications": applications,
+            "applications": app_list,
             "total_applications": len(applications),
             "stats": {
                 "applied": len(applications),
@@ -228,3 +260,30 @@ def check_application_status(
             status_code=500,
             detail=f"Failed to check application status: {str(e)}"
         )
+
+
+class StatusUpdate(BaseModel):
+    status: str
+
+@router.patch("/api/applications/{application_id}/status")
+def update_application_status(
+    application_id: int,
+    body: StatusUpdate,
+    db: Session = Depends(get_db)
+):
+    valid_statuses = [
+        "Applied", "Added by Recruiter", "Questions Generated",
+        "Interview Scheduled", "Interview Completed",
+        "Offer Sent", "Hired", "Rejected"
+    ]
+    if body.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+
+    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    application.status = body.status
+    db.commit()
+    db.refresh(application)
+    return {"id": application.id, "status": application.status}

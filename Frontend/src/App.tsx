@@ -22,7 +22,6 @@ import ResetPassword from './components/auth/ResetPassword'
 import Dashboard from './components/dashboard/Dashboard'
 import Jobs from './components/jobs/Jobs_new'
 import JobCreation from './components/jobs/JobCreation'
-import CandidateUpload from './components/candidates/CandidateUpload'
 import AIQuestionGeneration from './components/interview/AIQuestionGeneration'
 import InterviewOutline from './components/interview/InterviewOutline'
 import Results from './components/interview/Results'
@@ -47,8 +46,6 @@ import VideoInterviewScheduler from './components/video/VideoInterviewScheduler'
 import VideoInterviewList from './components/video/VideoInterviewList'
 import VideoInterviewRoom from './components/video/VideoInterviewRoom'
 import VideoInterviewDetail from './components/video/VideoInterviewDetail'
-import AIInterviewRoom from './components/video/AIInterviewRoom'
-
 // Fraud Detection Components
 import FraudDashboard from './components/fraud/FraudDashboard'
 import FraudAnalysisPanel from './components/fraud/FraudAnalysisPanel'
@@ -317,20 +314,11 @@ function App(): JSX.Element {
             {/* Candidates - Recruiter, Domain Expert, Admin */}
             <Route path="/candidates" element={
               <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['domain_expert', 'admin']}>
+                <RoleProtectedRoute allowedRoles={['domain_expert', 'admin', 'recruiter']}>
                   <Candidates />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />
-            {/* Candidate Upload - Recruiter, Admin */}
-            <Route path="/candidate-upload" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
-                  <CandidateUpload />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            
             {/* AI Questions - Recruiter, Domain Expert, Admin */}
             <Route path="/ai-questions" element={
               <ProtectedRoute>
@@ -451,13 +439,6 @@ function App(): JSX.Element {
               <ProtectedRoute>
                 <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
                   <VideoInterviewDetail />
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            } />
-            <Route path="/ai-interview/:videoId" element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['recruiter', 'admin']}>
-                  <AIInterviewRoom />
                 </RoleProtectedRoute>
               </ProtectedRoute>
             } />

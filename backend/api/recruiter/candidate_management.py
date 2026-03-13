@@ -98,7 +98,8 @@ async def add_candidate_to_job(
         expected_salary=expected_ctc or None,
         interview_datetime=parsed_interview_dt,
         duration_minutes=duration_minutes,
-        status="Added by Recruiter"
+        status="Added by Recruiter",
+        added_by=current_user.id
     )
     db.add(application)
     db.flush()  # get application.id

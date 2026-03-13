@@ -150,6 +150,8 @@ class JobApplication(Base):
     transcript_path = Column(String, nullable=True)
     report_card_json = Column(Text, nullable=True)  # Cached JSON report card
 
+    added_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
     # ATS fields
     ats_source = Column(String, nullable=True)
     ats_external_id = Column(String, nullable=True)
@@ -157,6 +159,7 @@ class JobApplication(Base):
     # Relationships
     job = relationship("Job", back_populates="applications")
     resume = relationship("CandidateResume", back_populates="application", uselist=False)
+    added_by_user = relationship("User", foreign_keys=[added_by])
 
 class ExperienceLevel(str, enum.Enum):
     JUNIOR = "Junior"

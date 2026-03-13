@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
-from models import User, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion, InterviewAnswer, InterviewRating, CandidateResume
+from models import User, UserRole, Job, JobApplication, InterviewQuestion, QuestionGenerationSession, InterviewQuestionVersion, InterviewAnswer, InterviewRating, CandidateResume
 from schemas import (
     QuestionGenerateRequest,
     InterviewQuestionResponse,
@@ -115,15 +115,84 @@ def generate_questions(
             total_questions=request.total_questions
         )
         
+        # Auto-create video interview session + send email
+        video_interview_id = None
+        try:
+            from models import VideoInterview, VideoInterviewStatus
+            from datetime import timedelta, timezone
+            import hashlib, random as _rnd
+
+            candidate_user = db.query(User).filter(User.email == candidate.applicant_email).first()
+            if not candidate_user:
+                base_username = candidate.applicant_email.split('@')[0]
+                username = base_username
+                if db.query(User).filter(User.username == username).first():
+                    username = f"{base_username}{_rnd.randint(100, 999)}"
+                candidate_user = User(
+                    email=candidate.applicant_email,
+                    username=username,
+                    full_name=candidate.applicant_name,
+                    role=UserRole.CANDIDATE,
+                    is_active=True,
+                    hashed_password=hashlib.sha256("Welcome123".encode()).hexdigest()
+                )
+                db.add(candidate_user)
+                db.flush()
+
+            existing_vi = db.query(VideoInterview).filter(
+                VideoInterview.job_id == request.job_id,
+                VideoInterview.candidate_id == candidate_user.id
+            ).first()
+
+            scheduled_time = datetime.now(timezone.utc) + timedelta(days=1)
+
+            if not existing_vi:
+                vi = VideoInterview(
+                    job_id=request.job_id,
+                    candidate_id=candidate_user.id,
+                    interviewer_id=current_user.id,
+                    scheduled_at=scheduled_time,
+                    duration_minutes=candidate.duration_minutes or 30,
+                    status=VideoInterviewStatus.SCHEDULED.value,
+                )
+                db.add(vi)
+                db.commit()
+                db.refresh(vi)
+                video_interview_id = vi.id
+            else:
+                video_interview_id = existing_vi.id
+
+            candidate.status = "Questions Generated"
+            db.commit()
+
+            try:
+                from services.email_service import send_interview_notification
+                frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+                send_interview_notification(
+                    candidate_email=candidate.applicant_email,
+                    candidate_name=candidate.applicant_name,
+                    job_title=job.title,
+                    interview_date=scheduled_time.strftime("%B %d, %Y"),
+                    interview_time=scheduled_time.strftime("%I:%M %p UTC"),
+                    meeting_url=f"{frontend_url}/video-room/{video_interview_id}"
+                )
+            except Exception as email_err:
+                print(f"⚠️ Email notification failed: {email_err}")
+                import traceback
+                traceback.print_exc()
+        except Exception as vi_err:
+            print(f"⚠️ Auto video interview creation failed: {vi_err}")
+
         return {
             "message": f"Successfully generated {result['total_questions']} questions in {result['mode']} mode",
             "session_id": result["session_id"],
             "mode": result["mode"],
             "total_questions": result["total_questions"],
             "status": "success",
-            "preview_mode": result["mode"] == "preview"
+            "preview_mode": result["mode"] == "preview",
+            "video_interview_id": video_interview_id
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,

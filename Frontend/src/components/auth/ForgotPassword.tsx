@@ -8,12 +8,29 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [emailTouched, setEmailTouched] = useState(false)
   const navigate = useNavigate()
+
+  const validateEmail = (value: string): string => {
+    if (!value.trim()) return 'Email is required'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email'
+    return ''
+  }
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value)
+    setEmailTouched(true)
+    setEmailError(validateEmail(value))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) {
-      showError('Please enter your email')
+    const err = validateEmail(email)
+    setEmailError(err)
+    setEmailTouched(true)
+    if (err) {
+      showError('Please fix the errors')
       return
     }
 
@@ -102,11 +119,13 @@ const ForgotPassword = () => {
                 <TextField
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => handleEmailChange(e.target.value)}
                   placeholder="Enter your email"
                   variant="outlined"
                   fullWidth
                   disabled={loading}
+                  error={emailTouched && !!emailError}
+                  helperText={emailTouched && emailError}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: '8px',

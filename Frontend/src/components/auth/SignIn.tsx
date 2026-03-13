@@ -19,15 +19,31 @@ const Login = () => {
     password: ''
   })
   const [loading, setLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [fieldTouched, setFieldTouched] = useState<Record<string, boolean>>({})
 
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case 'username':
+        if (!value.trim()) return 'Email is required'
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email'
+        return ''
+      case 'password':
+        if (!value) return 'Password is required'
+        return ''
+      default:
+        return ''
+    }
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
+    const { name, value } = e.target
+    setFormData({ ...formData, [name]: value })
+    setFieldTouched(prev => ({ ...prev, [name]: true }))
+    setFieldErrors(prev => ({ ...prev, [name]: validateField(name, value) }))
   }
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -41,8 +57,14 @@ const Login = () => {
       return
     }
 
-    if (!formData.username || !formData.password) {
-      showError('Please fill in all fields')
+    const errors = {
+      username: validateField('username', formData.username),
+      password: validateField('password', formData.password),
+    }
+    setFieldErrors(errors)
+    setFieldTouched({ username: true, password: true })
+    if (Object.values(errors).some(e => e !== '')) {
+      showError('Please fix the errors before signing in')
       return
     }
 
@@ -200,6 +222,8 @@ const Login = () => {
                 variant="outlined"
                 fullWidth
                 disabled={loading}
+                error={fieldTouched.username && !!fieldErrors.username}
+                helperText={fieldTouched.username && fieldErrors.username}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: '8px',
@@ -257,6 +281,8 @@ const Login = () => {
                 variant="outlined"
                 fullWidth
                 disabled={loading}
+                error={fieldTouched.password && !!fieldErrors.password}
+                helperText={fieldTouched.password && fieldErrors.password}
                 slotProps={{
                   input: {
                     endAdornment: (

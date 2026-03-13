@@ -194,6 +194,9 @@ def _build_list_item(vi: VideoInterview, db: Session) -> VideoInterviewListRespo
 
     return VideoInterviewListResponse(
         id=vi.id,
+        job_id=vi.job_id,
+        candidate_id=vi.candidate_id,
+        candidate_email=vi.candidate.email if vi.candidate else None,
         job_title=job_title,
         candidate_name=candidate_name,
         status=vi.status.value if hasattr(vi.status, "value") else vi.status,
@@ -455,6 +458,9 @@ def list_video_interviews(
             
             result.append(VideoInterviewListResponse(
                 id=vi.id,
+                job_id=vi.job_id,
+                candidate_id=vi.candidate_id,
+                candidate_email=vi.candidate.email if vi.candidate else None,
                 job_title=job_title,
                 candidate_name=candidate_name,
                 status=vi.status.value if hasattr(vi.status, "value") else vi.status,
@@ -725,51 +731,34 @@ async def join_video_interview(
     db.commit()
     db.refresh(vi)
     
-    # 2. Trigger AI agent - ONLY ONCE per interview using database flag
-    agent_dispatched = False
+    # 2. Generate LiveKit token for the user (recruiter conducts interview directly)
     try:
-        from routers.livekit_router import generate_livekit_token, TokenRequest, dispatch_agent, DispatchAgentRequest
-        
+        from routers.livekit_router import generate_livekit_token, TokenRequest
+
         room_name = f"interview_{video_id}"
-        
-        # Dispatch agent ONLY if:
-        # 1. Agent hasn't been dispatched yet (check database flag)
-        # 2. Candidate is joining
-        # 3. Interview is in progress
-        if not vi.agent_dispatched and is_candidate and vi.status == VideoInterviewStatus.IN_PROGRESS.value:
-            await dispatch_agent(DispatchAgentRequest(room_name=room_name))
-            vi.agent_dispatched = True
-            db.commit()
-            agent_dispatched = True
-            print(f"✅ AI Agent dispatched to room: {room_name}")
-        elif vi.agent_dispatched:
-            print(f"⏭️ Skipping agent dispatch - already dispatched for this interview")
-        
-        # 3. Generate token for the user
+
         token_data = await generate_livekit_token(TokenRequest(
             room_name=room_name,
             participant_name=current_user.full_name or current_user.username,
             participant_identity=str(current_user.id),
             role="interviewer" if is_recruiter else "candidate"
         ))
-        
+
         return {
             "success": True,
             "token": token_data.token,
             "livekit_url": token_data.livekit_url,
             "room_name": room_name,
             "status": vi.status,
-            "agent_dispatched": agent_dispatched
         }
-        
+
     except Exception as e:
-        print(f"❌ Error in join_video_interview (agent/token): {e}")
+        print(f"❌ Error in join_video_interview (token): {e}")
         import traceback
         traceback.print_exc()
-        # Fallback for just starting the interview
         return {
             "success": True,
-            "message": "Interview started, but agent dispatch/token failed",
+            "message": "Interview started, but token generation failed",
             "video_id": video_id,
             "status": vi.status,
             "error": str(e)
@@ -804,7 +793,7 @@ async def guest_join_interview(
 ):
     """
     Guest candidate joins interview — no auth required.
-    Sets status to IN_PROGRESS and dispatches AI agent.
+    Sets status to IN_PROGRESS.
     """
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -827,10 +816,9 @@ async def guest_join_interview(
     db.commit()
     db.refresh(vi)
 
-    # Dispatch AI agent and generate token
-    agent_dispatched = False
+    # Generate LiveKit token for the guest candidate
     try:
-        from routers.livekit_router import generate_livekit_token, TokenRequest, dispatch_agent, DispatchAgentRequest
+        from routers.livekit_router import generate_livekit_token, TokenRequest
 
         room_name = f"interview_{video_id}"
 
@@ -846,13 +834,6 @@ async def guest_join_interview(
             else:
                 candidate_name = vi.candidate.full_name or vi.candidate.username or candidate_name
 
-        if not vi.agent_dispatched and vi.status == VideoInterviewStatus.IN_PROGRESS.value:
-            await dispatch_agent(DispatchAgentRequest(room_name=room_name))
-            vi.agent_dispatched = True
-            db.commit()
-            agent_dispatched = True
-            print(f"✅ AI Agent dispatched to room: {room_name}")
-
         token_data = await generate_livekit_token(TokenRequest(
             room_name=room_name,
             participant_name=candidate_name,
@@ -866,7 +847,6 @@ async def guest_join_interview(
             "livekit_url": token_data.livekit_url,
             "room_name": room_name,
             "status": vi.status,
-            "agent_dispatched": agent_dispatched
         }
 
     except Exception as e:
@@ -875,7 +855,7 @@ async def guest_join_interview(
         traceback.print_exc()
         return {
             "success": True,
-            "message": "Interview started, but agent dispatch/token failed",
+            "message": "Interview started, but token generation failed",
             "video_id": video_id,
             "status": vi.status,
             "error": str(e)
@@ -978,30 +958,26 @@ def end_video_interview(
         # Don't change status, candidate can still join within grace period
         return _build_response(vi, db)
 
-    # FIXED: Only mark as no_show if candidate never actually joined
-    # Check if candidate_joined_at is set (candidate actually joined)
+    # Only mark as no_show if candidate never actually joined
     if max_participants is not None and max_participants < 2:
-        # Additional check: Did candidate actually join?
-        if vi.candidate_joined_at:
-            print(f"[end_interview] Candidate DID join (candidate_joined_at={vi.candidate_joined_at}), NOT marking as no-show")
-            # Candidate joined but left early - mark as completed, not no-show
-            vi.status = VideoInterviewStatus.COMPLETED.value
-            vi.ended_at = datetime.now(timezone.utc)
-            db.commit()
-            db.refresh(vi)
-            return _build_response(vi, db)
-        else:
+        if not vi.candidate_joined_at:
             print(f"[end_interview] No-show detected: max_participants={max_participants}, candidate_joined_at={vi.candidate_joined_at}")
             vi.status = VideoInterviewStatus.NO_SHOW.value
             vi.ended_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(vi)
             return _build_response(vi, db)
+        else:
+            print(f"[end_interview] Candidate DID join (candidate_joined_at={vi.candidate_joined_at}), proceeding to complete with transcript")
 
+    # Refresh to get latest recording_url (uploaded in separate request)
+    db.refresh(vi)
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
 
-    # Generate transcript — try REAL transcription first, fall back to mock
+    print(f"[end_interview] recording_url={vi.recording_url}")
+
+    # Generate transcript from recording
     try:
         candidate_name = None
         interviewer_name = None
@@ -1135,6 +1111,8 @@ def end_video_interview(
                 JobApplication.job_id == vi.job_id,
                 JobApplication.applicant_email == vi.candidate.email
             ).first()
+            if application:
+                application.status = "Interview Completed"
 
         session = InterviewSession(
             job_id=vi.job_id,

@@ -130,19 +130,27 @@ export interface InterviewTranscript {
 export interface Candidate {
   id: number;
   name: string;
-  role: string;
-  experience: string;
-  department: string;
-  hireDate: string;
-  skills: string[];
   email: string;
   phone: string;
+  experience: string;
+  currentPosition?: string;
+  location?: string;
+  skills: string[];
   score: number;
-  status: 'active' | 'pending';
+  recommendation?: string;
+  status: string;
+  appliedAt?: string;
+  appliedJobs?: { job_id: number; title: string; status: string; application_id: number }[];
+  totalApplications?: number;
+  hasTranscript?: boolean;
+  questionSessionId?: number;
+  // Backward compatibility
+  role: string;
+  department: string;
+  hireDate: string;
   onlineStatus?: 'Active' | 'Inactive';
   isOnline?: boolean;
   lastActivity?: string;
-  hasTranscript?: boolean;
   // Nested objects
   interview_questions?: InterviewQuestion[];
   interview_transcripts?: InterviewTranscript[];

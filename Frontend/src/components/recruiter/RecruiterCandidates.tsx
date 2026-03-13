@@ -122,10 +122,17 @@ const RecruiterCandidates = () => {
       case 'name':
         if (!value.trim()) return 'Full name is required'
         if (value.trim().length < 2) return 'Name must be at least 2 characters'
+        if (!/^[a-zA-Z\s.'-]+$/.test(value.trim())) return 'Name can only contain letters and spaces'
+        if (value.trim().length > 100) return 'Name must be less than 100 characters'
         return ''
       case 'email':
         if (!value.trim()) return 'Email is required'
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email'
+        return ''
+      case 'phone':
+        if (!value.trim()) return ''  // optional
+        if (!/^\d+$/.test(value.trim())) return 'Phone number must contain only digits'
+        if (value.trim().length !== 10) return 'Phone number must be exactly 10 digits'
         return ''
       case 'linkedin':
         if (value.trim() && !value.trim().startsWith('http')) return 'Please enter a valid URL'
@@ -136,10 +143,16 @@ const RecruiterCandidates = () => {
   }
 
   const handleAddFieldChange = (field: string, value: string) => {
-    setAddForm(prev => ({ ...prev, [field]: value }))
-    if (addFormTouched[field]) {
-      setAddFormErrors(prev => ({ ...prev, [field]: validateAddField(field, value) }))
+    // For phone, only allow digits
+    if (field === 'phone' && value !== '' && !/^\d*$/.test(value)) {
+      setAddFormTouched(prev => ({ ...prev, phone: true }))
+      setAddFormErrors(prev => ({ ...prev, phone: 'Phone number must contain only digits' }))
+      return
     }
+    setAddForm(prev => ({ ...prev, [field]: value }))
+    // Validate immediately as user types
+    setAddFormTouched(prev => ({ ...prev, [field]: true }))
+    setAddFormErrors(prev => ({ ...prev, [field]: validateAddField(field, value) }))
   }
 
   const handleAddFieldBlur = (field: string, value: string) => {
@@ -154,9 +167,10 @@ const RecruiterCandidates = () => {
       email: validateAddField('email', addForm.email),
       resume: addForm.resume ? '' : 'Resume is required',
     }
+    if (addForm.phone) errors.phone = validateAddField('phone', addForm.phone)
     if (addForm.linkedin) errors.linkedin = validateAddField('linkedin', addForm.linkedin)
     setAddFormErrors(errors)
-    setAddFormTouched({ name: true, email: true, resume: true, linkedin: true })
+    setAddFormTouched({ name: true, email: true, resume: true, phone: true, linkedin: true })
 
     if (Object.values(errors).some(e => e !== '')) {
       toast.error('Please fix the errors before submitting')
@@ -804,8 +818,12 @@ const RecruiterCandidates = () => {
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <Box>
                   <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Phone Number</Typography>
-                  <TextField fullWidth placeholder="+91 98765 43210" value={addForm.phone}
+                  <TextField fullWidth placeholder="9876543210" value={addForm.phone}
                     onChange={e => handleAddFieldChange('phone', e.target.value)}
+                    onBlur={() => handleAddFieldBlur('phone', addForm.phone)}
+                    error={addFormTouched.phone && !!addFormErrors.phone}
+                    helperText={addFormTouched.phone && addFormErrors.phone}
+                    inputProps={{ maxLength: 10 }}
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
                 </Box>
                 <Box>

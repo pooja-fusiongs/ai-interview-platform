@@ -105,6 +105,27 @@ Respond ONLY with valid JSON:
         if "feedback" not in result or not result["feedback"]:
             result["feedback"] = "AI evaluation completed."
 
+        # Sanity check: if answer is just repeating the question, cap score
+        answer_lower = answer_text.strip().lower()
+        question_lower = question_text.strip().lower()
+        if question_lower and answer_lower:
+            q_tokens = set(_tokenize(question_lower))
+            a_tokens = set(_tokenize(answer_lower))
+            if q_tokens and a_tokens:
+                overlap = len(q_tokens & a_tokens) / max(len(a_tokens), 1)
+                if overlap > 0.7:  # answer is >70% question words — likely parroting
+                    print(f"[WARN][AI Scorer] Answer appears to parrot the question (overlap={overlap:.0%}), capping score")
+                    for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                        result[key] = min(result[key], 15.0)
+                    result["score"] = round(
+                        result["relevance_score"] * config.WEIGHT_RELEVANCE
+                        + result["completeness_score"] * config.WEIGHT_COMPLETENESS
+                        + result["accuracy_score"] * config.WEIGHT_ACCURACY
+                        + result["clarity_score"] * config.WEIGHT_CLARITY, 1
+                    )
+                    if not result["feedback"] or "parrot" not in result["feedback"].lower():
+                        result["feedback"] = "The answer appears to repeat the question rather than providing a substantive response. " + (result.get("feedback") or "")
+
         return result
 
     except ImportError:
@@ -222,8 +243,8 @@ Respond ONLY with valid JSON:
             print(f"[WARN][AI Batch Scorer] Got {len(scored)} scores for {len(answers_data)} answers, falling back")
             return _fallback_batch_score(answers_data)
 
-        # Validate and clamp all scores
-        for item in scored:
+        # Validate, clamp, and sanity-check all scores
+        for idx, item in enumerate(scored):
             for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
                 val = item.get(key)
                 if val is None or not isinstance(val, (int, float)):
@@ -233,16 +254,31 @@ Respond ONLY with valid JSON:
             if not item.get("feedback"):
                 item["feedback"] = "AI evaluation completed."
 
-        # Validate overall fields
-        overall = result.get("overall_score")
-        if overall is None or not isinstance(overall, (int, float)):
-            overall = sum(s["score"] for s in scored) / len(scored)
+            # Sanity check: if answer parrots the question, cap score
+            qa = answers_data[idx]
+            a_tokens = set(_tokenize(qa["answer_text"].lower()))
+            q_tokens = set(_tokenize(qa["question_text"].lower()))
+            if q_tokens and a_tokens:
+                overlap = len(q_tokens & a_tokens) / max(len(a_tokens), 1)
+                if overlap > 0.7:
+                    print(f"[WARN][AI Batch Scorer] Q{idx+1} parrots the question (overlap={overlap:.0%}), capping score")
+                    for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                        item[key] = min(item[key], 15.0)
+                    item["score"] = round(
+                        item["relevance_score"] * config.WEIGHT_RELEVANCE
+                        + item["completeness_score"] * config.WEIGHT_COMPLETENESS
+                        + item["accuracy_score"] * config.WEIGHT_ACCURACY
+                        + item["clarity_score"] * config.WEIGHT_CLARITY, 1
+                    )
+                    item["feedback"] = "The answer appears to repeat the question rather than providing a substantive response. " + (item.get("feedback") or "")
+
+        # Always recompute overall_score from individual scores (don't trust AI's overall)
+        overall = sum(s["score"] for s in scored) / len(scored)
         result["overall_score"] = round(max(0.0, min(100.0, float(overall))), 1)
 
-        rec = result.get("recommendation", "").lower()
-        if rec not in {"select", "next_round", "reject"}:
-            ov = result["overall_score"]
-            result["recommendation"] = "select" if ov >= 75 else "next_round" if ov >= 50 else "reject"
+        # Always recompute recommendation from actual overall score
+        ov = result["overall_score"]
+        result["recommendation"] = "select" if ov >= 75 else "next_round" if ov >= 50 else "reject"
 
         if not result.get("strengths"):
             result["strengths"] = "Evaluation completed."

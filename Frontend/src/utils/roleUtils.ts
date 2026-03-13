@@ -70,15 +70,9 @@ export const getRouteAccess = (): RouteAccess[] => [
   },
   {
     path: '/candidates',
-    allowedRoles: ['domain_expert', 'admin'],
+    allowedRoles: ['domain_expert', 'admin','recruiter'],
     label: 'Candidates',
     icon: 'fas fa-users'
-  },
-  {
-    path: '/job-creation',
-    allowedRoles: ['recruiter', 'admin'],
-    label: 'Post a Job',
-    icon: 'fas fa-plus-circle'
   },
   {
     path: '/ai-questions',

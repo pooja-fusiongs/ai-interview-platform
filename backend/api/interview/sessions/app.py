@@ -362,6 +362,13 @@ def complete_session(
         .all()
     )
 
+    # Count total questions for this job to account for unanswered ones
+    total_questions = (
+        db.query(InterviewQuestion)
+        .filter(InterviewQuestion.job_id == session.job_id, InterviewQuestion.is_approved == True)
+        .count()
+    )
+
     # Build data for batch AI scoring
     answers_data = []
     valid_answers = []
@@ -391,9 +398,21 @@ def complete_session(
             answer.clarity_score = result["clarity_score"]
             answer.feedback = result["feedback"]
 
+    # Recompute overall_score: average over ALL questions (unanswered = 0)
+    answered_scores = [s["score"] for s in scored_answers] if scored_answers else []
+    total_q = max(total_questions, len(answered_scores))  # at least as many as answered
+    score_sum = sum(answered_scores)
+    computed_overall = round(score_sum / total_q, 1) if total_q > 0 else 0.0
+
     session.status = InterviewSessionStatus.SCORED
-    session.overall_score = ai_result["overall_score"]
-    session.recommendation = Recommendation(ai_result["recommendation"])
+    session.overall_score = computed_overall
+    # Recompute recommendation from actual overall score
+    if computed_overall >= 75:
+        session.recommendation = Recommendation("select")
+    elif computed_overall >= 50:
+        session.recommendation = Recommendation("next_round")
+    else:
+        session.recommendation = Recommendation("reject")
     session.strengths = ai_result["strengths"]
     session.weaknesses = ai_result["weaknesses"]
     session.completed_at = datetime.utcnow()
