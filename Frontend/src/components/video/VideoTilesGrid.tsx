@@ -467,8 +467,8 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
         onMouseDown={handleDragStart}
         sx={{
           position: 'absolute',
-          ...(selfViewPos ? { left: selfViewPos.x, top: selfViewPos.y } : { bottom: 96, right: panelOpen ? 292 : 12 }),
-          width: 200, height: 140, borderRadius: '8px', overflow: 'hidden',
+          ...(selfViewPos ? { left: selfViewPos.x, top: selfViewPos.y } : { bottom: { xs: 68, md: 96 }, right: panelOpen ? 292 : 12 }),
+          width: { xs: 120, md: 200 }, height: { xs: 90, md: 140 }, borderRadius: '8px', overflow: 'hidden',
           boxShadow: '0 1px 6px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.08)',
           zIndex: 10, cursor: 'grab', transition: selfViewPos ? 'none' : 'right 0.3s ease',
           '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.7)' },
@@ -503,7 +503,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
       {/* Emoji Picker Popup */}
       {showEmojiPicker && (
         <Box sx={{
-          position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', bottom: { xs: 68, md: 90 }, left: '50%', transform: 'translateX(-50%)',
           background: '#292a2d', borderRadius: '24px', px: 1.5, py: 1,
           display: 'flex', gap: 0.5, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
           border: '1px solid #3c4043', zIndex: 30,
@@ -524,39 +524,42 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
 
       {/* ===== BOTTOM CONTROL BAR ===== */}
       <Box sx={{
-        height: '72px', background: '#202124',
+        height: { xs: '60px', md: '72px' }, background: '#202124',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        px: { xs: 1, sm: 2, md: 3 },
+        px: { xs: 0.5, sm: 2, md: 3 },
         opacity: showControls ? 1 : 0, transition: 'opacity 0.3s ease',
-        position: 'relative', zIndex: 15,
+        position: 'relative', zIndex: 15, flexShrink: 0,
       }}>
         {/* Center: All controls in one row */}
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', gap: { xs: 0.5, md: 1 }, alignItems: 'center' }}>
           <Tooltip title={`${isMicOn ? 'Turn off' : 'Turn on'} microphone (Ctrl+D)`} arrow>
-            <IconButton onClick={toggleMic} sx={ctrlBtn(isMicOn)}>
-              {isMicOn ? <Mic /> : <MicOff />}
+            <IconButton onClick={toggleMic} sx={{ ...ctrlBtn(isMicOn), width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 } }}>
+              {isMicOn ? <Mic sx={{ fontSize: { xs: 20, md: 24 } }} /> : <MicOff sx={{ fontSize: { xs: 20, md: 24 } }} />}
             </IconButton>
           </Tooltip>
 
           <Tooltip title={`${isCamOn ? 'Turn off' : 'Turn on'} camera (Ctrl+E)`} arrow>
-            <IconButton onClick={toggleCamera} sx={ctrlBtn(isCamOn)}>
-              {isCamOn ? <Videocam /> : <VideocamOff />}
+            <IconButton onClick={toggleCamera} sx={{ ...ctrlBtn(isCamOn), width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 } }}>
+              {isCamOn ? <Videocam sx={{ fontSize: { xs: 20, md: 24 } }} /> : <VideocamOff sx={{ fontSize: { xs: 20, md: 24 } }} />}
             </IconButton>
           </Tooltip>
 
           <Tooltip title={isScreenSharing ? 'Stop presenting' : 'Present now'} arrow>
             <IconButton onClick={toggleScreenShare} sx={{
               ...ctrlBtn(!isScreenSharing),
+              width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 },
               bgcolor: isScreenSharing ? '#34a853' : 'rgba(255,255,255,0.1)',
               '&:hover': { bgcolor: isScreenSharing ? '#2d9249' : 'rgba(255,255,255,0.2)', transform: 'scale(1.05)' },
             }}>
-              {isScreenSharing ? <StopScreenShare /> : <ScreenShare />}
+              {isScreenSharing ? <StopScreenShare sx={{ fontSize: { xs: 20, md: 24 } }} /> : <ScreenShare sx={{ fontSize: { xs: 20, md: 24 } }} />}
             </IconButton>
           </Tooltip>
 
+          {/* Emoji - hidden on mobile to save space */}
           <Tooltip title="Send a reaction" arrow>
             <IconButton onClick={() => setShowEmojiPicker(!showEmojiPicker)} sx={{
               ...ctrlBtn(true),
+              display: { xs: 'none', sm: 'inline-flex' },
               bgcolor: showEmojiPicker ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
             }}>
               <EmojiEmotions />
@@ -564,23 +567,25 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
           </Tooltip>
 
           {/* Separator */}
-          <Box sx={{ width: 1, height: 28, bgcolor: '#5f6368', mx: 0.5 }} />
+          <Box sx={{ width: 1, height: 28, bgcolor: '#5f6368', mx: { xs: 0, md: 0.5 } }} />
 
           <Tooltip title="Leave call" arrow>
             <IconButton onClick={onEndCall} sx={{
               ...ctrlBtn(false, true),
-              borderRadius: '24px', width: 56, px: 2,
+              borderRadius: '24px', width: { xs: 48, md: 56 }, height: { xs: 40, md: 48 }, px: { xs: 1.5, md: 2 },
             }}>
-              <CallEnd />
+              <CallEnd sx={{ fontSize: { xs: 20, md: 24 } }} />
             </IconButton>
           </Tooltip>
 
-          {/* Separator */}
-          <Box sx={{ width: 1, height: 28, bgcolor: '#5f6368', mx: 0.5 }} />
+          {/* Separator - hidden on mobile */}
+          <Box sx={{ width: 1, height: 28, bgcolor: '#5f6368', mx: { xs: 0, md: 0.5 }, display: { xs: 'none', sm: 'block' } }} />
 
+          {/* Info, People, Fullscreen - hidden on mobile, accessible via More menu */}
           <Tooltip title="Meeting details" arrow>
             <IconButton onClick={() => { setShowMeetingInfo(!showMeetingInfo); if (!showMeetingInfo) setShowParticipants(false); }} sx={{
               color: showMeetingInfo ? '#8ab4f8' : '#e8eaed', width: 40, height: 40,
+              display: { xs: 'none', sm: 'inline-flex' },
               '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
             }}>
               <Info sx={{ fontSize: 20 }} />
@@ -590,6 +595,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
           <Tooltip title={`People (${participantCount})`} arrow>
             <IconButton onClick={() => { setShowParticipants(!showParticipants); if (!showParticipants) setShowMeetingInfo(false); }} sx={{
               color: showParticipants ? '#8ab4f8' : '#e8eaed', width: 40, height: 40,
+              display: { xs: 'none', sm: 'inline-flex' },
               '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
             }}>
               <PeopleAlt sx={{ fontSize: 20 }} />
@@ -599,6 +605,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
           <Tooltip title={isFullscreen ? 'Exit full screen' : 'Full screen'} arrow>
             <IconButton onClick={toggleFullscreen} sx={{
               color: '#e8eaed', width: 40, height: 40,
+              display: { xs: 'none', sm: 'inline-flex' },
               '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
             }}>
               {isFullscreen ? <FullscreenExit sx={{ fontSize: 20 }} /> : <Fullscreen sx={{ fontSize: 20 }} />}
@@ -607,7 +614,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
 
           <Tooltip title="More options" arrow>
             <IconButton onClick={(e) => setMoreMenuAnchor(e.currentTarget)} sx={{
-              color: '#e8eaed', width: 40, height: 40,
+              color: '#e8eaed', width: { xs: 36, md: 40 }, height: { xs: 36, md: 40 },
               '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
             }}>
               <MoreVert sx={{ fontSize: 20 }} />

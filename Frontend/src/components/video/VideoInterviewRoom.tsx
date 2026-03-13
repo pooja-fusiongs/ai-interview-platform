@@ -855,7 +855,7 @@ const VideoInterviewRoom: React.FC = () => {
           {/* LEFT SIDE - Questions Panel (hidden on mobile during active call, shown as collapsible) */}
           <Box sx={{
             width: { xs: '100%', md: '40%' },
-            maxHeight: { xs: isActive ? '35vh' : '50vh', md: 'none' },
+            maxHeight: { xs: isActive ? '30vh' : '40vh', md: 'none' },
             backgroundColor: 'white',
             borderRight: { md: '1px solid #e2e8f0' },
             borderBottom: { xs: '1px solid #e2e8f0', md: 'none' },
@@ -999,7 +999,7 @@ const VideoInterviewRoom: React.FC = () => {
           <Box sx={{
             width: { xs: '100%', md: '60%' },
             flex: { xs: 1, md: 'none' },
-            minHeight: { xs: '50vh', md: 'auto' },
+            minHeight: { xs: 0, md: 'auto' },
             background: 'white',
             position: 'relative',
             display: 'flex',
