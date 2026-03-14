@@ -60,18 +60,18 @@ const FeedbackForm: React.FC = () => {
   return (
     <Naivgation>
       <Box component="main" sx={{ flexGrow: 1, p: 3, overflow: 'auto', bgcolor: '#f5f5f5' }}>
-        <Typography variant="h4" sx={{ mb: 3 }}>Submit Hire Feedback</Typography>
+        <Typography variant="h4" sx={{ mb: 3, fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Submit Hire Feedback</Typography>
         {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
         <Paper sx={{ p: 3 }}>
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid size={{ xs: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <TextField label="Candidate ID" type="number" fullWidth value={candidateId} onChange={e => setCandidateId(Number(e.target.value))} />
             </Grid>
-            <Grid size={{ xs: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <TextField label="Job ID" type="number" fullWidth value={jobId} onChange={e => setJobId(Number(e.target.value))} />
             </Grid>
-            <Grid size={{ xs: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <TextField label="Hire Date" type="date" fullWidth InputLabelProps={{ shrink: true }} value={hireDate} onChange={e => setHireDate(e.target.value)} />
             </Grid>
           </Grid>
@@ -85,7 +85,7 @@ const FeedbackForm: React.FC = () => {
           <TextField label="Strengths" multiline rows={3} fullWidth sx={{ mb: 2 }} value={strengths} onChange={e => setStrengths(e.target.value)} />
           <TextField label="Areas for Improvement" multiline rows={3} fullWidth sx={{ mb: 2 }} value={areasForImprovement} onChange={e => setAreasForImprovement(e.target.value)} />
           <TextField label="Additional Comments" multiline rows={3} fullWidth sx={{ mb: 3 }} value={comments} onChange={e => setComments(e.target.value)} />
-          <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
             <FormControlLabel control={<Switch checked={stillEmployed} onChange={e => setStillEmployed(e.target.checked)} />} label="Still Employed" />
             {!stillEmployed && (
               <FormControl sx={{ minWidth: 200 }}>

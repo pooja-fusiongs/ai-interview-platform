@@ -500,7 +500,7 @@ const VideoInterviewList: React.FC = () => {
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Job Title</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Candidate</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', lg: 'table-cell' } }}>Scheduled At</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', sm: 'table-cell' } }}>Scheduled At</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', md: 'table-cell' } }}>Duration</TableCell>
                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', md: 'table-cell' } }}>Flags</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Actions</TableCell>
@@ -539,7 +539,7 @@ const VideoInterviewList: React.FC = () => {
                         <TableCell>
                           <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" />
                         </TableCell>
-                        <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.duration_minutes} min</TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.flag_count ?? 0}</TableCell>
                         <TableCell>

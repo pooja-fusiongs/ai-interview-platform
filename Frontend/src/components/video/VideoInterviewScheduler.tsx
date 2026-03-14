@@ -597,7 +597,7 @@ const VideoInterviewScheduler: React.FC = () => {
                 </Box>
 
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Box sx={{ display: 'flex', gap: '12px', width: '100%' }}>
+                  <Box sx={{ display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap', flexDirection: { xs: 'column', sm: 'row' } }}>
                     {/* Date Picker - Opens Modal */}
                     <MobileDatePicker
                       value={selectedDate}
@@ -712,7 +712,7 @@ const VideoInterviewScheduler: React.FC = () => {
                   <i className="fas fa-hourglass-half" style={{ fontSize: '11px', color: '#6b7280' }} />
                   Duration
                 </Typography>
-                <Box sx={{ display: 'flex', gap: '10px' }}>
+                <Box sx={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   {DURATION_OPTIONS.map((option) => (
                     <Tooltip
                       key={option.value}
@@ -723,7 +723,8 @@ const VideoInterviewScheduler: React.FC = () => {
                       <Box
                         onClick={() => setDuration(option.value)}
                         sx={{
-                          flex: 1,
+                          flex: { xs: '1 1 100%', sm: 1 },
+                          minWidth: { xs: 'auto', sm: 0 },
                           padding: '14px 12px',
                           borderRadius: '10px',
                           border: `1.5px solid ${duration === option.value ? '#020291' : '#e5e7eb'}`,

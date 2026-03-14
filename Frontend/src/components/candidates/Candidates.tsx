@@ -523,7 +523,9 @@ const Candidates = () => {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
+            <>
+            {/* Desktop Table View */}
+            <TableContainer sx={{ display: { xs: 'none', sm: 'block' } }}>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -654,6 +656,96 @@ const Candidates = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+
+            {/* Mobile Card View */}
+            <Box sx={{ display: { xs: 'flex', sm: 'none' }, flexDirection: 'column', gap: 0 }}>
+              {paginatedCandidates.map((candidate) => (
+                <Box
+                  key={candidate.id}
+                  onClick={() => handleViewDetails(candidate)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5,
+                    px: 2, py: 1.5, cursor: 'pointer',
+                    borderBottom: '1px solid #f1f5f9',
+                    '&:hover': { background: '#fafbff' },
+                    '&:active': { background: '#f1f5f9' },
+                  }}
+                >
+                  <Avatar sx={{ width: 36, height: 36, background: getAvatarColor(candidate.name), fontSize: '14px', fontWeight: 600, flexShrink: 0 }}>
+                    {candidate.name.charAt(0).toUpperCase()}
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
+                      <Typography sx={{ fontWeight: 600, color: '#1e293b', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {candidate.name}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={candidate.status}
+                        sx={{
+                          fontWeight: 600, fontSize: '9px', borderRadius: '4px', height: 18, flexShrink: 0,
+                          background:
+                            candidate.status === 'Hired' ? '#ecfdf5' :
+                            candidate.status === 'Interview' ? '#eff6ff' :
+                            candidate.status === 'Reviewed' ? '#f5f3ff' :
+                            candidate.status === 'Rejected' ? '#fef2f2' : '#f0f0ff',
+                          color:
+                            candidate.status === 'Hired' ? '#059669' :
+                            candidate.status === 'Interview' ? '#2563eb' :
+                            candidate.status === 'Reviewed' ? '#7c3aed' :
+                            candidate.status === 'Rejected' ? '#dc2626' : '#020291',
+                        }}
+                      />
+                    </Box>
+                    <Typography sx={{ fontSize: '11px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {candidate.email}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.3 }}>
+                      {candidate.experience && (
+                        <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
+                          <i className="fas fa-briefcase" style={{ fontSize: 9, marginRight: 3 }} />{candidate.experience}
+                        </Typography>
+                      )}
+                      <Chip
+                        size="small"
+                        label={candidate.is_active === false ? 'Inactive' : 'Active'}
+                        sx={{
+                          fontWeight: 600, fontSize: '9px', borderRadius: '4px', height: 16,
+                          background: candidate.is_active === false ? '#fef2f2' : '#ecfdf5',
+                          color: candidate.is_active === false ? '#dc2626' : '#059669',
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, flexShrink: 0 }}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const action = candidate.is_active === false ? 'activate' : 'deactivate';
+                        if (window.confirm(`Are you sure you want to ${action} "${candidate.name}"?\n\n${action === 'deactivate' ? 'Inactive candidates will not appear in Similar Candidates.' : 'This candidate will appear in Similar Candidates again.'}`)) {
+                          handleToggleStatus(candidate);
+                        }
+                      }}
+                      sx={{
+                        color: candidate.is_active === false ? '#059669' : '#f59e0b',
+                        p: 0.5,
+                      }}
+                    >
+                      <i className={`fas ${candidate.is_active === false ? 'fa-toggle-off' : 'fa-toggle-on'}`} style={{ fontSize: '14px' }}></i>
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(candidate) }}
+                      sx={{ color: '#94a3b8', p: 0.5 }}
+                    >
+                      <i className="fas fa-trash-alt" style={{ fontSize: '11px' }}></i>
+                    </IconButton>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+            </>
           )}
           {/* Pagination */}
           {sortedCandidates.length > 0 && !loading && (

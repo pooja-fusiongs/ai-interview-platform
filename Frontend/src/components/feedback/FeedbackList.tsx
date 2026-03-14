@@ -419,7 +419,7 @@ const FeedbackList: React.FC = () => {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' },
               gap: '16px',
               mb: '24px',
             }}
@@ -601,7 +601,7 @@ const FeedbackList: React.FC = () => {
               </Box>
             ) : (
               <TableContainer sx={{ overflowX: 'auto' }}>
-                <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
+                <Table sx={{ minWidth: { xs: 'auto', md: 650 } }}>
                   <TableHead>
                     <TableRow sx={{ backgroundColor: '#f8fafc' }}>
                       <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>ID</TableCell>
@@ -758,7 +758,7 @@ const FeedbackList: React.FC = () => {
               ) : (
                 // Desktop Table View
                 <TableContainer sx={{ overflowX: 'auto' }}>
-                  <Table sx={{ minWidth: { xs: 650, md: 'auto' } }}>
+                  <Table sx={{ minWidth: { xs: 'auto', md: 650 } }}>
                     <TableHead>
                       <TableRow sx={{ backgroundColor: '#f8fafc' }}>
                         <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '13px' }}>ID</TableCell>

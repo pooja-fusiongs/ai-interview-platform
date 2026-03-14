@@ -67,7 +67,7 @@ const DescriptionBlock: React.FC<{ text: string; canEdit?: boolean; onEdit?: () 
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
       <Box sx={{ flex: 1 }}>
-        <Typography sx={{ fontSize: '14px', color: '#64748b', lineHeight: 1.6 }}>
+        <Typography sx={{ fontSize: '14px', color: '#64748b', lineHeight: 1.6, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
           {isLong && !expanded ? text.slice(0, MAX_LENGTH) + '...' : text}
         </Typography>
         {isLong && (
@@ -443,7 +443,15 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   }
 
   return (
-    <Box sx={{ width: '100%', py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
+    <Box sx={{ width: '100%', py: { xs: 2, md: 4 }, px: { xs: 1, sm: 2, md: 3 }, overflowX: 'hidden' }}>
+      {/* Responsive helper: hide Recruiter column on md (960-1199px) screens */}
+      <style>{`
+        @media (min-width: 960px) and (max-width: 1199px) {
+          .hide-on-md { display: none !important; }
+          .btn-label-md { display: none !important; }
+          .job-action-btn { padding-left: 6px !important; padding-right: 6px !important; min-width: 28px !important; }
+        }
+      `}</style>
       {/* Back Button */}
       <Button
         onClick={onClose}
@@ -455,9 +463,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         <i className="fas fa-arrow-left" style={{ marginRight: 8, fontSize: 12 }}></i> Back to Jobs
       </Button>
 
-      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
-      {/* Left Column - Job Details + Candidates */}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 2, lg: 3 }, alignItems: 'flex-start', maxWidth: '100%' }}>
+      {/* Left Column - Job Card + Candidates */}
+      <Box sx={{ flex: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
 
       {/* Job Summary Card */}
       <Box sx={{
@@ -468,9 +476,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         mb: 3,
       }}>
         {/* Title + Status + Edit */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Typography sx={{ fontSize: { xs: '20px', md: '24px' }, fontWeight: 700, color: '#1e293b' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0 }}>
+            <Typography sx={{ fontSize: { xs: '18px', sm: '20px', md: '24px' }, fontWeight: 700, color: '#1e293b', wordBreak: 'break-word' }}>
               {selectedJob.title}
             </Typography>
             <Chip
@@ -618,6 +626,98 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             </Box>
           )
         })()}
+      </Box>{/* End Job Summary Card */}
+
+      {/* Mobile Similar Candidates - shown only on xs, hidden on md+ where right column shows */}
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
+        <Box sx={{
+          borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff',
+          overflow: 'hidden',
+        }}>
+          <Box sx={{
+            px: 2, py: 1.5,
+            background: 'linear-gradient(135deg, #f8faff 0%, #eef0ff 100%)',
+            borderBottom: '1px solid #e8eaf6',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{
+                width: 28, height: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: '#020291', color: '#fff', fontSize: '12px'
+              }}>
+                <i className="fas fa-user-friends" />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', lineHeight: 1.2 }}>
+                  Similar Candidates
+                </Typography>
+                <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>Based on required skills</Typography>
+              </Box>
+            </Box>
+            {similarCandidates.length > 0 && (
+              <Chip label={similarCandidates.length} size="small" sx={{
+                height: 22, fontSize: '11px', fontWeight: 700,
+                background: '#020291', color: '#fff',
+              }} />
+            )}
+          </Box>
+          <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {similarCandidatesLoading ? (
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <CircularProgress size={24} sx={{ color: '#020291' }} />
+              </Box>
+            ) : similarCandidates.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>No similar candidates found</Typography>
+              </Box>
+            ) : (
+              similarCandidates.map((candidate: any) => {
+                const jobSkills = (() => {
+                  try {
+                    if (Array.isArray(selectedJob.requirements) && selectedJob.requirements.length > 0) return selectedJob.requirements
+                    if (typeof selectedJob.skills_required === 'string') return JSON.parse(selectedJob.skills_required)
+                    if (Array.isArray(selectedJob.skills_required)) return selectedJob.skills_required
+                  } catch {}
+                  return []
+                })()
+                const jobSkillsLower = jobSkills.map((s: string) => s.toLowerCase())
+                const candidateSkills = (candidate.skills || [])
+                const matchedSkills = candidateSkills.filter((s: string) => jobSkillsLower.some((js: string) => s.toLowerCase().includes(js) || js.includes(s.toLowerCase())))
+                const matchPercent = jobSkills.length > 0 ? Math.round((matchedSkills.length / jobSkills.length) * 100) : 0
+                return (
+                  <Box
+                    key={candidate.id}
+                    onClick={() => navigate('/candidates')}
+                    sx={{
+                      p: '10px', borderRadius: '10px', cursor: 'pointer',
+                      border: '1px solid #f1f5f9', background: '#fafbfc',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Avatar sx={{
+                        width: 32, height: 32, fontSize: '12px', fontWeight: 700,
+                        background: 'linear-gradient(135deg, #020291, #4f46e5)', color: '#fff', flexShrink: 0
+                      }}>
+                        {(candidate.name || 'U').charAt(0).toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.name}
+                        </Typography>
+                        <Typography sx={{ fontSize: '10px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.email}
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 600, color: matchPercent >= 70 ? '#059669' : matchPercent >= 40 ? '#eab308' : '#dc2626', flexShrink: 0 }}>
+                        {matchPercent}%
+                      </Typography>
+                    </Box>
+                  </Box>
+                )
+              })
+            )}
+          </Box>
+        </Box>
       </Box>
 
       {/* Candidates Section Header */}
@@ -736,16 +836,16 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         )
         return (
           <>
-            <Box sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', overflow: 'hidden' }}>
+            <Box sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', display: { xs: 'none', sm: 'block' } }}>
               <Box sx={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '500px' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Candidate</th>
-                      <th style={{ textAlign: 'center', padding: '12px 16px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Experience</th>
-                      <th style={{ textAlign: 'center', padding: '12px 16px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Status</th>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Recruiter</th>
-                      <th style={{ textAlign: 'center', padding: '12px 16px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Actions</th>
+                      <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Candidate</th>
+                      <th style={{ textAlign: 'center', padding: '10px 8px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Experience</th>
+                      <th style={{ textAlign: 'center', padding: '10px 8px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Status</th>
+                      <th className="hide-on-md" style={{ textAlign: 'left', padding: '10px 8px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Recruiter</th>
+                      <th style={{ textAlign: 'center', padding: '10px 12px', color: '#64748b', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -760,58 +860,59 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                           onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
                           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                         >
-                          <td style={{ padding: '12px 16px' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <td style={{ padding: '10px 12px' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Avatar sx={{
-                                width: 32, height: 32, fontSize: '13px', fontWeight: 700,
+                                width: 30, height: 30, fontSize: '12px', fontWeight: 700,
                                 background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', color: '#475569'
                               }}>
                                 {(candidate.applicant_name || 'U').charAt(0).toUpperCase()}
                               </Avatar>
-                              <Box>
-                                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { sm: '140px', md: '120px', lg: '140px' } }}>
                                   {candidate.applicant_name}
                                 </Typography>
-                                <Typography sx={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                <Typography sx={{ fontSize: '10px', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { sm: '140px', md: '120px', lg: '140px' } }}>
                                   {candidate.applicant_email}
                                 </Typography>
                               </Box>
                             </Box>
                           </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                             <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
                               {candidate.experience_years ? `${candidate.experience_years} yrs` : '-'}
                             </Typography>
                           </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                             <Chip
                               label={candidate.status || 'Applied'}
                               size="small"
                               sx={{
-                                fontSize: '11px', fontWeight: 600, height: '22px',
+                                fontSize: '10px', fontWeight: 600, height: '22px',
                                 backgroundColor: getStatusColor(candidate.status || 'Applied').bg,
                                 color: getStatusColor(candidate.status || 'Applied').color,
                               }}
                             />
                           </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <Typography sx={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                          <td className="hide-on-md" style={{ padding: '10px 8px' }}>
+                            <Typography sx={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
                               {candidate.recruiter_name || '-'}
                             </Typography>
                           </td>
-                          <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                             <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'center', flexWrap: 'nowrap' }}>
                               {(() => {
                                 const st = candidate.status || 'Applied'
                                 const btnSx = (borderColor: string, color: string, hoverBg: string) => ({
                                   textTransform: 'none' as const, fontSize: '11px', fontWeight: 600,
                                   borderRadius: '6px', px: 1.2, height: '28px', minWidth: 0,
+                                  whiteSpace: 'nowrap' as const,
                                   borderColor, color,
                                   '&:hover': { background: hoverBg, color: '#fff', borderColor }
                                 })
 
                                 if (st === 'Offer Sent' || st === 'Offer Declined' || st === 'Hired' || st === 'Rejected') {
-                                  const actionLabel = st === 'Offer Sent' ? 'Awaiting response' : st === 'Hired' ? 'Onboarding' : st === 'Offer Declined' ? 'Offer declined' : 'Closed'
+                                  const actionLabel = st === 'Offer Sent' ? 'Awaiting' : st === 'Hired' ? 'Onboarding' : st === 'Offer Declined' ? 'Declined' : 'Closed'
                                   const actionColors: Record<string, { bg: string; color: string; icon: string }> = {
                                     'Offer Sent': { bg: '#eff6ff', color: '#2563eb', icon: 'fas fa-clock' },
                                     'Hired': { bg: '#ecfdf5', color: '#059669', icon: 'fas fa-user-check' },
@@ -836,11 +937,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 if (st === 'Interview Completed') {
                                   return (
                                     <>
-                                      <Button onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
-                                        <i className="fas fa-paper-plane" style={{ marginRight: 4, fontSize: 10 }}></i>Send Offer
+                                      <Button className="job-action-btn" onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
+                                        <i className="fas fa-paper-plane" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Offer</span>
                                       </Button>
-                                      <Button onClick={() => handleUpdateStatus(candidate.id, 'Rejected')} size="small" variant="outlined" sx={btnSx('#dc2626', '#dc2626', '#dc2626')}>
-                                        <i className="fas fa-times" style={{ marginRight: 4, fontSize: 10 }}></i>Reject
+                                      <Button className="job-action-btn" onClick={() => handleUpdateStatus(candidate.id, 'Rejected')} size="small" variant="outlined" sx={btnSx('#dc2626', '#dc2626', '#dc2626')}>
+                                        <i className="fas fa-times" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Reject</span>
                                       </Button>
                                     </>
                                   )
@@ -849,12 +950,12 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 if (hasQuestions || st === 'Questions Generated' || st === 'Interview Scheduled') {
                                   return (
                                     <>
-                                      <Button onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
-                                        <i className="fas fa-eye" style={{ marginRight: 4, fontSize: 10 }}></i>Review
+                                      <Button className="job-action-btn" onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                        <i className="fas fa-eye" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Review</span>
                                       </Button>
                                       {candidateVideoIds[candidate.id] && (
-                                        <Button onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
-                                          <i className="fas fa-video" style={{ marginRight: 4, fontSize: 10 }}></i>Start Interview
+                                        <Button className="job-action-btn" onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
+                                          <i className="fas fa-video" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Interview</span>
                                         </Button>
                                       )}
                                     </>
@@ -863,6 +964,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
                                 return (
                                   <Button
+                                    className="job-action-btn"
                                     onClick={() => handleGenerateQuestions(candidate.id)}
                                     disabled={isGenerating}
                                     size="small" variant="outlined"
@@ -871,7 +973,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                     {isGenerating ? (
                                       <CircularProgress size={12} sx={{ color: '#020291' }} />
                                     ) : (
-                                      <><i className="fas fa-magic" style={{ marginRight: 4, fontSize: 10 }}></i>Generate</>
+                                      <><i className="fas fa-magic" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Generate</span></>
                                     )}
                                   </Button>
                                 )
@@ -884,6 +986,128 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   </tbody>
                 </table>
               </Box>
+            </Box>
+
+            {/* Mobile Card View */}
+            <Box sx={{ display: { xs: 'flex', sm: 'none' }, flexDirection: 'column', gap: 1.5 }}>
+              {paginatedCandidates.map((candidate: any) => {
+                const hasQuestions = !!candidateQuestionSets[candidate.id]
+                const questionSetId = candidateQuestionSets[candidate.id]
+                const isGenerating = generatingQuestions[candidate.id]
+                const st = candidate.status || 'Applied'
+                const btnSx = (borderColor: string, color: string, hoverBg: string) => ({
+                  textTransform: 'none' as const, fontSize: '11px', fontWeight: 600,
+                  borderRadius: '6px', px: 1.2, height: '28px', minWidth: 0,
+                  borderColor, color,
+                  '&:hover': { background: hoverBg, color: '#fff', borderColor }
+                })
+                return (
+                  <Box key={candidate.id} sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', p: 1.5 }}>
+                    {/* Row 1: Avatar + Name + Status */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Avatar sx={{
+                        width: 32, height: 32, fontSize: '13px', fontWeight: 700,
+                        background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', color: '#475569'
+                      }}>
+                        {(candidate.applicant_name || 'U').charAt(0).toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.applicant_name}
+                        </Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.applicant_email}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={st}
+                        size="small"
+                        sx={{
+                          fontSize: '10px', fontWeight: 600, height: '20px', flexShrink: 0,
+                          backgroundColor: getStatusColor(st).bg,
+                          color: getStatusColor(st).color,
+                        }}
+                      />
+                    </Box>
+                    {/* Row 2: Experience + Recruiter */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 1, pl: '44px' }}>
+                      <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
+                        <i className="fas fa-briefcase" style={{ fontSize: 9, marginRight: 4 }} />
+                        {candidate.experience_years ? `${candidate.experience_years} yrs` : '-'}
+                      </Typography>
+                      {candidate.recruiter_name && (
+                        <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
+                          <i className="fas fa-user-tie" style={{ fontSize: 9, marginRight: 4 }} />
+                          {candidate.recruiter_name}
+                        </Typography>
+                      )}
+                    </Box>
+                    {/* Row 3: Actions */}
+                    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', pl: '44px' }}>
+                      {(() => {
+                        if (st === 'Offer Sent' || st === 'Offer Declined' || st === 'Hired' || st === 'Rejected') {
+                          const actionLabel = st === 'Offer Sent' ? 'Awaiting response' : st === 'Hired' ? 'Onboarding' : st === 'Offer Declined' ? 'Offer declined' : 'Closed'
+                          const actionColors: Record<string, { bg: string; color: string; icon: string }> = {
+                            'Offer Sent': { bg: '#eff6ff', color: '#2563eb', icon: 'fas fa-clock' },
+                            'Hired': { bg: '#ecfdf5', color: '#059669', icon: 'fas fa-user-check' },
+                            'Offer Declined': { bg: '#fef2f2', color: '#dc2626', icon: 'fas fa-times-circle' },
+                            'Rejected': { bg: '#fef2f2', color: '#dc2626', icon: 'fas fa-ban' },
+                          }
+                          const ac = actionColors[st] || actionColors['Rejected']
+                          return (
+                            <Chip
+                              icon={<i className={ac.icon} style={{ fontSize: 10, color: ac.color, marginLeft: 8 }} />}
+                              label={actionLabel}
+                              size="small"
+                              sx={{ fontSize: '10px', fontWeight: 600, height: '22px', backgroundColor: ac.bg, color: ac.color, border: 'none', '& .MuiChip-label': { px: 1 } }}
+                            />
+                          )
+                        }
+                        if (st === 'Interview Completed') {
+                          return (
+                            <>
+                              <Button onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
+                                <i className="fas fa-paper-plane" style={{ marginRight: 4, fontSize: 10 }}></i>Offer
+                              </Button>
+                              <Button onClick={() => handleUpdateStatus(candidate.id, 'Rejected')} size="small" variant="outlined" sx={btnSx('#dc2626', '#dc2626', '#dc2626')}>
+                                <i className="fas fa-times" style={{ marginRight: 4, fontSize: 10 }}></i>Reject
+                              </Button>
+                            </>
+                          )
+                        }
+                        if (hasQuestions || st === 'Questions Generated' || st === 'Interview Scheduled') {
+                          return (
+                            <>
+                              <Button onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                <i className="fas fa-eye" style={{ marginRight: 4, fontSize: 10 }}></i>Review
+                              </Button>
+                              {candidateVideoIds[candidate.id] && (
+                                <Button onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
+                                  <i className="fas fa-video" style={{ marginRight: 4, fontSize: 10 }}></i>Interview
+                                </Button>
+                              )}
+                            </>
+                          )
+                        }
+                        return (
+                          <Button
+                            onClick={() => handleGenerateQuestions(candidate.id)}
+                            disabled={isGenerating}
+                            size="small" variant="outlined"
+                            sx={{ ...btnSx('#020291', '#020291', '#020291'), '&:disabled': { opacity: 0.5 } }}
+                          >
+                            {isGenerating ? (
+                              <CircularProgress size={12} sx={{ color: '#020291' }} />
+                            ) : (
+                              <><i className="fas fa-magic" style={{ marginRight: 4, fontSize: 10 }}></i>Generate</>
+                            )}
+                          </Button>
+                        )
+                      })()}
+                    </Box>
+                  </Box>
+                )
+              })}
             </Box>
 
             {totalPages > 1 && (
@@ -946,9 +1170,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
       {/* Right Column - Similar Candidates */}
       <Box sx={{
-        width: { xs: '100%', md: 300 }, flexShrink: 0,
+        width: { md: 220, lg: 300 }, flexShrink: 0,
         display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
-        alignSelf: 'stretch',
+        alignSelf: 'flex-start',
       }}>
         <Box sx={{
           borderRadius: '16px', border: '1px solid #e2e8f0',
@@ -967,139 +1191,112 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Box sx={{
-                width: 28, height: 28, borderRadius: '8px',
-                background: 'linear-gradient(135deg, #020291, #4f46e5)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                width: 28, height: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: '#020291', color: '#fff', fontSize: '12px'
               }}>
-                <i className="fas fa-user-friends" style={{ fontSize: 11, color: '#fff' }}></i>
+                <i className="fas fa-user-friends" />
               </Box>
               <Box>
                 <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', lineHeight: 1.2 }}>
                   Similar Candidates
                 </Typography>
-                <Typography sx={{ fontSize: '10px', color: '#64748b' }}>
-                  Based on required skills
-                </Typography>
+                <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>Based on required skills</Typography>
               </Box>
             </Box>
-            {!similarCandidatesLoading && similarCandidates.length > 0 && (
+            {similarCandidates.length > 0 && (
               <Chip label={similarCandidates.length} size="small" sx={{
-                height: 20, fontSize: '10px', fontWeight: 700,
+                height: 22, fontSize: '11px', fontWeight: 700,
                 background: '#020291', color: '#fff',
-                '& .MuiChip-label': { px: 0.8 }
               }} />
             )}
           </Box>
-
           {/* Body */}
-          <Box sx={{ p: 1.5, flex: 1, overflowY: 'auto',
-            '&::-webkit-scrollbar': { width: '4px' },
-            '&::-webkit-scrollbar-thumb': { background: '#cbd5e1', borderRadius: '2px' }
-          }}>
+          <Box sx={{ p: 1.5, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {similarCandidatesLoading ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <CircularProgress size={22} sx={{ color: '#020291' }} />
-                <Typography sx={{ fontSize: '11px', color: '#94a3b8', mt: 1 }}>Finding matches...</Typography>
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <CircularProgress size={24} sx={{ color: '#020291' }} />
               </Box>
             ) : similarCandidates.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Box sx={{ width: 40, height: 40, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1 }}>
-                  <i className="fas fa-search" style={{ fontSize: 16, color: '#94a3b8' }}></i>
-                </Box>
+              <Box sx={{ textAlign: 'center', py: 3 }}>
                 <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>No similar candidates found</Typography>
               </Box>
             ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {similarCandidates.map((candidate: any) => {
-                  // Calculate skill match percentage
-                  let jobSkillsLower: string[] = []
-                  let matchCount = 0
+              similarCandidates.map((candidate: any) => {
+                const jobSkills = (() => {
                   try {
-                    const sr = selectedJob.skills_required
-                    const reqs = selectedJob.requirements
-                    const raw = Array.isArray(reqs) && reqs.length > 0 ? reqs : typeof sr === 'string' ? JSON.parse(sr) : Array.isArray(sr) ? sr : []
-                    jobSkillsLower = raw.map((s: string) => s.toLowerCase())
-                    if (candidate.skills?.length > 0 && jobSkillsLower.length > 0) {
-                      matchCount = candidate.skills.filter((skill: string) =>
-                        jobSkillsLower.some((js: string) => skill.toLowerCase().includes(js) || js.includes(skill.toLowerCase()))
-                      ).length
-                    }
-                  } catch { /* ignore */ }
-                  const matchPct = jobSkillsLower.length > 0 ? Math.round((matchCount / jobSkillsLower.length) * 100) : 0
-                  const matchColor = matchPct >= 75 ? '#059669' : matchPct >= 50 ? '#d97706' : '#64748b'
+                    if (Array.isArray(selectedJob.requirements) && selectedJob.requirements.length > 0) return selectedJob.requirements
+                    if (typeof selectedJob.skills_required === 'string') return JSON.parse(selectedJob.skills_required)
+                    if (Array.isArray(selectedJob.skills_required)) return selectedJob.skills_required
+                  } catch {}
+                  return []
+                })()
+                const jobSkillsLower = jobSkills.map((s: string) => s.toLowerCase())
+                const candidateSkills = (candidate.skills || [])
+                const matchedSkills = candidateSkills.filter((s: string) => jobSkillsLower.some((js: string) => s.toLowerCase().includes(js) || js.includes(s.toLowerCase())))
+                const matchPercent = jobSkills.length > 0 ? Math.round((matchedSkills.length / jobSkills.length) * 100) : 0
 
-                  return (
-                    <Box
-                      key={candidate.id}
-                      onClick={() => navigate('/candidates')}
-                      sx={{
-                        p: '12px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s',
-                        border: '1px solid #f1f5f9', background: '#fafbfc',
-                        '&:hover': { borderColor: '#c7d2fe', background: '#f5f3ff', transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(2,2,145,0.08)' }
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                        <Avatar sx={{
-                          width: 36, height: 36, fontSize: '13px', fontWeight: 700,
-                          background: 'linear-gradient(135deg, #020291, #4f46e5)', color: '#fff', flexShrink: 0
-                        }}>
-                          {(candidate.name || 'U').charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {candidate.name}
-                          </Typography>
-                          <Typography sx={{ fontSize: '10px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {candidate.email}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                          {candidate.experience ? (
-                            <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#1e293b' }}>
-                              {candidate.experience}
-                            </Typography>
-                          ) : (
-                            <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>N/A</Typography>
-                          )}
-                        </Box>
+                return (
+                  <Box
+                    key={candidate.id}
+                    onClick={() => navigate('/candidates')}
+                    sx={{
+                      p: '12px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s',
+                      border: '1px solid #f1f5f9', background: '#fafbfc',
+                      '&:hover': { borderColor: '#c7d2fe', background: '#f5f3ff', transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(2,2,145,0.08)' }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                      <Avatar sx={{
+                        width: 36, height: 36, fontSize: '13px', fontWeight: 700,
+                        background: 'linear-gradient(135deg, #020291, #4f46e5)', color: '#fff', flexShrink: 0
+                      }}>
+                        {(candidate.name || 'U').charAt(0).toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.name}
+                        </Typography>
+                        <Typography sx={{ fontSize: '10px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {candidate.email}
+                        </Typography>
                       </Box>
-
-                      {/* Skills + Match */}
-                      {candidate.skills?.length > 0 && (
-                        <Box sx={{ mt: 1, ml: '48px' }}>
-                          {/* Match indicator bar */}
-                          {jobSkillsLower.length > 0 && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.8 }}>
-                              <Box sx={{ flex: 1, height: 3, borderRadius: '2px', background: '#f1f5f9', overflow: 'hidden' }}>
-                                <Box sx={{ width: `${matchPct}%`, height: '100%', borderRadius: '2px', background: matchColor, transition: 'width 0.3s' }} />
-                              </Box>
-                              <Typography sx={{ fontSize: '9px', fontWeight: 700, color: matchColor, whiteSpace: 'nowrap' }}>
-                                {matchPct}% match
-                              </Typography>
-                            </Box>
-                          )}
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {candidate.skills.slice(0, 4).map((skill: string, idx: number) => {
-                              const isMatch = jobSkillsLower.some((js: string) => skill.toLowerCase().includes(js) || js.includes(skill.toLowerCase()))
-                              return (
-                                <Typography key={idx} sx={{
-                                  fontSize: '9.5px', fontWeight: isMatch ? 600 : 500, borderRadius: '4px', px: 0.8, py: 0.2,
-                                  color: isMatch ? '#059669' : '#64748b',
-                                  background: isMatch ? '#ecfdf5' : '#f1f5f9',
-                                  border: isMatch ? '1px solid #a7f3d0' : '1px solid transparent',
-                                }}>
-                                  {isMatch && <i className="fas fa-check" style={{ fontSize: 7, marginRight: 3 }}></i>}
-                                  {skill}
-                                </Typography>
-                              )
-                            })}
-                          </Box>
-                        </Box>
-                      )}
+                      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                        {candidate.experience ? (
+                          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#1e293b' }}>
+                            {candidate.experience}
+                          </Typography>
+                        ) : (
+                          <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>N/A</Typography>
+                        )}
+                      </Box>
                     </Box>
-                  )
-                })}
-              </Box>
+                    {/* Match bar */}
+                    <Box sx={{ mt: 1 }}>
+                      <Box sx={{ height: 4, borderRadius: 2, background: '#f1f5f9', overflow: 'hidden' }}>
+                        <Box sx={{ height: '100%', borderRadius: 2, width: `${matchPercent}%`, background: matchPercent >= 70 ? '#059669' : matchPercent >= 40 ? '#eab308' : '#dc2626', transition: 'width 0.5s' }} />
+                      </Box>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 600, color: matchPercent >= 70 ? '#059669' : matchPercent >= 40 ? '#eab308' : '#dc2626', textAlign: 'right', mt: 0.3 }}>
+                        {matchPercent}% match
+                      </Typography>
+                    </Box>
+                    {matchedSkills.length > 0 && (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                        {matchedSkills.slice(0, 4).map((skill: string, idx: number) => (
+                          <Typography key={idx} sx={{
+                            fontSize: '9px', px: 0.8, py: 0.2, borderRadius: '4px',
+                            background: idx === 0 ? '#ecfdf5' : '#f1f5f9',
+                            color: idx === 0 ? '#059669' : '#64748b',
+                            fontWeight: idx === 0 ? 600 : 500,
+                            border: idx === 0 ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                          }}>
+                            {idx === 0 && <span style={{ marginRight: 2 }}>✓</span>}{skill}
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                )
+              })
             )}
           </Box>
         </Box>

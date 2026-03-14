@@ -24,7 +24,6 @@ import {
   CheckCircle,
   Error,
   Refresh,
-  FiberManualRecord,
   GraphicEq,
   RecordVoiceOver,
   Accessibility,
@@ -133,7 +132,6 @@ const RealTimeFlagMonitor: React.FC = () => {
 
   const totalFlags = sessions.reduce((sum, s) => sum + s.flags.length, 0);
   const flaggedSessions = sessions.filter((s) => s.status === 'flagged').length;
-  const clearedSessions = sessions.filter((s) => s.status === 'completed').length;
 
   const ScoreBar = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => {
     const scoreColor = getScoreColor(value);
@@ -189,17 +187,17 @@ const RealTimeFlagMonitor: React.FC = () => {
 
   return (
     <Navigation>
-      <Box sx={{ minHeight: '100vh', background: 'linear-gradient(180deg, #F8F9FB 0%, #EEF2F6 100%)', padding: '24px' }}>
+      <Box sx={{ minHeight: '100vh', background: 'linear-gradient(180deg, #F8F9FB 0%, #EEF2F6 100%)', padding: { xs: '12px', sm: '24px' } }}>
         {/* Header */}
         <Box sx={{ mb: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <Box sx={{
-              width: 52, height: 52, borderRadius: '14px',
+              width: { xs: 40, sm: 52 }, height: { xs: 40, sm: 52 }, borderRadius: { xs: '10px', sm: '14px' },
               background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 8px 24px rgba(139, 92, 246, 0.3)', position: 'relative',
             }}>
-              <MonitorHeart sx={{ color: '#fff', fontSize: '26px' }} />
+              <MonitorHeart sx={{ color: '#fff', fontSize: { xs: '20px', sm: '26px' } }} />
               <Box sx={{
                 position: 'absolute', top: -4, right: -4, width: 14, height: 14,
                 borderRadius: '50%', backgroundColor: '#22c55e', border: '2px solid #fff',
@@ -208,7 +206,7 @@ const RealTimeFlagMonitor: React.FC = () => {
               }} />
             </Box>
             <Box>
-              <Typography sx={{ fontSize: '26px', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>
+              <Typography sx={{ fontSize: { xs: '18px', sm: '26px' }, fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>
                 Real-Time Monitor
               </Typography>
             </Box>
@@ -364,7 +362,7 @@ const RealTimeFlagMonitor: React.FC = () => {
             {/* Flag Activity Log */}
             <Card sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
               <Box sx={{
-                padding: '18px 24px', borderBottom: '1px solid #e5e7eb',
+                padding: { xs: '12px 16px', sm: '18px 24px' }, borderBottom: '1px solid #e5e7eb',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 background: 'linear-gradient(180deg, #fff 0%, #fafbfc 100%)',
               }}>
@@ -387,7 +385,8 @@ const RealTimeFlagMonitor: React.FC = () => {
                   }}
                 />
               </Box>
-              <TableContainer>
+              {/* Desktop Table View */}
+              <TableContainer sx={{ display: { xs: 'none', sm: 'block' } }}>
                 <Table>
                   <TableHead>
                     <TableRow sx={{ backgroundColor: '#f8fafc' }}>
@@ -464,6 +463,62 @@ const RealTimeFlagMonitor: React.FC = () => {
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {/* Mobile Card View */}
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                {allFlags.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 5 }}>
+                    <CheckCircle sx={{ fontSize: 48, color: '#22c55e', opacity: 0.5, mb: 1 }} />
+                    <Typography sx={{ color: '#64748b', fontSize: '14px' }}>No flags detected</Typography>
+                  </Box>
+                ) : (
+                  allFlags.map((flag: any, index: number) => {
+                    const sev = severityConfig[flag.severity as keyof typeof severityConfig] || severityConfig.low;
+                    return (
+                      <Box
+                        key={`${flag.id}-${index}`}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 1.5,
+                          px: 2, py: 1.5,
+                          borderBottom: '1px solid #f1f5f9',
+                          backgroundColor: index % 2 === 0 ? '#fff' : '#fafbfc',
+                        }}
+                      >
+                        <Box sx={{
+                          width: 32, height: 32, borderRadius: '8px', backgroundColor: '#f1f5f9',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '13px', fontWeight: 600, color: '#64748b', flexShrink: 0,
+                        }}>
+                          {(flag.candidateName || 'U')[0].toUpperCase()}
+                        </Box>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
+                            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {flag.candidateName}
+                            </Typography>
+                            <Chip
+                              label={sev.label}
+                              size="small"
+                              sx={{
+                                backgroundColor: sev.bg, color: sev.color,
+                                fontWeight: 600, fontSize: '9px', height: 18, flexShrink: 0,
+                                border: `1px solid ${sev.color}30`,
+                              }}
+                            />
+                          </Box>
+                          <Typography sx={{ fontSize: '12px', color: '#475569', textTransform: 'capitalize' }}>
+                            {(flag.flag_type || '').replace(/_/g, ' ')}
+                          </Typography>
+                          <Typography sx={{ fontSize: '11px', color: '#94a3b8', mt: 0.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {flag.description}
+                            {flag.timestamp_seconds ? ` • ${Math.floor(flag.timestamp_seconds / 60)}m ${Math.floor(flag.timestamp_seconds % 60)}s` : ''}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  })
+                )}
+              </Box>
             </Card>
           </>
         )}

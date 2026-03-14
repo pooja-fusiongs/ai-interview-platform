@@ -69,40 +69,56 @@ const Jobs = () => {
       )
     }
 
-    // Apply other filters
+    // Apply other filters (case-insensitive matching)
     if (filters.jobType) {
-      filtered = filtered.filter((job: any) => getJobType(job) === filters.jobType)
+      filtered = filtered.filter((job: any) =>
+        getJobType(job).toLowerCase() === filters.jobType.toLowerCase()
+      )
     }
 
     if (filters.experienceLevel) {
-      filtered = filtered.filter((job: any) => getExperienceLevel(job) === filters.experienceLevel)
+      filtered = filtered.filter((job: any) => {
+        const jobExp = getExperienceLevel(job).toLowerCase()
+        const filterExp = filters.experienceLevel.toLowerCase()
+        // Exact match first
+        if (jobExp === filterExp) return true
+        // Map filter values to API data patterns
+        if (filterExp === 'entry level' && (jobExp.includes('0-1') || jobExp.includes('entry') || jobExp.includes('fresher'))) return true
+        if (filterExp === '<5 yrs' && (jobExp.includes('0-1') || jobExp.includes('1-3') || jobExp.includes('2-4') || jobExp.includes('3-5'))) return true
+        if (filterExp === '5-10 yrs' && (jobExp.includes('5-8') || jobExp.includes('5-10') || jobExp.includes('6-8') || jobExp.includes('7-10'))) return true
+        if (filterExp === '10+ yrs' && (jobExp.includes('10+') || jobExp.includes('10-') || jobExp.includes('15'))) return true
+        return false
+      })
     }
 
     if (filters.location) {
-      filtered = filtered.filter((job: any) => 
-        job.location.toLowerCase().includes(filters.location.toLowerCase())
+      filtered = filtered.filter((job: any) =>
+        (job.location || '').toLowerCase().includes(filters.location.toLowerCase())
       )
     }
 
     if (filters.status) {
-      filtered = filtered.filter((job: any) => job.status === filters.status)
+      filtered = filtered.filter((job: any) =>
+        (job.status || '').toLowerCase() === filters.status.toLowerCase()
+      )
     }
 
     if (filters.company) {
-      filtered = filtered.filter((job: any) => 
-        job.company.toLowerCase().includes(filters.company.toLowerCase())
+      filtered = filtered.filter((job: any) =>
+        (job.company || '').toLowerCase().includes(filters.company.toLowerCase())
       )
     }
 
     if (filters.workMode) {
-      filtered = filtered.filter((job: any) => 
-        job.workMode && job.workMode.toLowerCase().includes(filters.workMode.toLowerCase())
-      )
+      filtered = filtered.filter((job: any) => {
+        const jobMode = (job.workMode || job.work_mode || '').toLowerCase()
+        return jobMode.includes(filters.workMode.toLowerCase())
+      })
     }
 
     if (filters.department) {
-      filtered = filtered.filter((job: any) => 
-        job.department && job.department.toLowerCase().includes(filters.department.toLowerCase())
+      filtered = filtered.filter((job: any) =>
+        (job.department || '').toLowerCase().includes(filters.department.toLowerCase())
       )
     }
 

@@ -299,8 +299,8 @@ const FraudDashboard: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' } }}>
             <Box
               sx={{
-                width: 52,
-                height: 52,
+                width: { xs: 40, md: 52 },
+                height: { xs: 40, md: 52 },
                 borderRadius: '14px',
                 background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                 display: 'flex',
@@ -384,7 +384,7 @@ const FraudDashboard: React.FC = () => {
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' },
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' },
                 gap: '20px',
                 mb: '28px',
               }}
@@ -406,7 +406,7 @@ const FraudDashboard: React.FC = () => {
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr 1.3fr' },
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr', lg: '1fr 1fr 1fr 1.3fr' },
                 gap: '20px',
                 mb: '28px',
               }}
@@ -459,8 +459,8 @@ const FraudDashboard: React.FC = () => {
                         </Box>
                         <Box
                           sx={{
-                            width: 52,
-                            height: 52,
+                            width: { xs: 40, md: 52 },
+                            height: { xs: 40, md: 52 },
                             borderRadius: '14px',
                             backgroundColor: card.bgColor,
                             display: 'flex',
