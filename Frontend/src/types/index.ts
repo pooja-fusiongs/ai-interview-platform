@@ -144,6 +144,7 @@ export interface Candidate {
   totalApplications?: number;
   hasTranscript?: boolean;
   questionSessionId?: number;
+  is_active?: boolean;
   // Backward compatibility
   role: string;
   department: string;

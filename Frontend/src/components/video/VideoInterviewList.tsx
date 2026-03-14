@@ -183,7 +183,7 @@ const VideoInterviewList: React.FC = () => {
                 sx={{
                   borderColor: filterOpen || activeFilterCount > 0 ? '#020291' : '#e2e8f0',
                   color: filterOpen || activeFilterCount > 0 ? '#020291' : '#64748b',
-                  backgroundColor: 'trasperant',
+                  backgroundColor: 'transparent',
                   textTransform: 'none',
                   fontWeight: 500,
                   borderRadius: '8px',

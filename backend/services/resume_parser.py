@@ -249,6 +249,111 @@ def _extract_years_from_text(text: str) -> Optional[int]:
 
 
 # ---------------------------------------------------------------------------
+# Contact info extraction (name, email, phone, current position)
+# ---------------------------------------------------------------------------
+
+def _extract_email(text: str) -> Optional[str]:
+    """Extract email address from resume text."""
+    match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+    return match.group(0) if match else None
+
+
+def _extract_phone(text: str) -> Optional[str]:
+    """Extract phone number from resume text."""
+    patterns = [
+        r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',
+        r'(?:\+?\d{1,3}[-.\s]?)?\d{5}[-.\s]?\d{5}',
+        r'(?:\+91[-.\s]?)?\d{10}',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(0).strip()
+    return None
+
+
+def _extract_name(text: str) -> Optional[str]:
+    """Extract candidate name from resume - typically the first non-empty line."""
+    lines = text.strip().split('\n')
+    for line in lines[:5]:
+        line = line.strip()
+        if not line or len(line) < 2:
+            continue
+        # Skip lines that look like emails, phones, URLs, or common headers
+        if re.search(r'@|http|www\.|\.com|\.in|\.org|resume|curriculum|vitae|cv\b|\d{5,}|education|experience|summary|objective|skills', line, re.IGNORECASE):
+            continue
+        # Clean pipe-separated headers like "Deep M. Mehta | Full Stack Developer site.com"
+        # Take only the name part (before |)
+        if '|' in line:
+            line = line.split('|')[0].strip()
+        # A name is typically 2-4 words, all alpha (with dots for initials)
+        words = line.split()
+        if 1 <= len(words) <= 5 and all(re.match(r'^[a-zA-Z.\'-]+$', w) for w in words):
+            return line
+    return None
+
+
+def _extract_current_position(text: str) -> Optional[str]:
+    """Extract current job title/position from resume text."""
+    text_lower = text.lower()
+    # Look for explicit current position patterns
+    patterns = [
+        r'(?:current(?:ly)?|present)\s*(?:role|position|title|designation)\s*[:\-–]\s*(.+)',
+        r'(?:working as|currently working as|role)\s*[:\-–]?\s*(.+)',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            pos = match.group(1).strip().rstrip('.').strip()
+            if 3 < len(pos) < 80:
+                start = match.start(1)
+                return text[start:start + len(pos)].strip()
+
+    # Look for common title keywords in the header area
+    title_keywords = [
+        "software engineer", "developer", "frontend developer", "backend developer",
+        "full stack developer", "fullstack developer", "data scientist", "data analyst",
+        "data engineer", "devops engineer", "ui designer", "ux designer", "ui/ux designer",
+        "product manager", "project manager", "qa engineer", "tester", "analyst",
+        "consultant", "architect", "team lead", "tech lead", "manager", "intern", "trainee",
+    ]
+    # Check first ~500 chars for title keywords
+    top_text = text_lower[:500]
+    for kw in title_keywords:
+        if kw in top_text:
+            # Extract just the title, not the whole line (which may have names/URLs)
+            # If the line has a pipe separator, look for the part with the keyword
+            for line in text[:500].split('\n'):
+                if kw in line.lower():
+                    # If pipe-separated, take only the part with the keyword
+                    if '|' in line:
+                        for part in line.split('|'):
+                            if kw in part.lower():
+                                clean = part.strip()
+                                # Remove URLs and emails
+                                clean = re.sub(r'https?://\S+|www\.\S+|\S+\.\w{2,3}\.\w{2,3}|\S+@\S+', '', clean).strip()
+                                if 3 < len(clean) < 60:
+                                    return clean
+                    else:
+                        clean = line.strip()
+                        clean = re.sub(r'https?://\S+|www\.\S+|\S+\.\w{2,3}\.\w{2,3}|\S+@\S+', '', clean).strip()
+                        if 3 < len(clean) < 60:
+                            return clean
+    return None
+
+
+def extract_contact_info(resume_text: str) -> dict:
+    """Extract contact information from resume text."""
+    return {
+        "name": _extract_name(resume_text),
+        "email": _extract_email(resume_text),
+        "phone": _extract_phone(resume_text),
+        "current_position": _extract_current_position(resume_text),
+        "experience_years": _extract_years_from_text(resume_text),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Gemini AI integration (single combined call for skills + experience)
 # ---------------------------------------------------------------------------
 
@@ -262,11 +367,15 @@ def _analyze_with_gemini(resume_text: str, job_skills: List[str]) -> Optional[di
         truncated = resume_text[:3000]
         skills_list = ", ".join(job_skills)
 
-        prompt = f"""You are a resume analysis expert. Given the following resume text and required job skills, perform two tasks:
+        prompt = f"""You are a resume analysis expert. Given the following resume text and required job skills, perform these tasks:
 
 1. SKILL MATCHING: Identify which of the required skills the candidate possesses. Consider synonyms, abbreviations, and related technologies. For example, "ReactJS" matches "React", "Node" matches "Node.js", etc. Only return skills from the provided list.
 
-2. EXPERIENCE LEVEL: Determine the candidate's experience level as one of: "Junior" (0-2 years), "Mid" (3-5 years), or "Senior" (6+ years).
+2. ALL SKILLS: Extract ALL technical skills, tools, frameworks, and technologies mentioned in the resume (not just from the required list). Include programming languages, frameworks, databases, tools, cloud platforms, etc.
+
+3. EXPERIENCE LEVEL: Determine the candidate's experience level as one of: "Junior" (0-2 years), "Mid" (3-5 years), or "Senior" (6+ years).
+
+4. CONTACT INFO: Extract the candidate's full name, email address, phone number, current job title/position, and total years of experience (as integer).
 
 RESUME TEXT:
 {truncated}
@@ -275,7 +384,7 @@ REQUIRED SKILLS:
 {skills_list}
 
 Respond ONLY with valid JSON (no markdown, no explanation):
-{{"matched_skills": ["skill1", "skill2"], "experience_level": "Junior"}}"""
+{{"matched_skills": ["skill1", "skill2"], "all_skills": ["React", "Python", "Docker", "..."], "experience_level": "Junior", "name": "John Doe", "email": "john@example.com", "phone": "+1234567890", "current_position": "Software Engineer", "experience_years": 3}}"""
 
         response = client.models.generate_content(
             model='gemini-2.0-flash',
@@ -340,13 +449,25 @@ def parse_resume(
     else:
         parsing_status = "completed"
 
-    # Step 2: Extract skills
+    # Step 2: Extract skills (matched against job requirements)
     skills = extract_skills(parsed_text, job_skills)
+
+    # Also extract general skills from resume (using all known skill aliases)
+    if parsed_text:
+        all_known_skills = list(SKILL_ALIASES.keys())
+        general_skills = extract_skills(parsed_text, all_known_skills)
+        for s in general_skills:
+            if s not in skills:
+                skills.append(s)
 
     # Step 3: Determine experience level
     exp_level = determine_experience_level(parsed_text, experience_years)
 
-    # If Gemini returned experience_level and we didn't determine one from rules
+    # Step 4: Extract contact info (rule-based)
+    contact_info = extract_contact_info(parsed_text) if parsed_text else {}
+
+    # Step 5: Gemini AI enhancement
+    ai_result = None
     if config.GEMINI_API_KEY and parsed_text and job_skills:
         ai_result = _analyze_with_gemini(parsed_text, job_skills)
         if ai_result:
@@ -364,9 +485,21 @@ def parse_resume(
                 level_map = {"junior": ExperienceLevel.JUNIOR, "mid": ExperienceLevel.MID, "senior": ExperienceLevel.SENIOR}
                 exp_level = level_map.get(ai_result["experience_level"].lower())
 
+            # Use AI contact info as fallback for rule-based extraction
+            for field in ("name", "email", "phone", "current_position", "experience_years"):
+                if not contact_info.get(field) and ai_result.get(field):
+                    contact_info[field] = ai_result[field]
+
+            # Merge all_skills from AI (general skills found in resume)
+            if "all_skills" in ai_result and isinstance(ai_result["all_skills"], list):
+                for s in ai_result["all_skills"]:
+                    if s and s not in skills:
+                        skills.append(s)
+
     return {
         "parsed_text": parsed_text,
         "skills": skills,
         "experience_level": exp_level,
         "parsing_status": parsing_status,
+        "contact_info": contact_info,
     }

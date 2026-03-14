@@ -15,7 +15,8 @@ import {
   DialogContent,
   DialogActions,
   MenuItem,
-  CircularProgress
+  CircularProgress,
+  Tooltip
 } from '@mui/material'
 import { apiClient } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -310,7 +311,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         const jobCategory = (selectedJob.category || selectedJob.company || '').toLowerCase()
 
         const scored = allCandidates
-          .filter((c: any) => !currentEmails.includes(c.email?.toLowerCase()))
+          .filter((c: any) => !currentEmails.includes(c.email?.toLowerCase()) && c.is_active !== false)
           .map((c: any) => {
             const cSkills = (c.skills || []).map((s: string) => s.toLowerCase())
             const skillMatch = cSkills.filter((s: string) => jobSkillsLower.some(js => s.includes(js) || js.includes(s))).length
@@ -687,16 +688,22 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             <i className="fas fa-sync-alt" style={{ fontSize: 12 }}></i>
           </IconButton>
           {(user?.role === 'recruiter' || user?.role === 'admin') && (
-            <Button
-              onClick={() => setAddDialogOpen(true)}
-              sx={{
-                background: '#020291', color: 'white', borderRadius: '8px',
-                textTransform: 'none', fontWeight: 600, fontSize: '12px', px: 2, height: '34px',
-                '&:hover': { background: '#06109E' }
-              }}
-            >
-              <i className="fas fa-plus" style={{ marginRight: 5, fontSize: 10 }}></i> Add candidate
-            </Button>
+            <Tooltip title={selectedJob?.status === 'Closed' ? 'Cannot add candidates to a closed job' : ''}>
+              <span>
+                <Button
+                  onClick={() => setAddDialogOpen(true)}
+                  disabled={selectedJob?.status === 'Closed'}
+                  sx={{
+                    background: selectedJob?.status === 'Closed' ? '#94a3b8' : '#020291', color: 'white', borderRadius: '8px',
+                    textTransform: 'none', fontWeight: 600, fontSize: '12px', px: 2, height: '34px',
+                    '&:hover': { background: selectedJob?.status === 'Closed' ? '#94a3b8' : '#06109E' },
+                    '&.Mui-disabled': { color: 'rgba(255,255,255,0.7)', background: '#94a3b8' },
+                  }}
+                >
+                  <i className="fas fa-plus" style={{ marginRight: 5, fontSize: 10 }}></i> Add candidate
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Box>
       </Box>

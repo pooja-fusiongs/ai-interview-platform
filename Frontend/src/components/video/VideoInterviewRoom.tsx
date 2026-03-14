@@ -15,9 +15,9 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track } from 'livekit-client';
+import { Track, DisconnectReason } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
-import { getMediaDevices, requestMediaPermissions, getDeviceErrorMessage } from '../../utils/mediaDeviceUtils';
+import { getMediaDevices } from '../../utils/mediaDeviceUtils';
 import Navigation from '../layout/Sidebar';
 
 /**
@@ -282,7 +282,7 @@ const InterviewRecorder: React.FC<{
         console.error('❌ Failed to start recording:', err);
         startedRef.current = false;
       }
-    }, 1500);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [shouldRecord, micMediaTrack]);
@@ -354,6 +354,8 @@ const VideoInterviewRoom: React.FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const maxParticipantsRef = useRef(0);
+  const reconnectAttemptsRef = useRef(0);
+  const MAX_RECONNECT_ATTEMPTS = 3;
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -444,38 +446,19 @@ const VideoInterviewRoom: React.FC = () => {
     graceCheckIntervalRef.current = setInterval(checkGrace, 30000);
   };
 
-  // Pre-request camera/mic permissions on mount to trigger browser prompt
+  // Device check on mount (no permission request — LiveKit handles that to avoid double prompts in incognito)
   useEffect(() => {
-    const requestPermissions = async () => {
+    const checkDevices = async () => {
       try {
-        console.log('🎥 Pre-requesting camera/mic permissions...');
-
         const deviceInfo = await getMediaDevices();
-
-        console.log('📱 Available devices:', {
-          videoInputs: deviceInfo.videoDevices.length,
-          audioInputs: deviceInfo.audioDevices.length
-        });
-
         if (!deviceInfo.hasVideo && !deviceInfo.hasAudio) {
           toast.error('No camera or microphone found. Please connect devices and refresh.');
-          return;
         }
-
-        const stream = await requestMediaPermissions();
-        console.log('✅ Permissions granted');
-        // Immediately stop all tracks to release the devices
-        stream.getTracks().forEach(track => {
-          track.stop();
-          console.log(`🛑 Stopped ${track.kind} track`);
-        });
       } catch (err: any) {
-        console.warn('⚠️ Permissions not granted on mount:', err);
-        const errorMsg = getDeviceErrorMessage(err);
-        toast.error(errorMsg);
+        console.warn('Device enumeration failed:', err);
       }
     };
-    requestPermissions();
+    checkDevices();
   }, []);
 
   // Timer effect
@@ -498,24 +481,38 @@ const VideoInterviewRoom: React.FC = () => {
     };
   }, [isActive]);
 
-  // Fetch LiveKit token when interview is active
+  // Fetch LiveKit token when interview is active (with retry)
   useEffect(() => {
+    let cancelled = false;
     const fetchToken = async () => {
       if (isActive && interview && !lkToken) {
-        try {
-          const roomName = `interview_${videoId}`;
-          const data = isGuest
-            ? await videoInterviewService.guestJoinInterview(Number(videoId))
-            : await videoInterviewService.joinInterview(Number(videoId));
-          setLkToken(data.token);
-          console.log('🎥 LiveKit token fetched for room:', roomName);
-        } catch (err: any) {
-          toast.error('Failed to get video token. Please refresh.');
-          console.error('LiveKit token error:', err);
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          if (cancelled) return;
+          try {
+            const roomName = `interview_${videoId}`;
+            const data = isGuest
+              ? await videoInterviewService.guestJoinInterview(Number(videoId))
+              : await videoInterviewService.joinInterview(Number(videoId));
+            if (!cancelled) {
+              setLkToken(data.token);
+              console.log('🎥 LiveKit token fetched for room:', roomName);
+            }
+            return;
+          } catch (err: any) {
+            console.error(`LiveKit token error (attempt ${attempt}/${maxRetries}):`, err);
+            if (attempt === maxRetries) {
+              if (!cancelled) toast.error('Failed to get video token. Please refresh.');
+            } else {
+              // Wait before retrying (1s, 2s)
+              await new Promise(r => setTimeout(r, attempt * 1000));
+            }
+          }
         }
       }
     };
     fetchToken();
+    return () => { cancelled = true; };
   }, [isActive, interview, videoId, user, lkToken, isGuest]);
 
   // Removed Jitsi initialization functions as we're moving to declarative LiveKit components
@@ -1045,7 +1042,39 @@ const VideoInterviewRoom: React.FC = () => {
                           setCallJoined(true);
                           setParticipantCount(1);
                           maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
+                          reconnectAttemptsRef.current = 0;
                           toast.success('Joined interview');
+                        }}
+                        onDisconnected={(reason?: DisconnectReason) => {
+                          console.warn('LiveKit disconnected, reason:', reason);
+                          setCallJoined(false);
+
+                          // Don't reconnect if user intentionally left or interview ended
+                          if (
+                            reason === DisconnectReason.CLIENT_INITIATED ||
+                            endingRef.current
+                          ) {
+                            return;
+                          }
+
+                          // Attempt reconnection for unexpected disconnects
+                          if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+                            reconnectAttemptsRef.current += 1;
+                            const attempt = reconnectAttemptsRef.current;
+                            toast.error(`Connection lost. Reconnecting (${attempt}/${MAX_RECONNECT_ATTEMPTS})...`);
+                            // Clear token to trigger re-fetch
+                            setLkToken(null);
+                          } else {
+                            toast.error('Connection lost. Please refresh the page to rejoin.');
+                          }
+                        }}
+                        onError={(error: Error) => {
+                          console.error('LiveKit error:', error);
+                          toast.error(`Video error: ${error.message || 'Connection issue detected'}`);
+                        }}
+                        onMediaDeviceFailure={(failure: any) => {
+                          console.error('Media device failure:', failure);
+                          toast.error('Camera or microphone failed. Please check your device permissions and refresh.');
                         }}
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >

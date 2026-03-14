@@ -427,6 +427,7 @@ class RecruiterCandidateResponse(BaseModel):
     overall_score: Optional[float] = None
     recommendation: Optional[str] = None
     session_id: Optional[int] = None
+    is_active: bool = True
 
     class Config:
         from_attributes = True

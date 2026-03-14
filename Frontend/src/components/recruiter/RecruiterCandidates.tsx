@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
-  Box, Typography, Button, Card, Avatar,
+  Box, Typography, Button, Card, Avatar, Chip, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, LinearProgress, IconButton, CircularProgress,
   InputAdornment, Skeleton, MenuItem
@@ -9,6 +9,7 @@ import {
 import { toast } from 'react-hot-toast'
 import Navigation from '../layout/Sidebar'
 import { recruiterService, RecruiterCandidate } from '../../services/recruiterService'
+import { apiClient } from '../../services/api'
 
 const RecruiterCandidates = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -120,13 +121,13 @@ const RecruiterCandidates = () => {
   const validateAddField = (field: string, value: string): string => {
     switch (field) {
       case 'name':
-        if (!value.trim()) return 'Full name is required'
+        if (!value.trim()) return ''  // optional — will be parsed from resume
         if (value.trim().length < 2) return 'Name must be at least 2 characters'
         if (!/^[a-zA-Z\s.'-]+$/.test(value.trim())) return 'Name can only contain letters and spaces'
         if (value.trim().length > 100) return 'Name must be less than 100 characters'
         return ''
       case 'email':
-        if (!value.trim()) return 'Email is required'
+        if (!value.trim()) return ''  // optional — will be parsed from resume
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Please enter a valid email'
         return ''
       case 'phone':
@@ -161,11 +162,16 @@ const RecruiterCandidates = () => {
   }
 
   const handleAddCandidate = async () => {
-    // Validate required fields
+    // Resume is required; name/email can come from form OR resume
     const errors: Record<string, string> = {
       name: validateAddField('name', addForm.name),
       email: validateAddField('email', addForm.email),
       resume: addForm.resume ? '' : 'Resume is required',
+    }
+    // If no name AND no email AND no resume — show error
+    if (!addForm.name.trim() && !addForm.email.trim() && !addForm.resume) {
+      errors.name = 'Name or resume is required'
+      errors.email = 'Email or resume is required'
     }
     if (addForm.phone) errors.phone = validateAddField('phone', addForm.phone)
     if (addForm.linkedin) errors.linkedin = validateAddField('linkedin', addForm.linkedin)
@@ -245,6 +251,18 @@ const RecruiterCandidates = () => {
     }
   }
 
+
+  const handleToggleStatus = async (candidateId: number) => {
+    try {
+      const res = await apiClient.patch(`/api/candidates/${candidateId}/toggle-status`)
+      const newStatus = res.data.is_active
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, is_active: newStatus } : c))
+      setFilteredCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, is_active: newStatus } : c))
+      toast.success(`Candidate marked as ${newStatus ? 'Active' : 'Inactive'}`)
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to update status')
+    }
+  }
 
   const getScoreDisplay = (candidate: RecruiterCandidate) => {
     if (candidate.has_scores) {
@@ -465,10 +483,25 @@ const RecruiterCandidates = () => {
 
                 {/* Info */}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
                     <Typography sx={{ fontSize: { xs: '14px', sm: '15px' }, fontWeight: 600, color: '#1e293b' }}>
                       {candidate.applicant_name}
                     </Typography>
+                    <Tooltip title={`Click to mark ${candidate.is_active !== false ? 'Inactive' : 'Active'}`} arrow>
+                      <Chip
+                        label={candidate.is_active !== false ? 'Active' : 'Inactive'}
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); handleToggleStatus(candidate.id) }}
+                        sx={{
+                          height: 20, fontSize: '10px', fontWeight: 600, cursor: 'pointer',
+                          backgroundColor: candidate.is_active !== false ? '#ecfdf5' : '#fef2f2',
+                          color: candidate.is_active !== false ? '#059669' : '#dc2626',
+                          border: candidate.is_active !== false ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                          '& .MuiChip-label': { px: 0.8 },
+                          '&:hover': { opacity: 0.8 }
+                        }}
+                      />
+                    </Tooltip>
                     {getScoreDisplay(candidate)}
                   </Box>
                   <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 3 }, flexWrap: 'wrap' }}>
@@ -733,14 +766,22 @@ const RecruiterCandidates = () => {
           <DialogContent sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
 
+              {/* Auto-fill hint */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, borderRadius: '8px', background: '#EEF0FF', border: '1px solid #BBC3FF' }}>
+                <i className="fas fa-magic" style={{ fontSize: '14px', color: '#020291' }}></i>
+                <Typography sx={{ fontSize: '12px', color: '#020291', fontWeight: 500 }}>
+                  Fields left empty will be <strong>auto-filled from resume</strong>. Just upload the resume and we'll extract the details.
+                </Typography>
+              </Box>
+
               {/* Full Name + Email row */}
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <Box>
                   <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
-                    Full Name <span style={{ color: '#ef4444' }}>*</span>
+                    Full Name
                   </Typography>
                   <TextField
-                    fullWidth placeholder="Jane Smith" value={addForm.name}
+                    fullWidth placeholder="Auto-filled from resume" value={addForm.name}
                     onChange={e => handleAddFieldChange('name', e.target.value)}
                     onBlur={() => handleAddFieldBlur('name', addForm.name)}
                     error={addFormTouched.name && !!addFormErrors.name}
@@ -750,10 +791,10 @@ const RecruiterCandidates = () => {
                 </Box>
                 <Box>
                   <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
-                    Email <span style={{ color: '#ef4444' }}>*</span>
+                    Email
                   </Typography>
                   <TextField
-                    fullWidth placeholder="jane@example.com" type="email" value={addForm.email}
+                    fullWidth placeholder="Auto-filled from resume" type="email" value={addForm.email}
                     onChange={e => handleAddFieldChange('email', e.target.value)}
                     onBlur={() => handleAddFieldBlur('email', addForm.email)}
                     error={addFormTouched.email && !!addFormErrors.email}
@@ -792,7 +833,7 @@ const RecruiterCandidates = () => {
                   ) : (
                     <Box>
                       <i className="fas fa-cloud-upload-alt" style={{ fontSize: 22, color: '#94a3b8', marginBottom: 6 }} />
-                      <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#64748b' }}>Upload resume for personalized questions</Typography>
+                      <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#64748b' }}>Upload resume — auto-fills name, email, phone & experience</Typography>
                       <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>.pdf, .docx, .txt</Typography>
                     </Box>
                   )}
@@ -801,7 +842,7 @@ const RecruiterCandidates = () => {
                   <Typography sx={{ color: '#ef4444', fontSize: '12px', mt: '4px' }}>{addFormErrors.resume}</Typography>
                 )}
                 <Typography sx={{ fontSize: '12px', color: '#94a3b8', mt: '4px' }}>
-                  Required — AI uses this to generate hyper-personalized interview questions
+                  Required — Name, email, phone, experience & skills are auto-extracted from the resume
                 </Typography>
               </Box>
 

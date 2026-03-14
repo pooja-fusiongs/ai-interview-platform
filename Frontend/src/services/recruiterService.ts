@@ -25,6 +25,7 @@ export interface RecruiterCandidate {
   overall_score?: number;
   recommendation?: string;
   session_id?: number;
+  is_active?: boolean;
 }
 
 export interface TranscriptResult {

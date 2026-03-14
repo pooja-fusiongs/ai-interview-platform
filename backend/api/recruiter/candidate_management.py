@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from database import get_db
 from models import (
@@ -43,8 +44,8 @@ from services.resume_parser import parse_resume as _parse_resume_full
 @router.post("/api/recruiter/job/{job_id}/add-candidate")
 async def add_candidate_to_job(
     job_id: int,
-    name: str = Form(...),
-    email: str = Form(...),
+    name: str = Form(""),
+    email: str = Form(""),
     phone: str = Form(""),
     experience_years: int = Form(0),
     current_position: str = Form(""),
@@ -59,17 +60,62 @@ async def add_candidate_to_job(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Add a candidate under a job (recruiter uploads their resume)."""
+    """Add a candidate under a job. Form fields are optional — if not filled,
+    the system auto-extracts name, email, phone, position, experience from the resume."""
     _require_recruiter(current_user)
 
     job = db.query(Job).filter(Job.id == job_id, Job.is_active == True).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if job.status == "Closed":
+        raise HTTPException(status_code=400, detail="Cannot add candidates to a closed job")
+
+    # ── Step 1: Parse resume first (if uploaded) so we can fill missing fields ──
+    resume_info = None
+    parse_result = None
+    contact_info = {}
+    file_path = None
+    content = None
+
+    if resume and resume.filename:
+        ext = resume.filename.rsplit(".", 1)[-1] if "." in resume.filename else "pdf"
+        # Use temp name initially (we don't have application.id yet)
+        temp_name = f"temp_{uuid.uuid4().hex[:12]}.{ext}"
+        file_path = os.path.join(UPLOAD_DIR, temp_name)
+
+        content = await resume.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        # Parse resume: extract text, skills, experience, AND contact info
+        job_skills_list = []
+        if job.skills_required:
+            try:
+                job_skills_list = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
+            except Exception:
+                pass
+
+        parse_result = _parse_resume_full(file_path, resume.filename, job_skills_list, experience_years or None)
+        contact_info = parse_result.get("contact_info", {})
+
+    # ── Step 2: Fill missing form fields from resume ──
+    final_name = name.strip() if name.strip() else (contact_info.get("name") or "")
+    final_email = email.strip() if email.strip() else (contact_info.get("email") or "")
+    final_phone = phone.strip() if phone.strip() else (contact_info.get("phone") or "")
+    final_position = current_position.strip() if current_position.strip() else (contact_info.get("current_position") or "")
+    final_experience = experience_years if experience_years > 0 else (contact_info.get("experience_years") or 0)
+
+    # Name and email are required — must come from either form or resume
+    if not final_name:
+        raise HTTPException(status_code=400, detail="Candidate name is required. Please fill the name field or upload a resume with a name.")
+    if not final_email:
+        raise HTTPException(status_code=400, detail="Candidate email is required. Please fill the email field or upload a resume with an email.")
+
     # Check duplicate
     existing = db.query(JobApplication).filter(
         JobApplication.job_id == job_id,
-        JobApplication.applicant_email == email
+        JobApplication.applicant_email == final_email
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Candidate with this email already added to this job")
@@ -82,15 +128,15 @@ async def add_candidate_to_job(
         except (ValueError, TypeError):
             pass
 
-    # Create application record
+    # ── Step 3: Create application record ──
     from services.encryption_service import encrypt_pii
     application = JobApplication(
         job_id=job_id,
-        applicant_name=name,
-        applicant_email=email,
-        applicant_phone=encrypt_pii(phone) if phone else phone,
-        experience_years=experience_years,
-        current_position=current_position,
+        applicant_name=final_name,
+        applicant_email=final_email,
+        applicant_phone=encrypt_pii(final_phone) if final_phone else "",
+        experience_years=final_experience if isinstance(final_experience, int) else 0,
+        current_position=final_position,
         location=location or None,
         linkedin_url=linkedin_url or None,
         availability=notice_period or None,
@@ -104,46 +150,34 @@ async def add_candidate_to_job(
     db.add(application)
     db.flush()  # get application.id
 
-    resume_info = None
-    if resume and resume.filename:
-        # Save file
+    # ── Step 4: Save resume record (rename file with application id) ──
+    if parse_result and file_path and content is not None:
         ext = resume.filename.rsplit(".", 1)[-1] if "." in resume.filename else "pdf"
-        unique_name = f"{application.id}_{uuid.uuid4().hex[:8]}.{ext}"
-        file_path = os.path.join(UPLOAD_DIR, unique_name)
+        final_name_file = f"{application.id}_{uuid.uuid4().hex[:8]}.{ext}"
+        final_path = os.path.join(UPLOAD_DIR, final_name_file)
+        os.rename(file_path, final_path)
 
-        content = await resume.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
-
-        # Parse resume: extract text, skills, experience level
-        job_skills_list = []
-        if job.skills_required:
-            try:
-                job_skills_list = json.loads(job.skills_required) if isinstance(job.skills_required, str) else job.skills_required
-            except Exception:
-                pass
-
-        parse_result = _parse_resume_full(file_path, resume.filename, job_skills_list, experience_years)
         parsed_text = parse_result["parsed_text"]
         parsed_skills = parse_result["skills"]
 
         candidate_resume = CandidateResume(
             candidate_id=application.id,
             job_id=job_id,
-            resume_path=file_path,
+            resume_path=final_path,
             original_filename=resume.filename,
             file_size=len(content),
             parsed_text=parsed_text,
             skills=json.dumps(parsed_skills),
-            experience_years=experience_years,
+            experience_years=final_experience if isinstance(final_experience, int) else 0,
             experience_level=parse_result["experience_level"],
             parsing_status=parse_result["parsing_status"]
         )
         db.add(candidate_resume)
         resume_info = {
-            "resume_id": None,  # will be set after commit
+            "resume_id": None,
             "parsed_text_length": len(parsed_text),
-            "parsed_skills": parsed_skills
+            "parsed_skills": parsed_skills,
+            "auto_filled": {k: v for k, v in contact_info.items() if v},
         }
 
     db.commit()
@@ -155,7 +189,8 @@ async def add_candidate_to_job(
         "applicant_email": application.applicant_email,
         "status": application.status,
         "resume_uploaded": resume_info is not None,
-        "resume_info": resume_info
+        "resume_info": resume_info,
+        "auto_filled_from_resume": bool(contact_info and any(contact_info.values())),
     }
 
 
@@ -185,6 +220,13 @@ def get_job_candidates(
     app_ids = [app.id for app in applications]
 
     # --- BULK PRE-FETCH all related data (avoid N+1 queries) ---
+
+    # 0. User accounts for is_active status
+    app_emails = list(set(app.applicant_email.lower() for app in applications))
+    all_users_active = db.query(User.email, User.is_active).filter(
+        func.lower(User.email).in_(app_emails)
+    ).all() if app_emails else []
+    email_to_active = {u.email.lower(): u.is_active for u in all_users_active}
 
     # 1. All resumes for this job's candidates
     all_resumes = db.query(CandidateResume).filter(
@@ -278,7 +320,8 @@ def get_job_candidates(
             has_scores=has_scores,
             overall_score=overall_score,
             recommendation=recommendation,
-            session_id=session_id
+            session_id=session_id,
+            is_active=email_to_active.get(app.applicant_email.lower(), True)
         ))
 
     return result

@@ -599,9 +599,9 @@ const Jobs = () => {
             </Button>
           </Box>
         ) : (
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" }, gap: { xs: "12px", sm: "10px" } }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" }, gap: { xs: "12px", sm: "16px" } }}>
             {filteredJobs.map((job) => (
-            <Box key={job.id} sx={{ marginBottom: { xs: '16px', sm: '30px', md: '50px' } }}>
+            <Box key={job.id}>
               <Card sx={{
                 padding: { xs: '14px', sm: '18px', md: '20px' },
                 borderRadius: '12px',

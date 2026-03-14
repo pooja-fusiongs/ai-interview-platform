@@ -98,10 +98,16 @@ const Dashboard = () => {
       // Process interviews data
       if (interviewsData.status === 'fulfilled') {
         const interviews = Array.isArray(interviewsData.value) ? interviewsData.value : []
-        // Filter upcoming interviews (scheduled or confirmed)
+        // Filter upcoming interviews (scheduled or waiting, and in the future)
+        const now = new Date()
         const upcoming = interviews
-          .filter((i: Interview) => ['scheduled', 'confirmed', 'pending'].includes(i.status?.toLowerCase()))
-          .slice(0, 3)
+          .filter((i: Interview) => {
+            const isUpcomingStatus = ['scheduled', 'waiting', 'in_progress'].includes(i.status?.toLowerCase())
+            const isFuture = i.scheduled_at ? new Date(i.scheduled_at) >= new Date(now.toDateString()) : true
+            return isUpcomingStatus && isFuture
+          })
+          .sort((a: Interview, b: Interview) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+          .slice(0, 5)
         setUpcomingInterviews(upcoming)
 
         setStats(prev => ({

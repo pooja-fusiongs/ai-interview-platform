@@ -203,6 +203,18 @@ const Candidates = () => {
     setDetailCandidate(null)
   }
 
+  const handleToggleStatus = async (candidate: Candidate) => {
+    try {
+      const response = await apiClient.patch(`/api/candidates/${candidate.id}/toggle-status`)
+      const newStatus = response.data.is_active
+      setCandidates(prev => prev.map(c => c.id === candidate.id ? { ...c, is_active: newStatus } : c))
+      toast.success(`Candidate marked as ${newStatus ? 'Active' : 'Inactive'}`)
+    } catch (error) {
+      console.error('Error toggling status:', error)
+      toast.error('Failed to update status')
+    }
+  }
+
   const handleDeleteCandidate = async (candidate: Candidate) => {
     if (!window.confirm(`Are you sure you want to delete "${candidate.name}"?`)) return
     try {
@@ -529,6 +541,7 @@ const Candidates = () => {
                     >
                       Status {getSortIcon('status')}
                     </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5 }}>Account</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '13px', py: 1.5 }}>Action</TableCell>
                   </TableRow>
                 </TableHead>
@@ -578,8 +591,44 @@ const Candidates = () => {
                           }}
                         />
                       </TableCell>
+                      {/* Account Column - just shows status */}
                       <TableCell>
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <Chip
+                          size="small"
+                          icon={<i className={`fas ${candidate.is_active === false ? 'fa-user-times' : 'fa-user-check'}`} style={{ fontSize: '10px', color: 'inherit' }}></i>}
+                          label={candidate.is_active === false ? 'Inactive' : 'Active'}
+                          sx={{
+                            fontWeight: 600, fontSize: '11px', borderRadius: '4px', height: 24,
+                            background: candidate.is_active === false ? '#fef2f2' : '#ecfdf5',
+                            color: candidate.is_active === false ? '#dc2626' : '#059669',
+                            '& .MuiChip-icon': { color: 'inherit', ml: '6px' },
+                          }}
+                        />
+                      </TableCell>
+                      {/* Action Column - toggle + view + delete */}
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Tooltip title={candidate.is_active === false ? 'Mark as Active' : 'Mark as Inactive'}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const action = candidate.is_active === false ? 'activate' : 'deactivate';
+                                if (window.confirm(`Are you sure you want to ${action} "${candidate.name}"?\n\n${action === 'deactivate' ? 'Inactive candidates will not appear in Similar Candidates.' : 'This candidate will appear in Similar Candidates again.'}`)) {
+                                  handleToggleStatus(candidate);
+                                }
+                              }}
+                              sx={{
+                                color: candidate.is_active === false ? '#059669' : '#f59e0b',
+                                '&:hover': {
+                                  color: candidate.is_active === false ? '#047857' : '#d97706',
+                                  background: candidate.is_active === false ? 'rgba(5,150,105,0.08)' : 'rgba(245,158,11,0.08)',
+                                },
+                              }}
+                            >
+                              <i className={`fas ${candidate.is_active === false ? 'fa-toggle-off' : 'fa-toggle-on'}`} style={{ fontSize: '16px' }}></i>
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="View Details">
                             <IconButton
                               size="small"

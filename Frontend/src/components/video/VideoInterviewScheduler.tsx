@@ -47,7 +47,7 @@ const normalizeJob = (job: any): Job => ({
   id: job.id,
   title: job.title || job.job_title || job.jobTitle || 'Untitled Job',
   company: job.company || job.company_name || job.companyName || '',
-  status: job.status || job.is_active ? 'active' : 'inactive',
+  status: job.status || (job.is_active ? 'active' : 'inactive'),
 });
 
 // Helper to normalize candidate data from various API response formats
@@ -420,7 +420,6 @@ const VideoInterviewScheduler: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
-                      boxShadow:"0px 8px 24px rgba(2, 2, 145, 0.12)"
                     }}
                   >
                     <i className="fas fa-briefcase" style={{ fontSize: '11px', color: '#6b7280' }} />
@@ -794,9 +793,9 @@ const VideoInterviewScheduler: React.FC = () => {
                   padding: '14px 24px',
                   borderRadius: '10px',
                   background: isFormValid
-                    ? 'linear-gradient(135deg, primary.main0%, #020291 100%)'
+                    ? 'linear-gradient(135deg, #020291 0%, #06109E 100%)'
                     : '#e5e7eb',
-                  boxShadow: isFormValid ? '#020291' : 'none',
+                  boxShadow: isFormValid ? '0 4px 12px rgba(2, 2, 145, 0.3)' : 'none',
                   fontSize: '15px',
                   fontWeight: 600,
                   textTransform: 'none',
@@ -806,7 +805,7 @@ const VideoInterviewScheduler: React.FC = () => {
                     background: isFormValid
                       ? '#020291'
                       : '#e5e7eb',
-                    boxShadow: isFormValid ? '#020291' : 'none',
+                    boxShadow: isFormValid ? '0 6px 16px rgba(2, 2, 145, 0.35)' : 'none',
                     transform: isFormValid ? 'translateY(-1px)' : 'none',
                   },
                   '&:active': {

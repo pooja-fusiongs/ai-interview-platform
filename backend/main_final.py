@@ -75,6 +75,9 @@ def auto_migrate():
         ("jobs", "description_file_path", "VARCHAR"),
         ("jobs", "years_experience", "INTEGER"),
         # Client merge: new fields for job_applications (candidate scoring)
+        ("job_applications", "location", "VARCHAR"),
+        ("job_applications", "linkedin_url", "VARCHAR"),
+        ("job_applications", "current_ctc", "VARCHAR"),
         ("job_applications", "interview_datetime", "TIMESTAMP"),
         ("job_applications", "duration_minutes", "INTEGER DEFAULT 30"),
         ("job_applications", "overall_score", "INTEGER"),
@@ -669,10 +672,12 @@ async def apply_for_job_with_resume(
     try:
         print(f"🔍 Processing job application with resume for job ID: {job_id}")
 
-        # Check if job exists
+        # Check if job exists and is open
         job = db.query(Job).filter(Job.id == job_id, Job.is_active == True).first()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found or not active")
+        if job.status == "Closed":
+            raise HTTPException(status_code=400, detail="This job is closed and no longer accepting applications")
 
         # Check if user already applied
         existing_application = db.query(JobApplication).filter(
@@ -727,6 +732,15 @@ async def apply_for_job_with_resume(
             parse_result = _parse_resume_full(file_path, resume.filename, job_skills_list, experience_years)
             parsed_text = parse_result["parsed_text"]
             parsed_skills = parse_result["skills"]
+            contact_info = parse_result.get("contact_info", {})
+
+            # Auto-fill empty application fields from resume
+            if not current_position and contact_info.get("current_position"):
+                new_application.current_position = contact_info["current_position"]
+            if experience_years == 0 and contact_info.get("experience_years"):
+                new_application.experience_years = contact_info["experience_years"]
+
+            final_exp = new_application.experience_years or experience_years
 
             candidate_resume = CandidateResume(
                 candidate_id=new_application.id,
@@ -736,7 +750,7 @@ async def apply_for_job_with_resume(
                 file_size=len(content),
                 parsed_text=parsed_text,
                 skills=json.dumps(parsed_skills),
-                experience_years=experience_years,
+                experience_years=final_exp,
                 experience_level=parse_result["experience_level"],
                 parsing_status=parse_result["parsing_status"]
             )
@@ -859,6 +873,13 @@ def get_candidates(
         all_jobs = db.query(Job).filter(Job.id.in_(job_ids)).all() if job_ids else []
         job_id_to_title = {j.id: j.title for j in all_jobs}
 
+        # 5. User accounts (for is_active status)
+        all_emails = list(email_to_apps.keys())
+        all_users = db.query(User.email, User.is_active).filter(
+            func.lower(User.email).in_(all_emails)
+        ).all() if all_emails else []
+        email_to_active = {u.email.lower(): u.is_active for u in all_users}
+
         # --- Build deduplicated candidate list ---
         candidate_list = []
         seen_emails = set()
@@ -939,6 +960,7 @@ def get_candidates(
                 "score": round(best_score, 1),
                 "recommendation": best_recommendation.value if best_recommendation else None,
                 "status": overall_status,
+                "is_active": email_to_active.get(email, True),
                 "appliedAt": primary_app.applied_at.isoformat() if primary_app.applied_at else None,
                 "appliedJobs": applied_jobs,
                 "totalApplications": len(apps),
@@ -975,6 +997,29 @@ def get_candidates(
             status_code=500,
             detail=f"Database error: {str(e)}"
         )
+
+@app.patch("/api/candidates/{candidate_id}/toggle-status")
+def toggle_candidate_status(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+):
+    """Toggle candidate active/inactive status."""
+    application = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    email = application.applicant_email.lower()
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+
+    if user:
+        user.is_active = not user.is_active
+        db.commit()
+        db.refresh(user)
+        return {"id": candidate_id, "email": email, "is_active": user.is_active}
+    else:
+        # No user account — just return current state
+        return {"id": candidate_id, "email": email, "is_active": True, "message": "No user account found"}
+
 
 @app.delete("/api/candidates/{candidate_id}")
 def delete_candidate(
