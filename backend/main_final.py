@@ -514,12 +514,14 @@ def update_job_endpoint(
         raise HTTPException(status_code=403, detail="Not authorized to update jobs")
     db_job = update_job(db, job_id=job_id, job_update=job_data, user_id=current_user.id)
     if db_job is None:
-        # Fallback: allow update if user is admin even if not the creator
-        if current_user.role == UserRole.ADMIN:
+        # Fallback: allow update if user is admin or recruiter even if not the creator
+        if current_user.role in [UserRole.ADMIN, UserRole.RECRUITER]:
             db_job = db.query(Job).filter(Job.id == job_id).first()
             if not db_job:
                 raise HTTPException(status_code=404, detail="Job not found")
             update_data = job_data.dict(exclude_unset=True)
+            if 'skills_required' in update_data and isinstance(update_data['skills_required'], list):
+                update_data['skills_required'] = json.dumps(update_data['skills_required'])
             for key, value in update_data.items():
                 setattr(db_job, key, value)
             db.commit()
