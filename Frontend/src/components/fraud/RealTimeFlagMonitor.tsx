@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -18,6 +18,9 @@ import {
   Fade,
   Grow,
   Skeleton,
+  Pagination,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Warning,
@@ -134,7 +137,20 @@ const RealTimeFlagMonitor: React.FC = () => {
   }, []);
 
   const totalFlags = sessions.reduce((sum, s) => sum + s.flags.length, 0);
-  const flaggedSessions = sessions.filter((s) => s.status === 'flagged').length; 
+  const flaggedSessions = sessions.filter((s) => s.status === 'flagged').length;
+
+  // Main view tab: 0=Interviews, 1=Flag Activity Log
+  const [mainTab, setMainTab] = useState(0);
+
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  const totalPages = Math.ceil(sessions.length / ITEMS_PER_PAGE);
+  const paginatedSessions = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return sessions.slice(start, start + ITEMS_PER_PAGE);
+  }, [sessions, page]); 
 
   const ScoreBar = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => {
     const scoreColor = getScoreColor(value);
@@ -187,6 +203,15 @@ const RealTimeFlagMonitor: React.FC = () => {
   const allFlags = sessions.flatMap((s) =>
     s.flags.map((f) => ({ ...f, candidateName: s.candidateName, analyzedAt: s.analyzedAt }))
   );
+
+  // Flag table pagination
+  const [flagPage, setFlagPage] = useState(1);
+  const FLAGS_PER_PAGE = 10;
+  const totalFlagPages = Math.ceil(allFlags.length / FLAGS_PER_PAGE);
+  const paginatedFlags = useMemo(() => {
+    const start = (flagPage - 1) * FLAGS_PER_PAGE;
+    return allFlags.slice(start, start + FLAGS_PER_PAGE);
+  }, [allFlags, flagPage]);
 
   return (
     <Navigation>
@@ -257,13 +282,29 @@ const RealTimeFlagMonitor: React.FC = () => {
           ))}
         </Box>
 
+        {/* Main View Tabs */}
+        <Box sx={{ mb: 3, borderBottom: '2px solid #e5e7eb' }}>
+          <Tabs
+            value={mainTab}
+            onChange={(_, v) => setMainTab(v)}
+            sx={{
+              minHeight: 42,
+              '& .MuiTab-root': { minHeight: 42, textTransform: 'none', fontWeight: 600, fontSize: '14px', px: 3 },
+              '& .MuiTabs-indicator': { borderRadius: 2, height: 3 },
+            }}
+          >
+            <Tab label={`Interviews (${sessions.length})`} />
+            <Tab label={`Flag Activity Log (${totalFlags})`} />
+          </Tabs>
+        </Box>
+
         {loading ? (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: '20px', mb: '24px' }}>
             {[1, 2, 3, 4].map((i) => <SessionCardSkeleton key={i} />)}
           </Box>
-        ) : (
+        ) : mainTab === 0 ? (
           <>
-            {/* Sessions Grid */}
+            {/* ===== TAB 1: Interviews ===== */}
             {sessions.length === 0 ? (
               <Card sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', p: 6, textAlign: 'center', mb: 3 }}>
                 <CheckCircle sx={{ fontSize: 56, color: '#22c55e', opacity: 0.5, mb: 2 }} />
@@ -271,8 +312,9 @@ const RealTimeFlagMonitor: React.FC = () => {
                 <Typography sx={{ fontSize: '14px', color: '#64748b' }}>Completed interviews will appear here after fraud analysis.</Typography>
               </Card>
             ) : (
+              <>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: '20px', mb: '28px' }}>
-                {sessions.map((session, index) => {
+                {paginatedSessions.map((session, index) => {
                   const trustColor = getScoreColor(session.trustScore);
                   const isFlagged = session.status === 'flagged';
                   return (
@@ -361,9 +403,27 @@ const RealTimeFlagMonitor: React.FC = () => {
                   );
                 })}
               </Box>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                  <Pagination
+                    count={totalPages}
+                    page={page}
+                    onChange={(_, v) => setPage(v)}
+                    color="primary"
+                    shape="rounded"
+                    sx={{
+                      '& .MuiPaginationItem-root': { fontWeight: 600, fontSize: '13px' },
+                    }}
+                  />
+                </Box>
+              )}
+              </>
             )}
-
-            {/* Flag Activity Log */}
+          </>
+        ) : (
+          <>
+            {/* ===== TAB 2: Flag Activity Log ===== */}
             <Card sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
               <Box sx={{
                 padding: { xs: '12px 16px', sm: '18px 24px' }, borderBottom: '1px solid #e5e7eb',
@@ -406,7 +466,7 @@ const RealTimeFlagMonitor: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {allFlags.map((flag: any, index: number) => {
+                    {paginatedFlags.map((flag: any, index: number) => {
                       const sev = severityConfig[flag.severity as keyof typeof severityConfig] || severityConfig.low;
                       return (
                         <Fade in key={`${flag.id}-${index}`} timeout={200 + index * 50}>
@@ -470,13 +530,13 @@ const RealTimeFlagMonitor: React.FC = () => {
 
               {/* Mobile Card View */}
               <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                {allFlags.length === 0 ? (
+                {paginatedFlags.length === 0 ? (
                   <Box sx={{ textAlign: 'center', py: 5 }}>
                     <CheckCircle sx={{ fontSize: 48, color: '#22c55e', opacity: 0.5, mb: 1 }} />
                     <Typography sx={{ color: '#64748b', fontSize: '14px' }}>No flags detected</Typography>
                   </Box>
                 ) : (
-                  allFlags.map((flag: any, index: number) => {
+                  paginatedFlags.map((flag: any, index: number) => {
                     const sev = severityConfig[flag.severity as keyof typeof severityConfig] || severityConfig.low;
                     return (
                       <Box
@@ -523,6 +583,22 @@ const RealTimeFlagMonitor: React.FC = () => {
                   })
                 )}
               </Box>
+              {/* Flag Table Pagination */}
+              {totalFlagPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2, borderTop: '1px solid #e5e7eb' }}>
+                  <Pagination
+                    count={totalFlagPages}
+                    page={flagPage}
+                    onChange={(_, v) => setFlagPage(v)}
+                    color="primary"
+                    shape="rounded"
+                    size="small"
+                    sx={{
+                      '& .MuiPaginationItem-root': { fontWeight: 600, fontSize: '12px' },
+                    }}
+                  />
+                </Box>
+              )}
             </Card>
           </>
         )}
