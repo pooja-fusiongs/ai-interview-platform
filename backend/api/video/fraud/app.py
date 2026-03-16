@@ -38,6 +38,37 @@ from services.fraud_simulator import run_full_simulated_analysis
 router = APIRouter(tags=["Fraud Detection"])
 
 
+def get_or_create_fraud_analysis(db: Session, video_interview_id: int) -> FraudAnalysis:
+    """Get existing or create new FraudAnalysis record. Prevents duplicates."""
+    existing = (
+        db.query(FraudAnalysis)
+        .filter(FraudAnalysis.video_interview_id == video_interview_id)
+        .first()
+    )
+    if existing:
+        return existing
+    # Create new record
+    fraud = FraudAnalysis(
+        video_interview_id=video_interview_id,
+        analysis_status="pending",
+    )
+    db.add(fraud)
+    try:
+        db.flush()
+    except Exception:
+        db.rollback()
+        # Another request may have created it — fetch again
+        existing = (
+            db.query(FraudAnalysis)
+            .filter(FraudAnalysis.video_interview_id == video_interview_id)
+            .first()
+        )
+        if existing:
+            return existing
+        raise
+    return fraud
+
+
 # ---------------------------------------------------------------------------
 # POST /api/video/fraud/{video_interview_id}/face-events  -- Live face detection
 # ---------------------------------------------------------------------------
@@ -75,9 +106,9 @@ def submit_face_events(
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
 
-    # Only allow face events for active interviews
+    # Only block face events for fully ended interviews
     vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
-    if vi_status in ("completed", "cancelled"):
+    if vi_status in ("cancelled", "no_show"):
         raise HTTPException(status_code=400, detail="Interview is no longer active")
 
     # Calculate face detection score (0-1, higher = better/more trustworthy)
@@ -122,78 +153,194 @@ def submit_face_events(
             "timestamp_seconds": 0,
         })
 
-    # Upsert FraudAnalysis
-    existing = (
-        db.query(FraudAnalysis)
-        .filter(FraudAnalysis.video_interview_id == video_interview_id)
-        .first()
-    )
-
+    # Get or create single FraudAnalysis record (prevents duplicates)
+    existing = get_or_create_fraud_analysis(db, video_interview_id)
     now = datetime.utcnow()
 
-    if existing:
-        # Keep the WORST (lowest) face detection score — don't let good periods erase bad ones
-        if existing.face_detection_score is not None:
-            existing.face_detection_score = round(min(face_score, existing.face_detection_score), 3)
-        else:
-            existing.face_detection_score = round(face_score, 3)
-        existing.face_detection_details = details
-        # Merge flags: keep existing non-face flags, and keep the WORST face flags
-        existing_flags = []
-        old_face_flags = []
-        if existing.flags:
-            try:
-                parsed = json.loads(existing.flags)
-                existing_flags = [f for f in parsed if f.get("flag_type") not in ("face_not_visible", "multiple_faces")]
-                old_face_flags = [f for f in parsed if f.get("flag_type") in ("face_not_visible", "multiple_faces")]
-            except (json.JSONDecodeError, TypeError):
-                existing_flags = []
-        # For each face flag type, keep whichever has higher severity/confidence
-        merged_face_flags = {}
-        for f in old_face_flags + face_flags:
-            ft = f["flag_type"]
-            if ft not in merged_face_flags:
-                merged_face_flags[ft] = f
-            else:
-                # Keep the one with higher severity, or higher confidence if same severity
-                sev_order = {"high": 3, "medium": 2, "low": 1}
-                old_sev = sev_order.get(merged_face_flags[ft].get("severity", "low"), 0)
-                new_sev = sev_order.get(f.get("severity", "low"), 0)
-                if new_sev > old_sev or (new_sev == old_sev and f.get("confidence", 0) > merged_face_flags[ft].get("confidence", 0)):
-                    merged_face_flags[ft] = f
-        all_flags = existing_flags + list(merged_face_flags.values())
-        existing.flags = json.dumps(all_flags)
-        existing.flag_count = len(all_flags)
-        # Recalculate overall trust score using the stored (worst) face detection score
-        scores = [s for s in [
-            existing.voice_consistency_score,
-            existing.lip_sync_score,
-            existing.body_movement_score,
-            existing.face_detection_score,
-        ] if s is not None]
-        if scores:
-            existing.overall_trust_score = round(sum(scores) / len(scores), 3)
-        if existing.analysis_status == "pending":
-            existing.analysis_status = "completed"
-            existing.analyzed_at = now
-        db.commit()
-        db.refresh(existing)
-        return {"status": "updated", "face_detection_score": round(face_score, 3), "flags": len(face_flags)}
+    # Keep the WORST (lowest) face detection score
+    if existing.face_detection_score is not None:
+        existing.face_detection_score = round(min(face_score, existing.face_detection_score), 3)
     else:
-        fraud = FraudAnalysis(
-            video_interview_id=video_interview_id,
-            face_detection_score=round(face_score, 3),
-            face_detection_details=details,
-            overall_trust_score=round(face_score, 3),
-            flags=json.dumps(face_flags),
-            flag_count=len(face_flags),
-            analysis_status="completed",
-            analyzed_at=now,
-        )
-        db.add(fraud)
-        db.commit()
-        db.refresh(fraud)
-        return {"status": "created", "face_detection_score": round(face_score, 3), "flags": len(face_flags)}
+        existing.face_detection_score = round(face_score, 3)
+    existing.face_detection_details = details
+
+    # Merge flags: keep existing non-face flags, and keep the WORST face flags
+    existing_flags = []
+    old_face_flags = []
+    if existing.flags:
+        try:
+            parsed = json.loads(existing.flags)
+            existing_flags = [f for f in parsed if f.get("flag_type") not in ("face_not_visible", "multiple_faces")]
+            old_face_flags = [f for f in parsed if f.get("flag_type") in ("face_not_visible", "multiple_faces")]
+        except (json.JSONDecodeError, TypeError):
+            existing_flags = []
+    merged_face_flags = {}
+    for f in old_face_flags + face_flags:
+        ft = f["flag_type"]
+        if ft not in merged_face_flags:
+            merged_face_flags[ft] = f
+        else:
+            sev_order = {"high": 3, "medium": 2, "low": 1}
+            old_sev = sev_order.get(merged_face_flags[ft].get("severity", "low"), 0)
+            new_sev = sev_order.get(f.get("severity", "low"), 0)
+            if new_sev > old_sev or (new_sev == old_sev and f.get("confidence", 0) > merged_face_flags[ft].get("confidence", 0)):
+                merged_face_flags[ft] = f
+    all_flags = existing_flags + list(merged_face_flags.values())
+    existing.flags = json.dumps(all_flags)
+    existing.flag_count = len(all_flags)
+
+    # Recalculate overall trust score
+    scores = [s for s in [
+        existing.voice_consistency_score,
+        existing.lip_sync_score,
+        existing.body_movement_score,
+        existing.face_detection_score,
+    ] if s is not None]
+    if scores:
+        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+    if existing.analysis_status == "pending":
+        existing.analysis_status = "completed"
+        existing.analyzed_at = now
+
+    db.commit()
+    db.refresh(existing)
+    return {"status": "updated", "face_detection_score": existing.face_detection_score, "flags": len(face_flags)}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/fraud/{video_interview_id}/lip-events  -- Live lip sync detection
+# ---------------------------------------------------------------------------
+
+
+class LipEventPayload(BaseModel):
+    total_frames: int = 0
+    lip_moving_with_audio: int = 0
+    lip_still_with_audio: int = 0
+    lip_moving_no_audio: int = 0
+    lip_still_no_audio: int = 0
+    no_face_frames: int = 0
+    max_mouth_openness: float = 0
+    avg_mouth_openness: float = 0
+    mismatch_seconds: float = 0
+    detection_interval_ms: int = 750
+
+
+@router.post("/api/video/fraud/{video_interview_id}/lip-events")
+def submit_lip_events(
+    video_interview_id: int,
+    payload: LipEventPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Receive real-time lip sync detection stats from the candidate's browser.
+    No auth required — guest candidates call this during interviews.
+    """
+    vi = (
+        db.query(VideoInterview)
+        .filter(VideoInterview.id == video_interview_id)
+        .first()
+    )
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
+    if vi_status in ("cancelled", "no_show"):
+        raise HTTPException(status_code=400, detail="Interview is no longer active")
+
+    # Calculate lip sync score
+    # Frames where audio was active (candidate should be speaking)
+    audio_active_frames = payload.lip_moving_with_audio + payload.lip_still_with_audio
+    if audio_active_frames == 0:
+        # No audio detected yet — can't calculate sync, give neutral score
+        lip_score = 1.0
+    else:
+        # Sync ratio = how often lips move when audio is active
+        sync_ratio = payload.lip_moving_with_audio / audio_active_frames
+        # Penalize heavily for mismatch (audio active but lips still)
+        mismatch_ratio = payload.lip_still_with_audio / audio_active_frames
+        lip_score = max(0.0, min(1.0, sync_ratio - (mismatch_ratio * 0.3)))
+
+    details = json.dumps({
+        "total_frames": payload.total_frames,
+        "lip_moving_with_audio": payload.lip_moving_with_audio,
+        "lip_still_with_audio": payload.lip_still_with_audio,
+        "lip_moving_no_audio": payload.lip_moving_no_audio,
+        "lip_still_no_audio": payload.lip_still_no_audio,
+        "no_face_frames": payload.no_face_frames,
+        "sync_ratio": round(sync_ratio if audio_active_frames > 0 else 1.0, 3),
+        "mismatch_seconds": round(payload.mismatch_seconds, 1),
+        "max_mouth_openness": round(payload.max_mouth_openness, 4),
+        "avg_mouth_openness": round(payload.avg_mouth_openness, 4),
+    })
+
+    # Build lip sync flags
+    lip_flags = []
+    if audio_active_frames > 0:
+        mismatch_ratio_val = payload.lip_still_with_audio / audio_active_frames
+        if mismatch_ratio_val > 0.3 or payload.mismatch_seconds > 20:
+            lip_flags.append({
+                "flag_type": "lip_sync_mismatch",
+                "severity": "high" if mismatch_ratio_val > 0.5 or payload.mismatch_seconds > 45 else "medium",
+                "description": f"Lip sync mismatch {round(mismatch_ratio_val * 100)}% of speaking time ({round(payload.mismatch_seconds)}s)",
+                "confidence": round(mismatch_ratio_val, 2),
+                "timestamp_seconds": 0,
+            })
+
+    # Get or create single FraudAnalysis record (prevents duplicates)
+    existing = get_or_create_fraud_analysis(db, video_interview_id)
+    now = datetime.utcnow()
+
+    # Keep worst lip sync score
+    if existing.lip_sync_score is not None:
+        existing.lip_sync_score = round(min(lip_score, existing.lip_sync_score), 3)
+    else:
+        existing.lip_sync_score = round(lip_score, 3)
+    existing.lip_sync_details = details
+
+    # Merge lip flags with existing flags
+    existing_flags = []
+    old_lip_flags = []
+    if existing.flags:
+        try:
+            parsed = json.loads(existing.flags)
+            existing_flags = [f for f in parsed if f.get("flag_type") != "lip_sync_mismatch"]
+            old_lip_flags = [f for f in parsed if f.get("flag_type") == "lip_sync_mismatch"]
+        except (json.JSONDecodeError, TypeError):
+            existing_flags = []
+
+    merged_lip_flags = {}
+    for f in old_lip_flags + lip_flags:
+        ft = f["flag_type"]
+        if ft not in merged_lip_flags:
+            merged_lip_flags[ft] = f
+        else:
+            sev_order = {"high": 3, "medium": 2, "low": 1}
+            old_sev = sev_order.get(merged_lip_flags[ft].get("severity", "low"), 0)
+            new_sev = sev_order.get(f.get("severity", "low"), 0)
+            if new_sev > old_sev or (new_sev == old_sev and f.get("confidence", 0) > merged_lip_flags[ft].get("confidence", 0)):
+                merged_lip_flags[ft] = f
+
+    all_flags = existing_flags + list(merged_lip_flags.values())
+    existing.flags = json.dumps(all_flags)
+    existing.flag_count = len(all_flags)
+
+    # Recalculate overall trust score
+    scores = [s for s in [
+        existing.voice_consistency_score,
+        existing.lip_sync_score,
+        existing.body_movement_score,
+        existing.face_detection_score,
+    ] if s is not None]
+    if scores:
+        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+
+    if existing.analysis_status == "pending":
+        existing.analysis_status = "completed"
+        existing.analyzed_at = now
+
+    db.commit()
+    db.refresh(existing)
+    return {"status": "updated", "lip_sync_score": existing.lip_sync_score, "flags": len(lip_flags)}
 
 
 # ---------------------------------------------------------------------------
@@ -256,23 +403,31 @@ def trigger_fraud_analysis(
             new_flags = json.loads(results["flags"]) if results["flags"] else []
         except (json.JSONDecodeError, TypeError):
             new_flags = []
-        existing_face_flags = []
+        existing_realtime_flags = []
         if existing.flags:
             try:
-                existing_face_flags = [
+                existing_realtime_flags = [
                     f for f in json.loads(existing.flags)
-                    if f.get("flag_type") in ("face_not_visible", "multiple_faces")
+                    if f.get("flag_type") in ("face_not_visible", "multiple_faces", "lip_sync_mismatch")
                 ]
             except (json.JSONDecodeError, TypeError):
-                existing_face_flags = []
-        all_flags = new_flags + existing_face_flags
+                existing_realtime_flags = []
+        all_flags = new_flags + existing_realtime_flags
         existing.flags = json.dumps(all_flags)
         existing.flag_count = len(all_flags)
 
-        # Recalculate overall trust score including face detection if available
+        # Recalculate overall trust score including real-time scores if available
+        # Use worst of: analysis lip_sync vs real-time lip_sync
+        lip_score = results["lip_sync_score"]
+        if existing.lip_sync_score is not None and lip_score is not None:
+            lip_score = min(lip_score, existing.lip_sync_score)
+        elif existing.lip_sync_score is not None:
+            lip_score = existing.lip_sync_score
+        existing.lip_sync_score = round(lip_score, 3) if lip_score is not None else None
+
         scores = [s for s in [
             results["voice_consistency_score"],
-            results["lip_sync_score"],
+            lip_score,
             results["body_movement_score"],
             existing.face_detection_score,
         ] if s is not None]

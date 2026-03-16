@@ -100,7 +100,6 @@ const InterviewRecorder: React.FC<{
   // Attach/detach screen share video element when track changes
   useEffect(() => {
     if (screenMediaTrack) {
-      console.log('🖥️ [Recorder] Local screen share track detected, attaching to video element');
       if (!screenVideoElRef.current) {
         screenVideoElRef.current = document.createElement('video');
         screenVideoElRef.current.muted = true;

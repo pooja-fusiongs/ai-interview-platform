@@ -34,6 +34,21 @@ export const fraudDetectionService = {
     const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/face-events`, data);
     return response.data;
   },
+  submitLipEvents: async (videoInterviewId: number, data: {
+    total_frames: number;
+    lip_moving_with_audio: number;
+    lip_still_with_audio: number;
+    lip_moving_no_audio: number;
+    lip_still_no_audio: number;
+    no_face_frames: number;
+    max_mouth_openness: number;
+    avg_mouth_openness: number;
+    mismatch_seconds: number;
+    detection_interval_ms: number;
+  }) => {
+    const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/lip-events`, data);
+    return response.data;
+  },
 };
 
 export default fraudDetectionService;
