@@ -91,6 +91,9 @@ def auto_migrate():
         ("interview_questions", "suggested_answer", "TEXT"),
         ("interview_questions", "category", "VARCHAR(100)"),
         ("interview_questions", "order_number", "INTEGER DEFAULT 0"),
+        # Face detection columns for fraud analysis
+        ("fraud_analyses", "face_detection_score", "FLOAT"),
+        ("fraud_analyses", "face_detection_details", "TEXT"),
     ]
 
     with engine.begin() as conn:

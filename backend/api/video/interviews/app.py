@@ -883,15 +883,97 @@ async def guest_end_interview(
     video_id: int,
     db: Session = Depends(get_db),
 ):
-    """End interview for guest candidate (no auth)."""
+    """End interview for guest candidate (no auth). Also generates transcript from recording."""
+    from models import InterviewQuestion, JobApplication, InterviewSession, InterviewSessionStatus
+
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
-    if vi.status != VideoInterviewStatus.COMPLETED.value:
+
+    already_completed = vi.status == VideoInterviewStatus.COMPLETED.value
+    if not already_completed:
         vi.status = VideoInterviewStatus.COMPLETED.value
         vi.ended_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(vi)
+
+    # Generate transcript from recording (same logic as authenticated end)
+    if vi.recording_url and not vi.transcript:
+        try:
+            recording_filename = os.path.basename(vi.recording_url)
+            recordings_dir = os.path.normpath(os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
+            ))
+            recording_path = os.path.join(recordings_dir, recording_filename)
+
+            if os.path.exists(recording_path):
+                # Fetch interview questions for context
+                actual_questions = []
+                if vi.job_id:
+                    questions = db.query(InterviewQuestion).filter(
+                        InterviewQuestion.job_id == vi.job_id,
+                        InterviewQuestion.is_approved == True
+                    ).all()
+                    if questions:
+                        actual_questions = [
+                            {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+                            for q in questions
+                        ]
+
+                from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+
+                validate_recording_file(recording_path)
+                transcript_data = create_real_transcript(
+                    interview_id=vi.id,
+                    recording_path=recording_path,
+                    interview_start_time=vi.started_at or vi.scheduled_at,
+                    interview_end_time=datetime.now(timezone.utc),
+                    question_timestamps=actual_questions if actual_questions else None
+                )
+                vi.transcript = transcript_data["transcript_text"]
+                vi.transcript_source = "recording"
+                vi.transcript_generated_at = datetime.now(timezone.utc)
+                print(f"[guest_end] Transcript generated for interview {video_id} ({len(vi.transcript)} chars)")
+
+                # Create InterviewSession for scoring pipeline
+                try:
+                    application = None
+                    if vi.candidate:
+                        application = db.query(JobApplication).filter(
+                            JobApplication.job_id == vi.job_id,
+                            JobApplication.applicant_email == vi.candidate.email
+                        ).first()
+                        if application:
+                            application.status = "Interview Completed"
+
+                    session = InterviewSession(
+                        job_id=vi.job_id,
+                        candidate_id=vi.candidate_id,
+                        application_id=application.id if application else None,
+                        status=InterviewSessionStatus.IN_PROGRESS,
+                        interview_mode="video_interview",
+                        transcript_text=vi.transcript,
+                        started_at=vi.started_at or vi.scheduled_at,
+                    )
+                    db.add(session)
+                    db.flush()
+                    vi.session_id = session.id
+                    print(f"[guest_end] Created InterviewSession id={session.id}")
+                except Exception as e:
+                    print(f"[guest_end] Failed to create InterviewSession: {e}")
+
+            else:
+                print(f"[guest_end] Recording file not found: {recording_path}")
+                vi.transcript_source = "failed"
+                vi.transcript_error = f"Recording file not found: {recording_filename}"
+
+        except Exception as e:
+            print(f"[guest_end] Transcript generation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            vi.transcript_source = "failed"
+            vi.transcript_error = str(e)
+
+    db.commit()
+    db.refresh(vi)
     return {"message": "Interview ended", "status": vi.status}
 
 

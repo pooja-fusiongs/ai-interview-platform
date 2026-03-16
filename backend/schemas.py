@@ -735,6 +735,8 @@ class FraudAnalysisResponse(BaseModel):
     lip_sync_details: Optional[str] = None
     body_movement_score: Optional[float] = None
     body_movement_details: Optional[str] = None
+    face_detection_score: Optional[float] = None
+    face_detection_details: Optional[str] = None
     overall_trust_score: Optional[float] = None
     flags: Optional[str] = None
     flag_count: int = 0

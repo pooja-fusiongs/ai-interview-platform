@@ -17,6 +17,7 @@ import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks } from
 import '@livekit/components-styles';
 import { Track, DisconnectReason } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
+import FaceDetectionOverlay from './FaceDetectionOverlay';
 import { getMediaDevices } from '../../utils/mediaDeviceUtils';
 import Navigation from '../layout/Sidebar';
 
@@ -99,6 +100,7 @@ const InterviewRecorder: React.FC<{
   // Attach/detach screen share video element when track changes
   useEffect(() => {
     if (screenMediaTrack) {
+      console.log('🖥️ [Recorder] Local screen share track detected, attaching to video element');
       if (!screenVideoElRef.current) {
         screenVideoElRef.current = document.createElement('video');
         screenVideoElRef.current.muted = true;
@@ -107,6 +109,7 @@ const InterviewRecorder: React.FC<{
       screenVideoElRef.current.srcObject = new MediaStream([screenMediaTrack]);
       screenVideoElRef.current.play().catch(() => {});
     } else if (screenVideoElRef.current) {
+      console.log('🖥️ [Recorder] Screen share ended, detaching');
       screenVideoElRef.current.srcObject = null;
     }
   }, [screenMediaTrack]);
@@ -129,6 +132,7 @@ const InterviewRecorder: React.FC<{
   // Attach/detach remote screen share video element
   useEffect(() => {
     if (remoteScreenMediaTrack) {
+      console.log('🖥️ [Recorder] Remote screen share track detected, attaching');
       if (!remoteScreenVideoElRef.current) {
         remoteScreenVideoElRef.current = document.createElement('video');
         remoteScreenVideoElRef.current.muted = true;
@@ -137,6 +141,7 @@ const InterviewRecorder: React.FC<{
       remoteScreenVideoElRef.current.srcObject = new MediaStream([remoteScreenMediaTrack]);
       remoteScreenVideoElRef.current.play().catch(() => {});
     } else if (remoteScreenVideoElRef.current) {
+      console.log('🖥️ [Recorder] Remote screen share ended, detaching');
       remoteScreenVideoElRef.current.srcObject = null;
     }
   }, [remoteScreenMediaTrack]);
@@ -1045,7 +1050,7 @@ const VideoInterviewRoom: React.FC = () => {
                           reconnectAttemptsRef.current = 0;
                           toast.success('Joined interview');
                         }}
-                        onDisconnected={(reason?: DisconnectReason) => {
+                        onDisconnected={async (reason?: DisconnectReason) => {
                           console.warn('LiveKit disconnected, reason:', reason);
                           setCallJoined(false);
 
@@ -1055,6 +1060,13 @@ const VideoInterviewRoom: React.FC = () => {
                             endingRef.current
                           ) {
                             return;
+                          }
+
+                          // If candidate has an active recording and got disconnected
+                          // (recruiter ended the call), save the recording before reconnecting
+                          if (isUserCandidate && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                            console.log('🎬 Candidate disconnected with active recording — uploading before reconnect');
+                            await stopAndUploadRecording();
                           }
 
                           // Attempt reconnection for unexpected disconnects
@@ -1079,11 +1091,12 @@ const VideoInterviewRoom: React.FC = () => {
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >
                         <InterviewRecorder
-                          shouldRecord={!isUserCandidate && callJoined}
+                          shouldRecord={isUserCandidate && callJoined}
                           mediaRecorderRef={mediaRecorderRef}
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
                         />
+                        {isUserCandidate && <FaceDetectionOverlay enabled={callJoined} videoInterviewId={videoId ? parseInt(videoId) : undefined} />}
                         <VideoTilesGrid onEndCall={handleEnd} />
                         <RoomAudioRenderer />
                       </LiveKitRoom>

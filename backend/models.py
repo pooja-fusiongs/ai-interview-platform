@@ -579,6 +579,8 @@ class FraudAnalysis(Base):
     lip_sync_details = Column(Text, nullable=True)
     body_movement_score = Column(Float, nullable=True)
     body_movement_details = Column(Text, nullable=True)
+    face_detection_score = Column(Float, nullable=True)
+    face_detection_details = Column(Text, nullable=True)
 
     overall_trust_score = Column(Float, nullable=True)
     flags = Column(Text, nullable=True)

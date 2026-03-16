@@ -27,6 +27,7 @@ import {
   GraphicEq,
   RecordVoiceOver,
   Accessibility,
+  Face,
   Timeline,
   MonitorHeart,
   Circle,
@@ -54,6 +55,7 @@ interface MonitorSession {
   voiceScore: number;
   lipSyncScore: number;
   bodyScore: number;
+  faceDetectionScore: number;
   analyzedAt: string | null;
 }
 
@@ -111,6 +113,7 @@ const RealTimeFlagMonitor: React.FC = () => {
           voiceScore: Math.round((a.voice_consistency_score || 0) * 100),
           lipSyncScore: Math.round((a.lip_sync_score || 0) * 100),
           bodyScore: Math.round((a.body_movement_score || 0) * 100),
+          faceDetectionScore: Math.round((a.face_detection_score || 0) * 100),
           analyzedAt: a.analyzed_at,
         };
       });
@@ -131,7 +134,7 @@ const RealTimeFlagMonitor: React.FC = () => {
   }, []);
 
   const totalFlags = sessions.reduce((sum, s) => sum + s.flags.length, 0);
-  const flaggedSessions = sessions.filter((s) => s.status === 'flagged').length;
+  const flaggedSessions = sessions.filter((s) => s.status === 'flagged').length; 
 
   const ScoreBar = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => {
     const scoreColor = getScoreColor(value);
@@ -323,6 +326,7 @@ const RealTimeFlagMonitor: React.FC = () => {
                           />
                         </Box>
                         <CardContent sx={{ padding: '20px !important' }}>
+                          <ScoreBar label="Face Detection" value={session.faceDetectionScore} icon={<Face sx={{ fontSize: '16px' }} />} />
                           <ScoreBar label="Voice Consistency" value={session.voiceScore} icon={<RecordVoiceOver sx={{ fontSize: '16px' }} />} />
                           <ScoreBar label="Lip Sync" value={session.lipSyncScore} icon={<GraphicEq sx={{ fontSize: '16px' }} />} />
                           <ScoreBar label="Body Movement" value={session.bodyScore} icon={<Accessibility sx={{ fontSize: '16px' }} />} />

@@ -21,6 +21,19 @@ export const fraudDetectionService = {
     const response = await apiClient.get('/api/video/fraud/all');
     return response.data;
   },
+  submitFaceEvents: async (videoInterviewId: number, data: {
+    total_detections: number;
+    no_face_count: number;
+    multiple_face_count: number;
+    single_face_count: number;
+    no_face_seconds: number;
+    multiple_face_seconds: number;
+    max_faces_detected: number;
+    detection_interval_ms: number;
+  }) => {
+    const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/face-events`, data);
+    return response.data;
+  },
 };
 
 export default fraudDetectionService;

@@ -33,6 +33,29 @@ interface FloatingReaction {
   x: number;
 }
 
+// Generate a consistent avatar color from a name/identity string
+// Same name always produces the same color, regardless of local/remote
+const AVATAR_COLORS = [
+  '#673ab7', // purple
+  '#e8710a', // orange
+  '#0097a7', // teal
+  '#d32f2f', // red
+  '#1976d2', // blue
+  '#388e3c', // green
+  '#7b1fa2', // deep purple
+  '#f57c00', // deep orange
+  '#00796b', // dark teal
+  '#c2185b', // pink
+];
+
+const getAvatarColor = (name: string): string => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+
 /**
  * Google Meet-style AI Interview UI
  */
@@ -73,10 +96,77 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
   const remoteParticipant = remoteParticipants[0] || null;
 
   // Find remote participant's camera track
-  const remoteCameraTrack = useMemo(() =>
-    tracks.find(t => !t.participant.isLocal && t.source === Track.Source.Camera && t.publication),
-    [tracks]
-  );
+  // Primary: from useTracks; Fallback: from participant's track publications directly
+  const lastLogRef = useRef(0);
+  const remoteCameraTrack = useMemo(() => {
+    // Primary: find from useTracks results — require publication.track to exist AND not muted
+    // When camera is turned off, track still exists but is muted → show avatar, not black frame
+    const found = tracks.find(t =>
+      !t.participant.isLocal &&
+      t.source === Track.Source.Camera &&
+      t.publication?.track &&
+      !t.publication.isMuted
+    );
+    if (found) {
+      console.log('[VideoTilesGrid] Remote camera track found:', {
+        participant: found.participant.identity,
+        hasTrack: !!found.publication?.track,
+        isSubscribed: found.publication?.isSubscribed,
+        isMuted: found.publication?.isMuted,
+      });
+      return found;
+    }
+
+    // Fallback: check remote participant's track publications directly
+    // This handles cases where useTracks returns only placeholders
+    if (remoteParticipant) {
+      const cameraPub = remoteParticipant.getTrackPublication(Track.Source.Camera);
+      if (cameraPub && cameraPub.track && !cameraPub.isMuted) {
+        console.log('[VideoTilesGrid] Remote camera found via participant fallback:', {
+          identity: remoteParticipant.identity,
+          isSubscribed: cameraPub.isSubscribed,
+        });
+        return {
+          participant: remoteParticipant,
+          source: Track.Source.Camera,
+          publication: cameraPub,
+        };
+      }
+    }
+
+    // Throttled logging to avoid console spam (log at most once per 5 seconds)
+    const now = Date.now();
+    if (now - lastLogRef.current > 5000) {
+      lastLogRef.current = now;
+      console.log('[VideoTilesGrid] No remote camera track. All tracks:', tracks.map(t => ({
+        identity: t.participant.identity,
+        isLocal: t.participant.isLocal,
+        source: t.source,
+        hasPub: !!t.publication,
+        hasTrack: !!t.publication?.track,
+        isMuted: t.publication?.isMuted,
+      })));
+    }
+    return undefined;
+  }, [tracks, remoteParticipant]);
+
+  // Auto-subscribe to remote camera track if unsubscribed
+  // Also re-subscribe if subscribed but track not yet attached (e.g. OBS virtual camera, slow networks)
+  useEffect(() => {
+    if (!remoteParticipant) return;
+    const cameraPub = remoteParticipant.getTrackPublication(Track.Source.Camera);
+    if (!cameraPub) return;
+
+    if (!cameraPub.isSubscribed) {
+      console.log('[VideoTilesGrid] Auto-subscribing to remote camera track');
+      cameraPub.setSubscribed(true);
+    } else if (!cameraPub.track) {
+      // Track is subscribed but media hasn't arrived — toggle subscription to retry
+      console.log('[VideoTilesGrid] Track subscribed but no media — re-subscribing');
+      cameraPub.setSubscribed(false);
+      setTimeout(() => cameraPub.setSubscribed(true), 500);
+    }
+  }, [remoteParticipant, tracks]);
 
   // Detect ANY active screen share (local or remote)
   const screenShareTrackRaw = useMemo(() =>
@@ -225,8 +315,14 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
   const localCameraTrack = tracks.find(t => t.participant.isLocal && t.source === Track.Source.Camera);
   const localName = localParticipant.name || localParticipant.identity || 'You';
   const localInitial = localName.charAt(0).toUpperCase();
+  const localAvatarColor = getAvatarColor(localName);
   const remoteName = remoteParticipant?.name || remoteParticipant?.identity || 'Participant';
   const remoteInitial = remoteName.charAt(0).toUpperCase();
+  // Ensure remote gets a different color than local (collision resolution for similar names)
+  const rawRemoteColor = getAvatarColor(remoteName);
+  const remoteAvatarColor = rawRemoteColor === localAvatarColor
+    ? AVATAR_COLORS[(AVATAR_COLORS.indexOf(rawRemoteColor) + 1) % AVATAR_COLORS.length]
+    : rawRemoteColor;
   const participantCount = 1 + remoteParticipants.length;
   const panelOpen = showParticipants || showMeetingInfo;
 
@@ -335,33 +431,28 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
                   /* Remote participant joined but camera off — show avatar */
                   <Box sx={{
                     width: 100, height: 100, borderRadius: '50%',
-                    background: '#5f6368',
+                    background: remoteAvatarColor,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <Typography sx={{ color: 'white', fontSize: 40, fontWeight: 400 }}>{remoteInitial}</Typography>
                   </Box>
                 ) : (
-                  /* No remote participant yet */
-                  <>
-                    <Box sx={{
-                      width: 80, height: 80, borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.08)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Person sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 40 }} />
-                    </Box>
-                    <Typography sx={{ color: '#9aa0a6', fontSize: '14px' }}>Waiting for participant to join...</Typography>
-                  </>
+                  /* No remote participant yet — show local user's avatar (Google Meet style) */
+                  <Box sx={{
+                    width: 120, height: 120, borderRadius: '50%',
+                    background: localAvatarColor,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Typography sx={{ color: 'white', fontSize: 52, fontWeight: 400 }}>{localInitial}</Typography>
+                  </Box>
                 )}
               </Box>
-              {/* Remote name bottom-left when camera off */}
-              {remoteParticipant && (
-                <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
-                  <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-                    {remoteName}
-                  </Typography>
-                </Box>
-              )}
+              {/* Name bottom-left: remote name when camera off, local name when alone */}
+              <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
+                <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+                  {remoteParticipant ? remoteName : localName}
+                </Typography>
+              </Box>
             </>
           )}
         </Box>
@@ -382,7 +473,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
             </Box>
             <Box sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: '8px', '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
-                <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: '#673ab7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: localAvatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Typography sx={{ color: 'white', fontSize: 14 }}>{localInitial}</Typography>
                 </Box>
                 <Typography sx={{ color: '#e8eaed', fontSize: '13px', flex: 1 }}>{localName} (You)</Typography>
@@ -391,7 +482,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
               </Box>
               {remoteParticipants.map(p => (
                 <Box key={p.identity} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: '8px', '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
-                  <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: '#e8710a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: (() => { const c = getAvatarColor(p.name || p.identity || '?'); return c === localAvatarColor ? AVATAR_COLORS[(AVATAR_COLORS.indexOf(c) + 1) % AVATAR_COLORS.length] : c; })(), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Typography sx={{ color: 'white', fontSize: 14 }}>{(p.name || p.identity || '?').charAt(0).toUpperCase()}</Typography>
                   </Box>
                   <Typography sx={{ color: '#e8eaed', fontSize: '13px', flex: 1 }}>{p.name || p.identity}</Typography>
@@ -462,8 +553,8 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
         )}
       </Box>
 
-      {/* ===== SELF-VIEW (Draggable) ===== */}
-      <Box
+      {/* ===== SELF-VIEW (Draggable) — only show when remote participant exists ===== */}
+      {remoteParticipant && <Box
         onMouseDown={handleDragStart}
         sx={{
           position: 'absolute',
@@ -487,7 +578,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
           </Box>
         ) : (
           <Box sx={{ width: '100%', height: '100%', background: '#3c4043', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <Box sx={{ width: 56, height: 56, borderRadius: '50%', background: '#673ab7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ width: 56, height: 56, borderRadius: '50%', background: localAvatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Typography sx={{ color: 'white', fontSize: 24 }}>{localInitial}</Typography>
             </Box>
             <Typography sx={{ color: '#e8eaed', fontSize: '12px', mt: 0.8 }}>{localName}</Typography>
@@ -498,7 +589,7 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
             <MicOff sx={{ color: 'white', fontSize: 14 }} />
           </Box>
         )}
-      </Box>
+      </Box>}
 
       {/* Emoji Picker Popup */}
       {showEmojiPicker && (
