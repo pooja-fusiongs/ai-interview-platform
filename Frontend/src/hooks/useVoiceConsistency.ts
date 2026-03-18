@@ -174,6 +174,17 @@ export function useVoiceConsistency({
         const s = statsRef.current;
         s.totalSegments += 1;
 
+        // Log first 5 segments to verify audio is flowing
+        if (s.totalSegments <= 5) {
+          // Calculate RMS manually for debug
+          let debugRms = 0;
+          for (let i = 0; i < bufferRef.current.length; i++) {
+            debugRms += bufferRef.current[i] * bufferRef.current[i];
+          }
+          debugRms = Math.sqrt(debugRms / bufferRef.current.length);
+          console.log(`[VoiceDetection] Segment ${s.totalSegments}: rms=${debugRms.toFixed(6)}, pitch=${pitch.toFixed(1)}Hz, threshold=${AUDIO_RMS_THRESHOLD}, audioCtx.state=${audioCtxRef.current.state}`);
+        }
+
         if (pitch === 0) {
           // Silence — no voice detected
           s.silentSegments += 1;

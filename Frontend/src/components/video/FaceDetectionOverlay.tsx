@@ -57,21 +57,46 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     };
   }, [localCameraTrack?.publication?.track?.mediaStreamTrack]);
 
-  // Get mic stream for audio analysis — use LiveKit's track directly
+  // Get mic stream for audio analysis — separate from LiveKit to ensure raw audio access
   useEffect(() => {
     if (!localMicTrack?.publication?.track || !enabled) {
       setMicStream(null);
       return;
     }
 
-    const micMediaTrack = localMicTrack.publication.track.mediaStreamTrack;
-    if (micMediaTrack) {
-      const stream = new MediaStream([micMediaTrack]);
-      setMicStream(stream);
-      console.log(`[FraudDetection] Mic stream set from LiveKit track: ${micMediaTrack.label}`);
-    }
+    let stream: MediaStream | null = null;
+    let cancelled = false;
+
+    // Try to get the same mic device that LiveKit is using
+    const lkTrack = localMicTrack.publication.track.mediaStreamTrack;
+    const deviceId = lkTrack?.getSettings?.()?.deviceId;
+
+    const constraints: MediaStreamConstraints = {
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+      video: false,
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then((s) => {
+        if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
+        stream = s;
+        const track = s.getAudioTracks()[0];
+        console.log(`[FraudDetection] Mic stream ready: ${track?.label}, enabled=${track?.enabled}, muted=${track?.muted}`);
+        setMicStream(s);
+      })
+      .catch((err) => {
+        console.warn(`[FraudDetection] getUserMedia failed: ${err.message}, falling back to LiveKit track`);
+        // Fallback: try LiveKit track directly
+        if (!cancelled && lkTrack) {
+          const fallbackStream = new MediaStream([lkTrack]);
+          setMicStream(fallbackStream);
+          console.log(`[FraudDetection] Using LiveKit track fallback: ${lkTrack.label}, enabled=${lkTrack.enabled}`);
+        }
+      });
 
     return () => {
+      cancelled = true;
+      if (stream) { stream.getTracks().forEach(t => t.stop()); }
       setMicStream(null);
     };
   }, [localMicTrack?.publication?.track, enabled]);
