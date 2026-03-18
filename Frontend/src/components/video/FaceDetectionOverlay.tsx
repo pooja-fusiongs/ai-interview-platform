@@ -57,46 +57,56 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     };
   }, [localCameraTrack?.publication?.track?.mediaStreamTrack]);
 
-  // Get mic stream for audio analysis — separate from LiveKit to ensure raw audio access
+  // Get mic stream for audio analysis
   useEffect(() => {
     if (!localMicTrack?.publication?.track || !enabled) {
       setMicStream(null);
       return;
     }
 
-    let stream: MediaStream | null = null;
+    let ownStream: MediaStream | null = null;
     let cancelled = false;
 
-    // Try to get the same mic device that LiveKit is using
     const lkTrack = localMicTrack.publication.track.mediaStreamTrack;
-    const deviceId = lkTrack?.getSettings?.()?.deviceId;
 
-    const constraints: MediaStreamConstraints = {
-      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
-      video: false,
+    const tryGetMic = async () => {
+      // Method 1: getUserMedia without deviceId constraint (gets default mic)
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
+        ownStream = s;
+        const track = s.getAudioTracks()[0];
+        console.log(`[FraudDetection] Mic stream (getUserMedia): ${track?.label}, enabled=${track?.enabled}, muted=${track?.muted}`);
+        setMicStream(s);
+        return;
+      } catch (e) {
+        console.warn(`[FraudDetection] getUserMedia failed: ${e}`);
+      }
+
+      // Method 2: Clone LiveKit's track (clone creates independent copy)
+      if (cancelled) return;
+      try {
+        const cloned = lkTrack.clone();
+        const s = new MediaStream([cloned]);
+        console.log(`[FraudDetection] Mic stream (cloned LiveKit): ${cloned.label}, enabled=${cloned.enabled}, muted=${cloned.muted}, readyState=${cloned.readyState}`);
+        setMicStream(s);
+        return;
+      } catch (e) {
+        console.warn(`[FraudDetection] Clone failed: ${e}`);
+      }
+
+      // Method 3: Use LiveKit track directly (last resort)
+      if (cancelled) return;
+      const s = new MediaStream([lkTrack]);
+      console.log(`[FraudDetection] Mic stream (direct LiveKit): ${lkTrack.label}, enabled=${lkTrack.enabled}, readyState=${lkTrack.readyState}`);
+      setMicStream(s);
     };
 
-    navigator.mediaDevices.getUserMedia(constraints)
-      .then((s) => {
-        if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
-        stream = s;
-        const track = s.getAudioTracks()[0];
-        console.log(`[FraudDetection] Mic stream ready: ${track?.label}, enabled=${track?.enabled}, muted=${track?.muted}`);
-        setMicStream(s);
-      })
-      .catch((err) => {
-        console.warn(`[FraudDetection] getUserMedia failed: ${err.message}, falling back to LiveKit track`);
-        // Fallback: try LiveKit track directly
-        if (!cancelled && lkTrack) {
-          const fallbackStream = new MediaStream([lkTrack]);
-          setMicStream(fallbackStream);
-          console.log(`[FraudDetection] Using LiveKit track fallback: ${lkTrack.label}, enabled=${lkTrack.enabled}`);
-        }
-      });
+    tryGetMic();
 
     return () => {
       cancelled = true;
-      if (stream) { stream.getTracks().forEach(t => t.stop()); }
+      if (ownStream) { ownStream.getTracks().forEach(t => t.stop()); }
       setMicStream(null);
     };
   }, [localMicTrack?.publication?.track, enabled]);

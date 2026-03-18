@@ -95,7 +95,7 @@ class FaceEventPayload(BaseModel):
     detection_interval_ms: int = 750
 
 
-@router.post("/api/video/fraud/{video_interview_id}/face-events")
+@router.post("/{video_interview_id}/face-events")
 def submit_face_events(
     video_interview_id: int,
     payload: FaceEventPayload,
@@ -233,7 +233,7 @@ class LipEventPayload(BaseModel):
     detection_interval_ms: int = 750
 
 
-@router.post("/api/video/fraud/{video_interview_id}/lip-events")
+@router.post("/{video_interview_id}/lip-events")
 def submit_lip_events(
     video_interview_id: int,
     payload: LipEventPayload,
@@ -368,7 +368,7 @@ class VoiceEventPayload(BaseModel):
     detection_interval_ms: int = 1500
 
 
-@router.post("/api/video/fraud/{video_interview_id}/voice-events")
+@router.post("/{video_interview_id}/voice-events")
 def submit_voice_events(
     video_interview_id: int,
     payload: VoiceEventPayload,
@@ -483,13 +483,10 @@ def submit_voice_events(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/video/fraud/{video_interview_id}/analyze  -- Trigger analysis
+# POST /fraud/{video_interview_id}/analyze  -- Trigger analysis
 # ---------------------------------------------------------------------------
 
-@router.post(
-    "/api/video/fraud/{video_interview_id}/analyze",
-    response_model=FraudAnalysisResponse,
-)
+@router.post("/{video_interview_id}/analyze", response_model=FraudAnalysisResponse)
 def trigger_fraud_analysis(
     video_interview_id: int,
     current_user: User = Depends(
@@ -627,10 +624,7 @@ def trigger_fraud_analysis(
 # GET /api/video/fraud/dashboard  -- Dashboard statistics
 # ---------------------------------------------------------------------------
 
-@router.get(
-    "/api/video/fraud/dashboard",
-    response_model=FraudDashboardStats,
-)
+@router.get("/dashboard", response_model=FraudDashboardStats)
 def fraud_dashboard(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -735,7 +729,7 @@ def fraud_dashboard(
 # GET /api/video/fraud/flagged  -- List flagged interviews
 # ---------------------------------------------------------------------------
 
-@router.get("/api/video/fraud/flagged")
+@router.get("/flagged")
 def list_flagged_interviews(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -790,7 +784,7 @@ def list_flagged_interviews(
 # GET /api/video/fraud/all  -- All analyses for live monitor
 # ---------------------------------------------------------------------------
 
-@router.get("/api/video/fraud/all")
+@router.get("/all")
 def list_all_analyses(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -835,10 +829,7 @@ def list_all_analyses(
 # GET /api/video/fraud/{video_interview_id}  -- Get analysis for interview
 # ---------------------------------------------------------------------------
 
-@router.get(
-    "/api/video/fraud/{video_interview_id}",
-    response_model=FraudAnalysisResponse,
-)
+@router.get("/{video_interview_id}", response_model=FraudAnalysisResponse)
 def get_fraud_analysis(
     video_interview_id: int,
     current_user: User = Depends(get_current_active_user),

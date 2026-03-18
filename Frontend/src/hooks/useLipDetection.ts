@@ -46,7 +46,7 @@ const CHIN_IDX = 152;
 
 // Thresholds
 const LIP_MOVEMENT_THRESHOLD = 0.06;  // Mouth openness (normalized) threshold — closed mouth ~0.03-0.05, open ~0.08+
-const AUDIO_RMS_THRESHOLD = 0.004;    // Audio RMS threshold to count as "active speech" (lowered for virtual audio cables)
+const AUDIO_RMS_THRESHOLD = 0.002;    // Audio RMS threshold to count as "active speech"
 const MISMATCH_CONSECUTIVE = 4;       // Consecutive mismatches before alert (~6s at 1500ms interval)
 
 const emptyStats: LipDetectionStats = {

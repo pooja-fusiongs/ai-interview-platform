@@ -30,7 +30,7 @@ interface UseVoiceConsistencyResult {
 }
 
 // Thresholds
-const AUDIO_RMS_THRESHOLD = 0.005;    // Minimum RMS to consider as speech (lowered for virtual audio cables)
+const AUDIO_RMS_THRESHOLD = 0.002;    // Minimum RMS to consider as speech
 const PITCH_SHIFT_THRESHOLD = 0.35;   // 35% pitch deviation = voice change
 const ALERT_CONSECUTIVE = 3;          // 3 consecutive shifts before alert
 

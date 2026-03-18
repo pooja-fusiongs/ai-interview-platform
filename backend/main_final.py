@@ -266,7 +266,7 @@ try:
     # Video interviews router already has /api/video/interviews prefix in routes
     app.include_router(video_interviews_router, tags=["Video Interviews"])
     app.include_router(video_zoom_router, tags=["Zoom Integration"])
-    app.include_router(video_fraud_router, tags=["Fraud Detection"])
+    app.include_router(video_fraud_router, prefix="/api/video/fraud", tags=["Fraud Detection"])
     
     print("✅ Video Interview & Fraud Detection endpoints included")
     print(f"   Routes registered: {len(video_interviews_router.routes)} video interview routes")
