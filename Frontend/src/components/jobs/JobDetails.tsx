@@ -123,6 +123,10 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
   // Add candidate dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addMode, setAddMode] = useState<'choose' | 'new' | 'existing'>('choose')
+  const [existingSearch, setExistingSearch] = useState('')
+  const [existingResults, setExistingResults] = useState<any[]>([])
+  const [existingLoading, setExistingLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [addForm, setAddForm] = useState({
     name: '', email: '', phone: '', location: '', linkedin: '',
@@ -432,6 +436,54 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       })
       setAddFormErrors({})
       setAddFormTouched({})
+      // Refresh candidates
+      const response = await apiClient.get(`/api/job/${selectedJob.id}/applications`)
+      if (response.status === 200) setCandidates(response.data.applications || [])
+    } catch (err: any) {
+      hotToast.error(err.response?.data?.detail || 'Failed to add candidate')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Fetch existing candidates (all or filtered by search)
+  const fetchExistingCandidates = async (query: string = '') => {
+    setExistingLoading(true)
+    try {
+      const url = query.trim()
+        ? `/api/candidates?search=${encodeURIComponent(query.trim())}&limit=20`
+        : `/api/candidates?limit=20`
+      const response = await apiClient.get(url)
+      if (response.data?.success && response.data.data) {
+        // Filter out candidates already in this job
+        const existingEmails = new Set(candidates.map((c: any) => c.applicant_email?.toLowerCase()))
+        setExistingResults(response.data.data.filter((c: any) => !existingEmails.has(c.email?.toLowerCase())))
+      }
+    } catch {
+      setExistingResults([])
+    } finally {
+      setExistingLoading(false)
+    }
+  }
+
+  // Search existing candidates for "Add Existing" flow
+  const handleSearchExisting = async (query: string) => {
+    setExistingSearch(query)
+    fetchExistingCandidates(query)
+  }
+
+  // Add existing candidate to this job
+  const handleAddExistingCandidate = async (candidateEmail: string) => {
+    setSubmitting(true)
+    try {
+      await apiClient.post(`/api/recruiter/job/${selectedJob.id}/add-existing-candidate`, {
+        candidate_email: candidateEmail,
+      })
+      hotToast.success('Candidate added successfully')
+      setAddDialogOpen(false)
+      setAddMode('choose')
+      setExistingSearch('')
+      setExistingResults([])
       // Refresh candidates
       const response = await apiClient.get(`/api/job/${selectedJob.id}/applications`)
       if (response.status === 200) setCandidates(response.data.applications || [])
@@ -791,7 +843,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             <Tooltip title={selectedJob?.status === 'Closed' ? 'Cannot add candidates to a closed job' : ''}>
               <span>
                 <Button
-                  onClick={() => setAddDialogOpen(true)}
+                  onClick={() => { setAddMode('choose'); setAddDialogOpen(true) }}
                   disabled={selectedJob?.status === 'Closed'}
                   sx={{
                     background: selectedJob?.status === 'Closed' ? '#94a3b8' : '#020291', color: 'white', borderRadius: '8px',
@@ -856,7 +908,12 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                       return (
                         <tr
                           key={candidate.id}
-                          style={{ borderBottom: '1px solid #f1f5f9' }}
+                          style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                          onClick={(e) => {
+                            // Don't navigate if clicking a button or action element
+                            if ((e.target as HTMLElement).closest('button, .job-action-btn, .MuiChip-root')) return
+                            navigate(`/candidates?search=${encodeURIComponent(candidate.applicant_email)}`)
+                          }}
                           onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
                           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                         >
@@ -869,7 +926,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 {(candidate.applicant_name || 'U').charAt(0).toUpperCase()}
                               </Avatar>
                               <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { sm: '140px', md: '120px', lg: '140px' } }}>
+                                <Typography
+                                  onClick={() => navigate(`/candidates?search=${encodeURIComponent(candidate.applicant_email)}`)}
+                                  sx={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { sm: '140px', md: '120px', lg: '140px' }, cursor: 'pointer', '&:hover': { color: '#020291', textDecoration: 'underline' } }}>
                                   {candidate.applicant_name}
                                 </Typography>
                                 <Typography sx={{ fontSize: '10px', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { sm: '140px', md: '120px', lg: '140px' } }}>
@@ -1002,7 +1061,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                   '&:hover': { background: hoverBg, color: '#fff', borderColor }
                 })
                 return (
-                  <Box key={candidate.id} sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', p: 1.5 }}>
+                  <Box key={candidate.id} sx={{ borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', p: 1.5, cursor: 'pointer', '&:hover': { borderColor: '#cbd5e1', background: '#f8fafc' } }}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('button, .MuiChip-root')) return
+                      navigate(`/candidates?search=${encodeURIComponent(candidate.applicant_email)}`)
+                    }}>
                     {/* Row 1: Avatar + Name + Status */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                       <Avatar sx={{
@@ -1012,7 +1075,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                         {(candidate.applicant_name || 'U').charAt(0).toUpperCase()}
                       </Avatar>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography
+                          onClick={() => navigate(`/candidates?search=${encodeURIComponent(candidate.applicant_email)}`)}
+                          sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', '&:hover': { color: '#020291', textDecoration: 'underline' } }}>
                           {candidate.applicant_name}
                         </Typography>
                         <Typography sx={{ fontSize: '11px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1304,7 +1369,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       </Box>{/* End Two Column Layout */}
 
       {/* ─── Add Candidate Dialog ─── */}
-      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth
+      <Dialog open={addDialogOpen} onClose={() => { setAddDialogOpen(false); setAddMode('choose'); setExistingSearch(''); setExistingResults([]) }} maxWidth="sm" fullWidth
         PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
           <Box sx={{ display: 'flex', gap: 1.5 }}>
@@ -1312,15 +1377,128 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#020291', color: 'white'
             }}>
-              <i className="fas fa-user-plus" />
+              <i className={addMode === 'existing' ? 'fas fa-search' : 'fas fa-user-plus'} />
             </Box>
             <Box>
-              <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>Add Candidate</Typography>
-              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Add a new candidate for this position</Typography>
+              <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>
+                {addMode === 'choose' ? 'Add Candidate' : addMode === 'new' ? 'Add New Candidate' : 'Add Existing Candidate'}
+              </Typography>
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                {addMode === 'choose' ? 'Choose how to add a candidate' : addMode === 'new' ? 'Add a new candidate for this position' : 'Search and select an existing candidate'}
+              </Typography>
             </Box>
           </Box>
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
+          {/* ─── Choose Mode ─── */}
+          {addMode === 'choose' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Box
+                onClick={() => setAddMode('new')}
+                sx={{
+                  p: 2.5, borderRadius: '12px', border: '1px solid #e2e8f0', cursor: 'pointer',
+                  transition: 'all 0.2s', '&:hover': { borderColor: '#020291', background: '#f8fafc' }
+                }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#EEF0FF', color: '#020291' }}>
+                    <i className="fas fa-user-plus" style={{ fontSize: 16 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>Add New Candidate</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#64748b' }}>Enter candidate details and upload resume</Typography>
+                  </Box>
+                  <i className="fas fa-chevron-right" style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }} />
+                </Box>
+              </Box>
+              <Box
+                onClick={() => { setAddMode('existing'); fetchExistingCandidates() }}
+                sx={{
+                  p: 2.5, borderRadius: '12px', border: '1px solid #e2e8f0', cursor: 'pointer',
+                  transition: 'all 0.2s', '&:hover': { borderColor: '#020291', background: '#f8fafc' }
+                }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0fdf4', color: '#16a34a' }}>
+                    <i className="fas fa-search" style={{ fontSize: 16 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>Add Existing Candidate</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#64748b' }}>Search by name or email from existing candidates</Typography>
+                  </Box>
+                  <i className="fas fa-chevron-right" style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }} />
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {/* ─── Existing Candidate Search ─── */}
+          {addMode === 'existing' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <TextField
+                fullWidth
+                placeholder="Search by name or email..."
+                value={existingSearch}
+                onChange={e => handleSearchExisting(e.target.value)}
+                autoFocus
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }}
+                InputProps={{
+                  startAdornment: <Box sx={{ mr: 1, color: '#94a3b8' }}><i className="fas fa-search" style={{ fontSize: 14 }} /></Box>
+                }}
+              />
+              {existingLoading && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={24} sx={{ color: '#020291' }} />
+                </Box>
+              )}
+              {!existingLoading && existingResults.length === 0 && (
+                <Typography sx={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', py: 2 }}>
+                  {existingSearch.trim() ? 'No matching candidates found' : 'No candidates available'}
+                </Typography>
+              )}
+              {existingResults.map((c: any) => (
+                <Box
+                  key={c.id}
+                  onClick={() => !submitting && handleAddExistingCandidate(c.email)}
+                  sx={{
+                    p: 2, borderRadius: '10px', border: '1px solid #e2e8f0', cursor: submitting ? 'default' : 'pointer',
+                    opacity: submitting ? 0.6 : 1,
+                    transition: 'all 0.2s', '&:hover': submitting ? {} : { borderColor: '#020291', background: '#f8fafc' }
+                  }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Avatar sx={{
+                      width: 36, height: 36, fontSize: '14px', fontWeight: 700,
+                      background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', color: '#475569'
+                    }}>
+                      {(c.name || 'U').charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{c.name}</Typography>
+                      <Typography sx={{ fontSize: '11px', color: '#64748b' }}>{c.email}</Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      {c.experience && c.experience !== 'N/A' && (
+                        <Typography sx={{ fontSize: '11px', color: '#64748b' }}>{c.experience}</Typography>
+                      )}
+                      {c.skills?.length > 0 && (
+                        <Typography sx={{ fontSize: '10px', color: '#94a3b8', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.skills.slice(0, 3).join(', ')}
+                        </Typography>
+                      )}
+                    </Box>
+                    <i className="fas fa-plus-circle" style={{ fontSize: 16, color: '#020291' }} />
+                  </Box>
+                </Box>
+              ))}
+              {submitting && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  <CircularProgress size={20} sx={{ color: '#020291' }} />
+                  <Typography sx={{ fontSize: '13px', color: '#64748b', ml: 1 }}>Adding candidate...</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* ─── New Candidate Form ─── */}
+          {addMode === 'new' && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
             {/* Full Name + Email row */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
@@ -1486,21 +1664,30 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               </Box>
             </Box>
           </Box>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
-          <Button onClick={() => setAddDialogOpen(false)} sx={{
+          {addMode !== 'choose' && (
+            <Button onClick={() => { setAddMode('choose'); setExistingSearch(''); setExistingResults([]) }} sx={{
+              color: '#64748b', textTransform: 'none', px: 2, height: '40px', borderRadius: '10px', mr: 'auto',
+              '&:hover': { background: '#f1f5f9' }
+            }}><i className="fas fa-arrow-left" style={{ marginRight: 6, fontSize: 12 }} />Back</Button>
+          )}
+          <Button onClick={() => { setAddDialogOpen(false); setAddMode('choose'); setExistingSearch(''); setExistingResults([]) }} sx={{
             color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px',
             '&:hover': { background: '#f1f5f9' }
           }}>Cancel</Button>
-          <Button onClick={handleAddCandidate} disabled={submitting}
-            sx={{
-              background: '#020291', color: 'white',
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px',
-              '&:hover': { background: '#06109E' },
-              '&:disabled': { opacity: 0.6, color: 'white' }
-            }}>
-            {submitting ? <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Adding...</> : <>Add candidate <i className="fas fa-arrow-right" style={{ marginLeft: 8, fontSize: 12 }} /></>}
-          </Button>
+          {addMode === 'new' && (
+            <Button onClick={handleAddCandidate} disabled={submitting}
+              sx={{
+                background: '#020291', color: 'white',
+                borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px',
+                '&:hover': { background: '#06109E' },
+                '&:disabled': { opacity: 0.6, color: 'white' }
+              }}>
+              {submitting ? <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Adding...</> : <>Add candidate <i className="fas fa-arrow-right" style={{ marginLeft: 8, fontSize: 12 }} /></>}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

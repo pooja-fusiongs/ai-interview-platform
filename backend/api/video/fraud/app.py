@@ -39,7 +39,8 @@ router = APIRouter(tags=["Fraud Detection"])
 
 
 def get_or_create_fraud_analysis(db: Session, video_interview_id: int) -> FraudAnalysis:
-    """Get existing or create new FraudAnalysis record. Prevents duplicates."""
+    """Get existing or create new FraudAnalysis record. Prevents duplicates using row-level lock."""
+    # First check without lock (fast path)
     existing = (
         db.query(FraudAnalysis)
         .filter(FraudAnalysis.video_interview_id == video_interview_id)
@@ -47,25 +48,32 @@ def get_or_create_fraud_analysis(db: Session, video_interview_id: int) -> FraudA
     )
     if existing:
         return existing
-    # Create new record
+
+    # No record found — lock the VideoInterview row to serialize creation
+    vi = (
+        db.query(VideoInterview)
+        .filter(VideoInterview.id == video_interview_id)
+        .with_for_update()
+        .first()
+    )
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # Re-check after acquiring lock (another request may have created it)
+    existing = (
+        db.query(FraudAnalysis)
+        .filter(FraudAnalysis.video_interview_id == video_interview_id)
+        .first()
+    )
+    if existing:
+        return existing
+    # Safe to create — we hold the lock
     fraud = FraudAnalysis(
         video_interview_id=video_interview_id,
         analysis_status="pending",
     )
     db.add(fraud)
-    try:
-        db.flush()
-    except Exception:
-        db.rollback()
-        # Another request may have created it — fetch again
-        existing = (
-            db.query(FraudAnalysis)
-            .filter(FraudAnalysis.video_interview_id == video_interview_id)
-            .first()
-        )
-        if existing:
-            return existing
-        raise
+    db.flush()
     return fraud
 
 
@@ -344,6 +352,137 @@ def submit_lip_events(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/video/fraud/{video_interview_id}/voice-events  -- Live voice consistency
+# ---------------------------------------------------------------------------
+
+
+class VoiceEventPayload(BaseModel):
+    total_segments: int = 0
+    consistent_segments: int = 0
+    inconsistent_segments: int = 0
+    silent_segments: int = 0
+    avg_pitch: float = 0
+    pitch_shift_count: int = 0
+    max_pitch_deviation: float = 0
+    inconsistent_seconds: float = 0
+    detection_interval_ms: int = 1500
+
+
+@router.post("/api/video/fraud/{video_interview_id}/voice-events")
+def submit_voice_events(
+    video_interview_id: int,
+    payload: VoiceEventPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Receive real-time voice consistency stats from the candidate's browser.
+    No auth required — guest candidates call this during interviews.
+    """
+    vi = (
+        db.query(VideoInterview)
+        .filter(VideoInterview.id == video_interview_id)
+        .first()
+    )
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
+    if vi_status in ("cancelled", "no_show"):
+        raise HTTPException(status_code=400, detail="Interview is no longer active")
+
+    # Calculate voice consistency score
+    voiced_segments = payload.consistent_segments + payload.inconsistent_segments
+    if voiced_segments == 0:
+        voice_score = 1.0  # No voice data — neutral
+    else:
+        consistency_ratio = payload.consistent_segments / voiced_segments
+        # Penalize pitch shifts
+        shift_penalty = min(0.3, payload.pitch_shift_count * 0.03)
+        voice_score = max(0.0, min(1.0, consistency_ratio - shift_penalty))
+
+    details = json.dumps({
+        "total_segments": payload.total_segments,
+        "consistent_segments": payload.consistent_segments,
+        "inconsistent_segments": payload.inconsistent_segments,
+        "silent_segments": payload.silent_segments,
+        "avg_pitch_hz": round(payload.avg_pitch, 1),
+        "pitch_shift_count": payload.pitch_shift_count,
+        "max_pitch_deviation_pct": round(payload.max_pitch_deviation * 100, 1),
+        "inconsistent_seconds": round(payload.inconsistent_seconds, 1),
+        "consistency_ratio": round(consistency_ratio if voiced_segments > 0 else 1.0, 3),
+    })
+
+    # Build voice flags
+    voice_flags = []
+    if voiced_segments > 0:
+        inconsistency_ratio = payload.inconsistent_segments / voiced_segments
+        if inconsistency_ratio > 0.2 or payload.pitch_shift_count > 5:
+            voice_flags.append({
+                "flag_type": "voice_pattern_change",
+                "severity": "high" if inconsistency_ratio > 0.4 or payload.pitch_shift_count > 10 else "medium",
+                "description": f"Voice pattern changed {payload.pitch_shift_count} times ({round(inconsistency_ratio * 100)}% inconsistent)",
+                "confidence": round(inconsistency_ratio, 2),
+                "timestamp_seconds": 0,
+            })
+
+    # Get or create single FraudAnalysis record
+    existing = get_or_create_fraud_analysis(db, video_interview_id)
+    now = datetime.utcnow()
+
+    # Keep worst voice consistency score
+    if existing.voice_consistency_score is not None:
+        existing.voice_consistency_score = round(min(voice_score, existing.voice_consistency_score), 3)
+    else:
+        existing.voice_consistency_score = round(voice_score, 3)
+    existing.voice_consistency_details = details
+
+    # Merge voice flags
+    existing_flags = []
+    old_voice_flags = []
+    if existing.flags:
+        try:
+            parsed = json.loads(existing.flags)
+            existing_flags = [f for f in parsed if f.get("flag_type") != "voice_pattern_change"]
+            old_voice_flags = [f for f in parsed if f.get("flag_type") == "voice_pattern_change"]
+        except (json.JSONDecodeError, TypeError):
+            existing_flags = []
+
+    merged_voice_flags = {}
+    for f in old_voice_flags + voice_flags:
+        ft = f["flag_type"]
+        if ft not in merged_voice_flags:
+            merged_voice_flags[ft] = f
+        else:
+            sev_order = {"high": 3, "medium": 2, "low": 1}
+            old_sev = sev_order.get(merged_voice_flags[ft].get("severity", "low"), 0)
+            new_sev = sev_order.get(f.get("severity", "low"), 0)
+            if new_sev > old_sev or (new_sev == old_sev and f.get("confidence", 0) > merged_voice_flags[ft].get("confidence", 0)):
+                merged_voice_flags[ft] = f
+
+    all_flags = existing_flags + list(merged_voice_flags.values())
+    existing.flags = json.dumps(all_flags)
+    existing.flag_count = len(all_flags)
+
+    # Recalculate overall trust score
+    scores = [s for s in [
+        existing.voice_consistency_score,
+        existing.lip_sync_score,
+        existing.body_movement_score,
+        existing.face_detection_score,
+    ] if s is not None]
+    if scores:
+        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+
+    if existing.analysis_status == "pending":
+        existing.analysis_status = "completed"
+        existing.analyzed_at = now
+
+    db.commit()
+    db.refresh(existing)
+    return {"status": "updated", "voice_consistency_score": existing.voice_consistency_score, "flags": len(voice_flags)}
+
+
+# ---------------------------------------------------------------------------
 # POST /api/video/fraud/{video_interview_id}/analyze  -- Trigger analysis
 # ---------------------------------------------------------------------------
 
@@ -408,7 +547,7 @@ def trigger_fraud_analysis(
             try:
                 existing_realtime_flags = [
                     f for f in json.loads(existing.flags)
-                    if f.get("flag_type") in ("face_not_visible", "multiple_faces", "lip_sync_mismatch")
+                    if f.get("flag_type") in ("face_not_visible", "multiple_faces", "lip_sync_mismatch", "voice_pattern_change")
                 ]
             except (json.JSONDecodeError, TypeError):
                 existing_realtime_flags = []
@@ -417,7 +556,7 @@ def trigger_fraud_analysis(
         existing.flag_count = len(all_flags)
 
         # Recalculate overall trust score including real-time scores if available
-        # Use worst of: analysis lip_sync vs real-time lip_sync
+        # Use worst of: analysis scores vs real-time scores
         lip_score = results["lip_sync_score"]
         if existing.lip_sync_score is not None and lip_score is not None:
             lip_score = min(lip_score, existing.lip_sync_score)
@@ -425,8 +564,15 @@ def trigger_fraud_analysis(
             lip_score = existing.lip_sync_score
         existing.lip_sync_score = round(lip_score, 3) if lip_score is not None else None
 
+        voice_score = results["voice_consistency_score"]
+        if existing.voice_consistency_score is not None and voice_score is not None:
+            voice_score = min(voice_score, existing.voice_consistency_score)
+        elif existing.voice_consistency_score is not None:
+            voice_score = existing.voice_consistency_score
+        existing.voice_consistency_score = round(voice_score, 3) if voice_score is not None else None
+
         scores = [s for s in [
-            results["voice_consistency_score"],
+            voice_score,
             lip_score,
             results["body_movement_score"],
             existing.face_detection_score,

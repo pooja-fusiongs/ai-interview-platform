@@ -4,6 +4,7 @@ import { useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { useFaceDetection } from '../../hooks/useFaceDetection';
 import { useLipDetection } from '../../hooks/useLipDetection';
+import { useVoiceConsistency } from '../../hooks/useVoiceConsistency';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 interface FaceDetectionOverlayProps {
@@ -17,6 +18,7 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const lastFaceSentRef = useRef(0);
   const lastLipSentRef = useRef(0);
+  const lastVoiceSentRef = useRef(0);
   const faceSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lipSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -55,39 +57,21 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     };
   }, [localCameraTrack?.publication?.track?.mediaStreamTrack]);
 
-  // Get a dedicated mic stream for audio analysis
-  // LiveKit's track doesn't reliably feed AudioContext, so we get a separate stream
+  // Get mic stream for audio analysis — use LiveKit's track directly
   useEffect(() => {
     if (!localMicTrack?.publication?.track || !enabled) {
       setMicStream(null);
       return;
     }
 
-    let stream: MediaStream | null = null;
-    let cancelled = false;
-
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-      .then((s) => {
-        if (cancelled) {
-          s.getTracks().forEach(t => t.stop());
-          return;
-        }
-        stream = s;
-        setMicStream(s);
-      })
-      .catch(() => {
-        // Fallback: try LiveKit track directly
-        const micMediaTrack = localMicTrack?.publication?.track?.mediaStreamTrack;
-        if (micMediaTrack && !cancelled) {
-          setMicStream(new MediaStream([micMediaTrack]));
-        }
-      });
+    const micMediaTrack = localMicTrack.publication.track.mediaStreamTrack;
+    if (micMediaTrack) {
+      const stream = new MediaStream([micMediaTrack]);
+      setMicStream(stream);
+      console.log(`[FraudDetection] Mic stream set from LiveKit track: ${micMediaTrack.label}`);
+    }
 
     return () => {
-      cancelled = true;
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
       setMicStream(null);
     };
   }, [localMicTrack?.publication?.track, enabled]);
@@ -107,6 +91,13 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     intervalMs: 1500,
   });
 
+  // --- Voice Consistency (every 1500ms — audio-only, lightweight) ---
+  const { alerts: voiceAlerts, status: voiceStatus, getLatestStats: getVoiceStats } = useVoiceConsistency({
+    audioStream: micStream,
+    enabled: enabled && !!micStream,
+    intervalMs: 1500,
+  });
+
   // Send face detection stats every 30s
   useEffect(() => {
     if (!videoInterviewId || !enabled) return;
@@ -118,6 +109,7 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
       lastFaceSentRef.current = s.totalDetections;
 
       try {
+        console.log(`[FraudDetection] Sending face stats: detections=${s.totalDetections}, noFace=${s.noFaceCount}, multi=${s.multipleFaceCount}`);
         await fraudDetectionService.submitFaceEvents(videoInterviewId, {
           total_detections: s.totalDetections,
           no_face_count: s.noFaceCount,
@@ -128,11 +120,13 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
           max_faces_detected: s.maxFacesDetected,
           detection_interval_ms: 750,
         });
-      } catch {
-        // Silently handle
+      } catch (err) {
+        console.error('[FraudDetection] Face event failed:', err);
       }
     };
 
+    // Send face stats first, then lip and voice follow with staggered delays
+    sendFaceStats(); // Send immediately to create the record first
     faceSendIntervalRef.current = setInterval(sendFaceStats, 30000);
     return () => {
       if (faceSendIntervalRef.current) clearInterval(faceSendIntervalRef.current);
@@ -151,6 +145,7 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
       lastLipSentRef.current = s.totalFrames;
 
       try {
+        console.log(`[FraudDetection] Sending lip stats: frames=${s.totalFrames}, noFace=${s.noFaceFrames}, mismatch=${s.lipStillWithAudio}`);
         await fraudDetectionService.submitLipEvents(videoInterviewId, {
           total_frames: s.totalFrames,
           lip_moving_with_audio: s.lipMovingWithAudio,
@@ -163,17 +158,64 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
           mismatch_seconds: s.mismatchSeconds,
           detection_interval_ms: 750,
         });
-      } catch {
-        // Silently handle
+      } catch (err) {
+        console.error('[FraudDetection] Lip event failed:', err);
       }
     };
 
-    lipSendIntervalRef.current = setInterval(sendLipStats, 30000);
+    // Delay lip stats by 5s so face record is created first
+    const lipDelay = setTimeout(() => {
+      sendLipStats();
+      lipSendIntervalRef.current = setInterval(sendLipStats, 30000);
+    }, 5000);
     return () => {
+      clearTimeout(lipDelay);
       if (lipSendIntervalRef.current) clearInterval(lipSendIntervalRef.current);
       sendLipStats();
     };
   }, [videoInterviewId, enabled, getLipStats]);
+
+  // Send voice consistency stats every 30s
+  useEffect(() => {
+    if (!videoInterviewId || !enabled) return;
+
+    let voiceSendInterval: ReturnType<typeof setInterval> | null = null;
+
+    const sendVoiceStats = async () => {
+      const s = getVoiceStats();
+      if (s.totalSegments === 0) return;
+      if (s.totalSegments === lastVoiceSentRef.current) return;
+      lastVoiceSentRef.current = s.totalSegments;
+
+      try {
+        console.log(`[FraudDetection] Sending voice stats: segments=${s.totalSegments}, silent=${s.silentSegments}, shifts=${s.pitchShiftCount}, pitch=${s.avgPitch.toFixed(1)}Hz`);
+        await fraudDetectionService.submitVoiceEvents(videoInterviewId, {
+          total_segments: s.totalSegments,
+          consistent_segments: s.consistentSegments,
+          inconsistent_segments: s.inconsistentSegments,
+          silent_segments: s.silentSegments,
+          avg_pitch: s.avgPitch,
+          pitch_shift_count: s.pitchShiftCount,
+          max_pitch_deviation: s.maxPitchDeviation,
+          inconsistent_seconds: s.inconsistentSeconds,
+          detection_interval_ms: 1500,
+        });
+      } catch (err) {
+        console.error('[FraudDetection] Voice event failed:', err);
+      }
+    };
+
+    // Delay voice stats by 10s so face record is created first
+    const voiceDelay = setTimeout(() => {
+      sendVoiceStats();
+      voiceSendInterval = setInterval(sendVoiceStats, 30000);
+    }, 10000);
+    return () => {
+      clearTimeout(voiceDelay);
+      if (voiceSendInterval) clearInterval(voiceSendInterval);
+      sendVoiceStats();
+    };
+  }, [videoInterviewId, enabled, getVoiceStats]);
 
   // --- UI State ---
   const [showNormal, setShowNormal] = useState(true);
@@ -239,6 +281,22 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     lipChipVisible = true;
   }
 
+  // Voice consistency chip
+  const hasVoiceChange = voiceAlerts.some((a) => a.type === 'voice_change');
+  let voiceChipVisible = false;
+  let voiceChipLabel = '';
+  let voiceChipColor = '';
+  let voiceChipBg = '';
+  let voiceDotColor = '';
+
+  if (voiceStatus === 'running' && hasVoiceChange) {
+    voiceChipLabel = 'Voice pattern change';
+    voiceChipColor = '#c4b5fd';
+    voiceChipBg = 'rgba(109,40,217,0.85)';
+    voiceDotColor = '#8b5cf6';
+    voiceChipVisible = true;
+  }
+
   const chipSx = (bg: string, color: string) => ({
     backgroundColor: bg,
     color: color,
@@ -294,6 +352,18 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
             icon={<Box sx={dotSx(lipDotColor, true)} />}
             label={lipChipLabel}
             sx={chipSx(lipChipBg, lipChipColor)}
+          />
+        </Box>
+      )}
+
+      {/* Voice consistency chip — shown below lip chip */}
+      {voiceChipVisible && (
+        <Box sx={{ position: 'fixed', top: (faceVisible ? 114 : 80) + (lipChipVisible ? 34 : 0), right: 24, zIndex: 1000, transition: 'all 0.3s ease' }}>
+          <Chip
+            size="small"
+            icon={<Box sx={dotSx(voiceDotColor, true)} />}
+            label={voiceChipLabel}
+            sx={chipSx(voiceChipBg, voiceChipColor)}
           />
         </Box>
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Candidate, CandidateFilters } from '../../types'
 import { apiClient } from '../../services/api'
 import { toast } from 'react-hot-toast'
@@ -54,7 +54,8 @@ const getAvatarColor = (name: string): string => {
 
 const Candidates = () => {
   const navigate = useNavigate()
-  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('search') || '')
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCandidate, setMenuCandidate] = useState<Candidate | null>(null)
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
@@ -80,6 +81,11 @@ const Candidates = () => {
   const [isTranscriptUploadOpen, setIsTranscriptUploadOpen] = useState(false)
   const [transcriptText, setTranscriptText] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+
+  // Edit candidate state
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', experience_years: '', current_position: '', location: '', linkedin_url: '', notice_period: '', current_ctc: '', expected_ctc: '' })
+  const [editSaving, setEditSaving] = useState(false)
   const [, setCandidateInterviews] = useState<any[]>([])
   const [candidateQuestionSessions, setCandidateQuestionSessions] = useState<Record<number, string>>({})
 
@@ -174,6 +180,19 @@ const Candidates = () => {
     fetchJobs()
   }, [])
 
+  // Auto-open detail drawer when navigated with ?search=email
+  useEffect(() => {
+    const searchEmail = searchParams.get('search')
+    if (searchEmail && candidates.length > 0) {
+      const match = candidates.find((c: Candidate) => c.email?.toLowerCase() === searchEmail.toLowerCase())
+      if (match && !isDetailOpen) {
+        handleViewDetails(match)
+        // Clear the search param so it doesn't re-trigger
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [candidates, searchParams])
+
   // Set up real-time status updates (every 60 seconds)
   useEffect(() => {
     const interval = setInterval(updateOnlineStatus, 60000)
@@ -208,10 +227,67 @@ const Candidates = () => {
       const response = await apiClient.patch(`/api/candidates/${candidate.id}/toggle-status`)
       const newStatus = response.data.is_active
       setCandidates(prev => prev.map(c => c.id === candidate.id ? { ...c, is_active: newStatus } : c))
+      // Also update the detail panel if open
+      if (detailCandidate && detailCandidate.id === candidate.id) {
+        setDetailCandidate({ ...detailCandidate, is_active: newStatus })
+      }
       toast.success(`Candidate marked as ${newStatus ? 'Active' : 'Inactive'}`)
     } catch (error) {
       console.error('Error toggling status:', error)
       toast.error('Failed to update status')
+    }
+  }
+
+  const handleOpenEdit = (candidate: Candidate) => {
+    setEditForm({
+      name: candidate.name || '',
+      email: candidate.email || '',
+      phone: candidate.phone || '',
+      experience_years: candidate.experience ? candidate.experience.replace(/[^0-9]/g, '') : '',
+      current_position: candidate.currentPosition || '',
+      location: candidate.location || '',
+      linkedin_url: '',
+      notice_period: '',
+      current_ctc: '',
+      expected_ctc: '',
+    })
+    setIsEditOpen(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!detailCandidate) return
+    setEditSaving(true)
+    try {
+      const payload: Record<string, any> = {}
+      if (editForm.name) payload.name = editForm.name
+      if (editForm.email) payload.email = editForm.email
+      if (editForm.phone) payload.phone = editForm.phone
+      if (editForm.experience_years) payload.experience_years = parseInt(editForm.experience_years) || 0
+      if (editForm.current_position) payload.current_position = editForm.current_position
+      if (editForm.location) payload.location = editForm.location
+      if (editForm.linkedin_url) payload.linkedin_url = editForm.linkedin_url
+      if (editForm.notice_period) payload.notice_period = editForm.notice_period
+      if (editForm.current_ctc) payload.current_ctc = editForm.current_ctc
+      if (editForm.expected_ctc) payload.expected_ctc = editForm.expected_ctc
+
+      await apiClient.patch(`/api/candidates/${detailCandidate.id}/edit`, payload)
+      toast.success('Candidate updated successfully')
+      setIsEditOpen(false)
+      // Refresh candidates list and update detail panel
+      fetchCandidates()
+      setDetailCandidate({
+        ...detailCandidate,
+        name: editForm.name || detailCandidate.name,
+        email: editForm.email || detailCandidate.email,
+        phone: editForm.phone || detailCandidate.phone,
+        experience: editForm.experience_years ? `${editForm.experience_years} years` : detailCandidate.experience,
+        currentPosition: editForm.current_position || detailCandidate.currentPosition,
+        location: editForm.location || detailCandidate.location,
+      })
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to update candidate')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -1505,9 +1581,16 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                       <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{detailCandidate.email}</Typography>
                     </Box>
                   </Box>
-                  <IconButton onClick={handleCloseDetails} size="small" sx={{ color: '#94a3b8', alignSelf: 'flex-start' }}>
-                    <i className="fas fa-times" style={{ fontSize: '14px' }}></i>
-                  </IconButton>
+                  <Box sx={{ display: 'flex', gap: 0.5, alignSelf: 'flex-start' }}>
+                    <Tooltip title="Edit candidate">
+                      <IconButton onClick={() => handleOpenEdit(detailCandidate)} size="small" sx={{ color: '#94a3b8', '&:hover': { color: '#020291' } }}>
+                        <i className="fas fa-pen" style={{ fontSize: '12px' }}></i>
+                      </IconButton>
+                    </Tooltip>
+                    <IconButton onClick={handleCloseDetails} size="small" sx={{ color: '#94a3b8' }}>
+                      <i className="fas fa-times" style={{ fontSize: '14px' }}></i>
+                    </IconButton>
+                  </Box>
                 </Box>
                 {/* Info row with icons */}
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -1529,6 +1612,35 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                       <Typography sx={{ fontSize: '12px', color: '#64748b' }}>{detailCandidate.experience}</Typography>
                     </Box>
                   )}
+                </Box>
+
+                {/* Action buttons: Toggle Active/Inactive */}
+                <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                  <Button
+                    size="small"
+                    onClick={() => handleToggleStatus(detailCandidate)}
+                    sx={{
+                      textTransform: 'none', fontSize: '12px', fontWeight: 600, borderRadius: '8px', px: 2, height: '32px',
+                      border: '1px solid',
+                      borderColor: detailCandidate.is_active !== false ? '#dc2626' : '#16a34a',
+                      color: detailCandidate.is_active !== false ? '#dc2626' : '#16a34a',
+                      '&:hover': {
+                        background: detailCandidate.is_active !== false ? '#fef2f2' : '#f0fdf4',
+                      }
+                    }}
+                  >
+                    <i className={detailCandidate.is_active !== false ? 'fas fa-user-slash' : 'fas fa-user-check'} style={{ fontSize: 11, marginRight: 6 }} />
+                    {detailCandidate.is_active !== false ? 'Mark Inactive' : 'Mark Active'}
+                  </Button>
+                  <Chip
+                    size="small"
+                    label={detailCandidate.is_active !== false ? 'Active' : 'Inactive'}
+                    sx={{
+                      fontWeight: 600, fontSize: '11px', height: '32px',
+                      background: detailCandidate.is_active !== false ? '#ecfdf5' : '#fef2f2',
+                      color: detailCandidate.is_active !== false ? '#059669' : '#dc2626',
+                    }}
+                  />
                 </Box>
               </Box>
 
@@ -1640,6 +1752,100 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             </Box>
           )}
         </Drawer>
+
+        {/* Edit Candidate Dialog */}
+        <Dialog open={isEditOpen} onClose={() => !editSaving && setIsEditOpen(false)} maxWidth="sm" fullWidth
+          PaperProps={{ sx: { borderRadius: '16px' } }}>
+          <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              <Box sx={{ width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#020291', color: 'white' }}>
+                <i className="fas fa-user-edit" />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>Edit Candidate</Typography>
+                <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Update candidate details</Typography>
+              </Box>
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ pt: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Full Name</Typography>
+                  <TextField fullWidth value={editForm.name} onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Email</Typography>
+                  <TextField fullWidth value={editForm.email} onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Phone</Typography>
+                  <TextField fullWidth value={editForm.phone} onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                    inputProps={{ maxLength: 10 }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Experience (Years)</Typography>
+                  <TextField fullWidth type="number" value={editForm.experience_years} onChange={e => setEditForm(prev => ({ ...prev, experience_years: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Current Position</Typography>
+                  <TextField fullWidth value={editForm.current_position} onChange={e => setEditForm(prev => ({ ...prev, current_position: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Location</Typography>
+                  <TextField fullWidth value={editForm.location} onChange={e => setEditForm(prev => ({ ...prev, location: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>LinkedIn</Typography>
+                  <TextField fullWidth value={editForm.linkedin_url} onChange={e => setEditForm(prev => ({ ...prev, linkedin_url: e.target.value }))}
+                    placeholder="https://linkedin.com/in/..."
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Notice Period</Typography>
+                  <TextField fullWidth value={editForm.notice_period} onChange={e => setEditForm(prev => ({ ...prev, notice_period: e.target.value }))}
+                    placeholder="30 days"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Current CTC</Typography>
+                  <TextField fullWidth value={editForm.current_ctc} onChange={e => setEditForm(prev => ({ ...prev, current_ctc: e.target.value }))}
+                    placeholder="12 LPA"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Expected CTC</Typography>
+                  <TextField fullWidth value={editForm.expected_ctc} onChange={e => setEditForm(prev => ({ ...prev, expected_ctc: e.target.value }))}
+                    placeholder="18 LPA"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+            <Button onClick={() => setIsEditOpen(false)} disabled={editSaving} sx={{ color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px', '&:hover': { background: '#f1f5f9' } }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={editSaving}
+              sx={{ background: '#020291', color: 'white', borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px', '&:hover': { background: '#06109E' }, '&:disabled': { opacity: 0.6, color: 'white' } }}>
+              {editSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Navigation>
   )

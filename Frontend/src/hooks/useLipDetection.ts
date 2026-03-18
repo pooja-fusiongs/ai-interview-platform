@@ -46,7 +46,7 @@ const CHIN_IDX = 152;
 
 // Thresholds
 const LIP_MOVEMENT_THRESHOLD = 0.06;  // Mouth openness (normalized) threshold — closed mouth ~0.03-0.05, open ~0.08+
-const AUDIO_RMS_THRESHOLD = 0.008;    // Audio RMS threshold to count as "active speech"
+const AUDIO_RMS_THRESHOLD = 0.004;    // Audio RMS threshold to count as "active speech" (lowered for virtual audio cables)
 const MISMATCH_CONSECUTIVE = 4;       // Consecutive mismatches before alert (~6s at 1500ms interval)
 
 const emptyStats: LipDetectionStats = {
@@ -171,21 +171,25 @@ export function useLipDetection({
 
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
         );
 
         if (cancelled) return;
 
+        console.log('[LipDetection] Loading FaceLandmarker model...');
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-            delegate: 'GPU',
+            delegate: 'CPU',
           },
           runningMode: 'VIDEO',
           numFaces: 1,
-          minFaceDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
+          minFaceDetectionConfidence: 0.3,
+          minTrackingConfidence: 0.3,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
         });
+        console.log('[LipDetection] FaceLandmarker model loaded successfully');
 
         if (cancelled) {
           landmarker.close();
@@ -202,9 +206,15 @@ export function useLipDetection({
           if (videoElement.readyState < 2 || videoElement.videoWidth === 0) return;
 
           try {
-            const result = landmarkerRef.current.detectForVideo(videoElement, performance.now());
+            const now = performance.now();
+            const result = landmarkerRef.current.detectForVideo(videoElement, now);
             const s = statsRef.current;
             s.totalFrames += 1;
+
+            // Log first few frames to debug
+            if (s.totalFrames <= 5) {
+              console.log(`[LipDetection] Frame ${s.totalFrames}: faces=${result.faceLandmarks?.length || 0}, videoReady=${videoElement.readyState}, size=${videoElement.videoWidth}x${videoElement.videoHeight}`);
+            }
 
             // Get audio level
             const rms = getAudioRMS();
@@ -288,11 +298,14 @@ export function useLipDetection({
             if (s.totalFrames % 10 === 0) {
               setStats({ ...s });
             }
-          } catch {
-            // Skip frame errors
+          } catch (frameErr) {
+            if (statsRef.current.totalFrames <= 3) {
+              console.error('[LipDetection] Frame error:', frameErr);
+            }
           }
         }, intervalMs);
-      } catch {
+      } catch (initErr) {
+        console.error('[LipDetection] Init error:', initErr);
         if (!cancelled) {
           setStatus('error');
         }

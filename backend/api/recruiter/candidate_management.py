@@ -193,6 +193,178 @@ async def add_candidate_to_job(
         "auto_filled_from_resume": bool(contact_info and any(contact_info.values())),
     }
 
+# ─────────────────────────────────────────────
+# POST /api/recruiter/job/{job_id}/add-existing-candidate
+# ─────────────────────────────────────────────
+from pydantic import BaseModel
+
+
+class AddExistingCandidatePayload(BaseModel):
+    candidate_email: str
+
+
+@router.post("/api/recruiter/job/{job_id}/add-existing-candidate")
+def add_existing_candidate_to_job(
+    job_id: int,
+    payload: AddExistingCandidatePayload,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Add an existing candidate (by email) to a job. Copies their details from the most recent application."""
+    _require_recruiter(current_user)
+
+    job = db.query(Job).filter(Job.id == job_id, Job.is_active == True).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == "Closed":
+        raise HTTPException(status_code=400, detail="Cannot add candidates to a closed job")
+
+    candidate_email = payload.candidate_email.strip().lower()
+    if not candidate_email:
+        raise HTTPException(status_code=400, detail="Candidate email is required")
+
+    # Check if already added to this job
+    existing = db.query(JobApplication).filter(
+        JobApplication.job_id == job_id,
+        func.lower(JobApplication.applicant_email) == candidate_email
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Candidate already added to this job")
+
+    # Find the most recent application for this candidate
+    source_app = db.query(JobApplication).filter(
+        func.lower(JobApplication.applicant_email) == candidate_email
+    ).order_by(JobApplication.applied_at.desc()).first()
+    if not source_app:
+        raise HTTPException(status_code=404, detail="No existing candidate found with this email")
+
+    # Create new application for this job using existing candidate details
+    from services.encryption_service import encrypt_pii
+    application = JobApplication(
+        job_id=job_id,
+        applicant_name=source_app.applicant_name,
+        applicant_email=source_app.applicant_email,
+        applicant_phone=source_app.applicant_phone or "",
+        experience_years=source_app.experience_years or 0,
+        current_position=source_app.current_position or "",
+        location=source_app.location or None,
+        linkedin_url=source_app.linkedin_url or None,
+        availability=source_app.availability or None,
+        current_ctc=source_app.current_ctc or None,
+        expected_salary=source_app.expected_salary or None,
+        status="Added by Recruiter",
+        added_by=current_user.id
+    )
+    db.add(application)
+    db.flush()
+
+    # Copy resume if the source application has one
+    source_resume = db.query(CandidateResume).filter(
+        CandidateResume.candidate_id == source_app.id
+    ).first()
+    if source_resume:
+        candidate_resume = CandidateResume(
+            candidate_id=application.id,
+            job_id=job_id,
+            resume_path=source_resume.resume_path,
+            original_filename=source_resume.original_filename,
+            file_size=source_resume.file_size,
+            parsed_text=source_resume.parsed_text,
+            skills=source_resume.skills,
+            experience_years=source_resume.experience_years,
+            experience_level=source_resume.experience_level,
+            parsing_status=source_resume.parsing_status
+        )
+        db.add(candidate_resume)
+
+    db.commit()
+    db.refresh(application)
+
+    return {
+        "id": application.id,
+        "applicant_name": application.applicant_name,
+        "applicant_email": application.applicant_email,
+        "status": application.status,
+        "copied_from_application": source_app.id,
+        "resume_copied": source_resume is not None,
+    }
+
+
+# ─────────────────────────────────────────────
+# PATCH /api/candidates/{candidate_id}/edit
+# ─────────────────────────────────────────────
+
+
+class EditCandidatePayload(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    experience_years: Optional[int] = None
+    current_position: Optional[str] = None
+    location: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    notice_period: Optional[str] = None
+    current_ctc: Optional[str] = None
+    expected_ctc: Optional[str] = None
+
+
+@router.patch("/api/candidates/{candidate_id}/edit")
+def edit_candidate(
+    candidate_id: int,
+    payload: EditCandidatePayload,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Edit candidate details. Updates all applications with the same email."""
+    _require_recruiter(current_user)
+
+    application = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    old_email = application.applicant_email.lower()
+
+    # Find all applications for this candidate (same email)
+    all_apps = db.query(JobApplication).filter(
+        func.lower(JobApplication.applicant_email) == old_email
+    ).all()
+
+    from services.encryption_service import encrypt_pii
+
+    for app in all_apps:
+        if payload.name is not None:
+            app.applicant_name = payload.name
+        if payload.email is not None:
+            app.applicant_email = payload.email
+        if payload.phone is not None:
+            app.applicant_phone = encrypt_pii(payload.phone) if payload.phone else ""
+        if payload.experience_years is not None:
+            app.experience_years = payload.experience_years
+        if payload.current_position is not None:
+            app.current_position = payload.current_position
+        if payload.location is not None:
+            app.location = payload.location
+        if payload.linkedin_url is not None:
+            app.linkedin_url = payload.linkedin_url
+        if payload.notice_period is not None:
+            app.availability = payload.notice_period
+        if payload.current_ctc is not None:
+            app.current_ctc = payload.current_ctc
+        if payload.expected_ctc is not None:
+            app.expected_salary = payload.expected_ctc
+
+    db.commit()
+    db.refresh(application)
+
+    return {
+        "id": application.id,
+        "applicant_name": application.applicant_name,
+        "applicant_email": application.applicant_email,
+        "experience_years": application.experience_years,
+        "location": application.location,
+        "updated_count": len(all_apps),
+    }
+
 
 # ─────────────────────────────────────────────
 # GET /api/recruiter/job/{job_id}/candidates
