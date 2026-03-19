@@ -2,9 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Box, Chip } from '@mui/material';
 import { useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { useFaceDetection } from '../../hooks/useFaceDetection';
-import { useLipDetection } from '../../hooks/useLipDetection';
-import { useVoiceConsistency } from '../../hooks/useVoiceConsistency';
+import { useDetection } from '../../hooks/useDetection';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
 interface FaceDetectionOverlayProps {
@@ -16,12 +14,7 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoReady, setVideoReady] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
-  const lastFaceSentRef = useRef(0);
-  const lastLipSentRef = useRef(0);
-  const lastVoiceSentRef = useRef(0);
-  const faceSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lipSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  
   // Get local camera + mic tracks from LiveKit
   const tracks = useTracks(
     [
@@ -38,24 +31,43 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     (t) => t.participant?.isLocal && t.source === Track.Source.Microphone
   );
 
+  // Check if camera is actually enabled (not muted)
+  const isCameraMuted = localCameraTrack?.publication?.isMuted ?? true;
+  const cameraTrackEnabled = !isCameraMuted && !!localCameraTrack?.publication?.track?.mediaStreamTrack;
+
   // Attach camera track to hidden video element
   useEffect(() => {
     const videoEl = videoRef.current;
-    if (!videoEl || !localCameraTrack?.publication?.track?.mediaStreamTrack) {
+    if (!videoEl || !cameraTrackEnabled || !localCameraTrack?.publication?.track?.mediaStreamTrack) {
       setVideoReady(false);
+      if (videoEl) videoEl.srcObject = null;
       return;
     }
 
     const mediaStreamTrack = localCameraTrack.publication.track.mediaStreamTrack;
     videoEl.srcObject = new MediaStream([mediaStreamTrack]);
-    videoEl.play().catch(() => {});
-    setVideoReady(true);
+
+    const onCanPlay = () => {
+      setVideoReady(true);
+    };
+
+    // Only mark ready once the video has enough data to process frames
+    if (videoEl.readyState >= 2) {
+      setVideoReady(true);
+    } else {
+      videoEl.addEventListener('canplay', onCanPlay, { once: true });
+    }
+
+    videoEl.play().catch((err) => {
+      console.warn('[FaceDetectionOverlay] Video play failed:', err);
+    });
 
     return () => {
+      videoEl.removeEventListener('canplay', onCanPlay);
       videoEl.srcObject = null;
       setVideoReady(false);
     };
-  }, [localCameraTrack?.publication?.track?.mediaStreamTrack]);
+  }, [localCameraTrack?.publication?.track?.mediaStreamTrack, cameraTrackEnabled]);
 
   // Get mic stream for audio analysis
   useEffect(() => {
@@ -70,35 +82,28 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     const lkTrack = localMicTrack.publication.track.mediaStreamTrack;
 
     const tryGetMic = async () => {
-      // Method 1: getUserMedia without deviceId constraint (gets default mic)
       try {
         const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
         ownStream = s;
-        const track = s.getAudioTracks()[0];
-        console.log(`[FraudDetection] Mic stream (getUserMedia): ${track?.label}, enabled=${track?.enabled}, muted=${track?.muted}`);
         setMicStream(s);
         return;
       } catch (e) {
         console.warn(`[FraudDetection] getUserMedia failed: ${e}`);
       }
 
-      // Method 2: Clone LiveKit's track (clone creates independent copy)
       if (cancelled) return;
       try {
         const cloned = lkTrack.clone();
         const s = new MediaStream([cloned]);
-        console.log(`[FraudDetection] Mic stream (cloned LiveKit): ${cloned.label}, enabled=${cloned.enabled}, muted=${cloned.muted}, readyState=${cloned.readyState}`);
         setMicStream(s);
         return;
       } catch (e) {
         console.warn(`[FraudDetection] Clone failed: ${e}`);
       }
 
-      // Method 3: Use LiveKit track directly (last resort)
       if (cancelled) return;
       const s = new MediaStream([lkTrack]);
-      console.log(`[FraudDetection] Mic stream (direct LiveKit): ${lkTrack.label}, enabled=${lkTrack.enabled}, readyState=${lkTrack.readyState}`);
       setMicStream(s);
     };
 
@@ -111,227 +116,63 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     };
   }, [localMicTrack?.publication?.track, enabled]);
 
-  // --- Face Detection (every 750ms) ---
-  const { faceCount, status: faceStatus, alerts: faceAlerts, getLatestStats: getFaceStats } = useFaceDetection({
-    videoElement: videoReady ? videoRef.current : null,
-    enabled: enabled && videoReady,
-    intervalMs: 750,
-  });
-
-  // --- Lip Detection (every 1500ms — heavier model, stagger with face detection) ---
-  const { alerts: lipAlerts, status: lipStatus, getLatestStats: getLipStats } = useLipDetection({
+  // --- Unified Detection Hook (approx 1fps) ---
+  const { status, faceCount: rawFaceCount, movementScore, extractAndResetPayload } = useDetection({
     videoElement: videoReady ? videoRef.current : null,
     audioStream: micStream,
     enabled: enabled && videoReady,
-    intervalMs: 1500,
+    intervalMs: 1000,
   });
 
-  // --- Voice Consistency (every 1500ms — audio-only, lightweight) ---
-  const { alerts: voiceAlerts, status: voiceStatus, getLatestStats: getVoiceStats } = useVoiceConsistency({
-    audioStream: micStream,
-    enabled: enabled && !!micStream,
-    intervalMs: 1500,
-  });
+  // Stabilize face count — only switch to "no face" after 2 consecutive misses
+  // For multi-face (>1), show immediately (important fraud signal)
+  // Camera off → immediately show "no face"
+  const noFaceStreakRef = React.useRef(0);
+  const lastNonZeroRef = React.useRef(1);
+  const [faceCount, setStableFaceCount] = React.useState(0);
 
-  // Send face detection stats every 30s
+  React.useEffect(() => {
+    // Camera off → immediately "no face"
+    if (!cameraTrackEnabled) {
+      noFaceStreakRef.current = 99;
+      setStableFaceCount(0);
+      return;
+    }
+
+    if (rawFaceCount === 0) {
+      noFaceStreakRef.current += 1;
+      if (noFaceStreakRef.current >= 2) {
+        setStableFaceCount(0);
+      }
+      // else keep showing last known face count (debounce flickering)
+    } else {
+      noFaceStreakRef.current = 0;
+      lastNonZeroRef.current = rawFaceCount;
+      setStableFaceCount(rawFaceCount);
+    }
+  }, [rawFaceCount, cameraTrackEnabled]);
+
+  // --- Send Unified Stats Every 5 Seconds ---
   useEffect(() => {
-    if (!videoInterviewId || !enabled) return;
+    if (!videoInterviewId || !enabled || status !== 'running') return;
 
-    const sendFaceStats = async () => {
-      const s = getFaceStats();
-      if (s.totalDetections === 0) return;
-      if (s.totalDetections === lastFaceSentRef.current) return;
-      lastFaceSentRef.current = s.totalDetections;
+    const interval = setInterval(async () => {
+      const payload = extractAndResetPayload(videoInterviewId);
+      
+      // Prevent sending empty payloads if detection just started
+      if (payload.total_detections === 0 && payload.total_segments === 0) return;
 
       try {
-        console.log(`[FraudDetection] Sending face stats: detections=${s.totalDetections}, noFace=${s.noFaceCount}, multi=${s.multipleFaceCount}`);
-        await fraudDetectionService.submitFaceEvents(videoInterviewId, {
-          total_detections: s.totalDetections,
-          no_face_count: s.noFaceCount,
-          multiple_face_count: s.multipleFaceCount,
-          single_face_count: s.singleFaceCount,
-          no_face_seconds: s.noFaceSeconds,
-          multiple_face_seconds: s.multipleFaceSeconds,
-          max_faces_detected: s.maxFacesDetected,
-          detection_interval_ms: 750,
-        });
+         await fraudDetectionService.submitUnifiedDetection(payload);
       } catch (err) {
-        console.error('[FraudDetection] Face event failed:', err);
+         console.error('[FraudDetection] Unified event failed:', err);
       }
-    };
-
-    // Send face stats first, then lip and voice follow with staggered delays
-    sendFaceStats(); // Send immediately to create the record first
-    faceSendIntervalRef.current = setInterval(sendFaceStats, 30000);
-    return () => {
-      if (faceSendIntervalRef.current) clearInterval(faceSendIntervalRef.current);
-      sendFaceStats();
-    };
-  }, [videoInterviewId, enabled, getFaceStats]);
-
-  // Send lip sync stats every 30s
-  useEffect(() => {
-    if (!videoInterviewId || !enabled) return;
-
-    const sendLipStats = async () => {
-      const s = getLipStats();
-      if (s.totalFrames === 0) return;
-      if (s.totalFrames === lastLipSentRef.current) return;
-      lastLipSentRef.current = s.totalFrames;
-
-      try {
-        console.log(`[FraudDetection] Sending lip stats: frames=${s.totalFrames}, noFace=${s.noFaceFrames}, mismatch=${s.lipStillWithAudio}`);
-        await fraudDetectionService.submitLipEvents(videoInterviewId, {
-          total_frames: s.totalFrames,
-          lip_moving_with_audio: s.lipMovingWithAudio,
-          lip_still_with_audio: s.lipStillWithAudio,
-          lip_moving_no_audio: s.lipMovingNoAudio,
-          lip_still_no_audio: s.lipStillNoAudio,
-          no_face_frames: s.noFaceFrames,
-          max_mouth_openness: s.maxMouthOpenness,
-          avg_mouth_openness: s.avgMouthOpenness,
-          mismatch_seconds: s.mismatchSeconds,
-          detection_interval_ms: 750,
-        });
-      } catch (err) {
-        console.error('[FraudDetection] Lip event failed:', err);
-      }
-    };
-
-    // Delay lip stats by 5s so face record is created first
-    const lipDelay = setTimeout(() => {
-      sendLipStats();
-      lipSendIntervalRef.current = setInterval(sendLipStats, 30000);
     }, 5000);
-    return () => {
-      clearTimeout(lipDelay);
-      if (lipSendIntervalRef.current) clearInterval(lipSendIntervalRef.current);
-      sendLipStats();
-    };
-  }, [videoInterviewId, enabled, getLipStats]);
 
-  // Send voice consistency stats every 30s
-  useEffect(() => {
-    if (!videoInterviewId || !enabled) return;
+    return () => clearInterval(interval);
+  }, [videoInterviewId, enabled, status, extractAndResetPayload]);
 
-    let voiceSendInterval: ReturnType<typeof setInterval> | null = null;
-
-    const sendVoiceStats = async () => {
-      const s = getVoiceStats();
-      if (s.totalSegments === 0) return;
-      if (s.totalSegments === lastVoiceSentRef.current) return;
-      lastVoiceSentRef.current = s.totalSegments;
-
-      try {
-        console.log(`[FraudDetection] Sending voice stats: segments=${s.totalSegments}, silent=${s.silentSegments}, shifts=${s.pitchShiftCount}, pitch=${s.avgPitch.toFixed(1)}Hz`);
-        await fraudDetectionService.submitVoiceEvents(videoInterviewId, {
-          total_segments: s.totalSegments,
-          consistent_segments: s.consistentSegments,
-          inconsistent_segments: s.inconsistentSegments,
-          silent_segments: s.silentSegments,
-          avg_pitch: s.avgPitch,
-          pitch_shift_count: s.pitchShiftCount,
-          max_pitch_deviation: s.maxPitchDeviation,
-          inconsistent_seconds: s.inconsistentSeconds,
-          detection_interval_ms: 1500,
-        });
-      } catch (err) {
-        console.error('[FraudDetection] Voice event failed:', err);
-      }
-    };
-
-    // Delay voice stats by 10s so face record is created first
-    const voiceDelay = setTimeout(() => {
-      sendVoiceStats();
-      voiceSendInterval = setInterval(sendVoiceStats, 30000);
-    }, 10000);
-    return () => {
-      clearTimeout(voiceDelay);
-      if (voiceSendInterval) clearInterval(voiceSendInterval);
-      sendVoiceStats();
-    };
-  }, [videoInterviewId, enabled, getVoiceStats]);
-
-  // --- UI State ---
-  const [showNormal, setShowNormal] = useState(true);
-  useEffect(() => {
-    if (faceAlerts.length === 0 && lipAlerts.length === 0 && faceStatus === 'running') {
-      const timer = setTimeout(() => setShowNormal(false), 5000);
-      return () => clearTimeout(timer);
-    }
-    setShowNormal(true);
-  }, [faceAlerts.length, lipAlerts.length, faceStatus, faceCount]);
-
-  // Face detection chip
-  const hasNoFace = faceAlerts.some((a) => a.type === 'no_face');
-  const hasMultiple = faceAlerts.some((a) => a.type === 'multiple_faces');
-
-  let faceChipLabel = '';
-  let faceChipColor = '';
-  let faceChipBg = '';
-  let faceDotColor = '';
-  let faceVisible = false;
-
-  if (faceStatus === 'loading') {
-    faceChipLabel = 'Face detection loading...';
-    faceChipColor = '#94a3b8';
-    faceChipBg = 'rgba(0,0,0,0.5)';
-    faceDotColor = '#94a3b8';
-    faceVisible = true;
-  } else if (faceStatus === 'running') {
-    if (hasMultiple) {
-      faceChipLabel = `${faceCount} faces detected`;
-      faceChipColor = '#fca5a5';
-      faceChipBg = 'rgba(220,38,38,0.85)';
-      faceDotColor = '#ef4444';
-      faceVisible = true;
-    } else if (hasNoFace) {
-      faceChipLabel = 'No face detected';
-      faceChipColor = '#fde68a';
-      faceChipBg = 'rgba(217,119,6,0.85)';
-      faceDotColor = '#f59e0b';
-      faceVisible = true;
-    } else if (showNormal && faceCount === 1) {
-      faceChipLabel = 'Face detected';
-      faceChipColor = '#86efac';
-      faceChipBg = 'rgba(0,0,0,0.5)';
-      faceDotColor = '#22c55e';
-      faceVisible = true;
-    }
-  }
-
-  // Lip sync chip
-  const hasLipMismatch = lipAlerts.some((a) => a.type === 'lip_not_moving');
-  let lipChipVisible = false;
-  let lipChipLabel = '';
-  let lipChipColor = '';
-  let lipChipBg = '';
-  let lipDotColor = '';
-
-  if (lipStatus === 'running' && hasLipMismatch) {
-    lipChipLabel = 'Lip sync mismatch';
-    lipChipColor = '#fdba74';
-    lipChipBg = 'rgba(194,65,12,0.85)';
-    lipDotColor = '#f97316';
-    lipChipVisible = true;
-  }
-
-  // Voice consistency chip
-  const hasVoiceChange = voiceAlerts.some((a) => a.type === 'voice_change');
-  let voiceChipVisible = false;
-  let voiceChipLabel = '';
-  let voiceChipColor = '';
-  let voiceChipBg = '';
-  let voiceDotColor = '';
-
-  if (voiceStatus === 'running' && hasVoiceChange) {
-    voiceChipLabel = 'Voice pattern change';
-    voiceChipColor = '#c4b5fd';
-    voiceChipBg = 'rgba(109,40,217,0.85)';
-    voiceDotColor = '#8b5cf6';
-    voiceChipVisible = true;
-  }
-
+  // --- UI State & Chips ---
   const chipSx = (bg: string, color: string) => ({
     backgroundColor: bg,
     color: color,
@@ -356,49 +197,98 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     },
   });
 
+  // Face Detection UI
+  let faceChipLabel = '';
+  let faceChipColor = '';
+  let faceChipBg = '';
+  let faceDotColor = '';
+  let faceVisible = false;
+
+  if (status === 'error') {
+    faceChipLabel = 'AI Detector failed — retrying on next join';
+    faceChipColor = '#fca5a5';
+    faceChipBg = 'rgba(220,38,38,0.7)';
+    faceDotColor = '#ef4444';
+    faceVisible = true;
+  } else if (status === 'loading') {
+    faceChipLabel = 'AI Detector loading...';
+    faceChipColor = '#94a3b8';
+    faceChipBg = 'rgba(0,0,0,0.5)';
+    faceDotColor = '#94a3b8';
+    faceVisible = true;
+  } else if (status === 'running') {
+    if (faceCount > 1) {
+      faceChipLabel = `${faceCount} faces detected`;
+      faceChipColor = '#fca5a5';
+      faceChipBg = 'rgba(220,38,38,0.85)';
+      faceDotColor = '#ef4444';
+      faceVisible = true;
+    } else if (faceCount === 0) {
+      faceChipLabel = 'No face detected';
+      faceChipColor = '#fde68a';
+      faceChipBg = 'rgba(217,119,6,0.85)';
+      faceDotColor = '#f59e0b';
+      faceVisible = true;
+    } else {
+      faceChipLabel = 'Monitoring Active';
+      faceChipColor = '#86efac';
+      faceChipBg = 'rgba(0,0,0,0.5)';
+      faceDotColor = '#22c55e';
+      faceVisible = true;
+    }
+  }
+
+  // Movement Score UI
+  let movementChipLabel = '';
+  let movementChipColor = '';
+  let movementChipBg = '';
+  let movementDotColor = '';
+  let movementVisible = false;
+
+  if (status === 'running') {
+    if (movementScore === 'HIGH') {
+      movementChipLabel = 'High Movement';
+      movementChipColor = '#fca5a5';
+      movementChipBg = 'rgba(220,38,38,0.85)';
+      movementDotColor = '#ef4444';
+      movementVisible = true;
+    } else if (movementScore === 'MODERATE') {
+      movementChipLabel = 'Moderate Movement';
+      movementChipColor = '#fde68a';
+      movementChipBg = 'rgba(217,119,6,0.85)';
+      movementDotColor = '#f59e0b';
+      movementVisible = true;
+    }
+  }
+
   return (
     <>
-      {/* Hidden video element for detection */}
       <video
         ref={videoRef}
-        style={{ display: 'none' }}
+        style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
         muted
         playsInline
         autoPlay
       />
 
-      {/* Face detection chip */}
       {faceVisible && (
         <Box sx={{ position: 'fixed', top: 80, right: 24, zIndex: 1000, transition: 'opacity 0.3s ease' }}>
           <Chip
             size="small"
-            icon={<Box sx={dotSx(faceDotColor, hasMultiple || hasNoFace)} />}
+            icon={<Box sx={dotSx(faceDotColor, faceCount !== 1)} />}
             label={faceChipLabel}
             sx={chipSx(faceChipBg, faceChipColor)}
           />
         </Box>
       )}
 
-      {/* Lip sync mismatch chip — shown below face chip */}
-      {lipChipVisible && (
+      {movementVisible && (
         <Box sx={{ position: 'fixed', top: faceVisible ? 114 : 80, right: 24, zIndex: 1000, transition: 'all 0.3s ease' }}>
           <Chip
             size="small"
-            icon={<Box sx={dotSx(lipDotColor, true)} />}
-            label={lipChipLabel}
-            sx={chipSx(lipChipBg, lipChipColor)}
-          />
-        </Box>
-      )}
-
-      {/* Voice consistency chip — shown below lip chip */}
-      {voiceChipVisible && (
-        <Box sx={{ position: 'fixed', top: (faceVisible ? 114 : 80) + (lipChipVisible ? 34 : 0), right: 24, zIndex: 1000, transition: 'all 0.3s ease' }}>
-          <Chip
-            size="small"
-            icon={<Box sx={dotSx(voiceDotColor, true)} />}
-            label={voiceChipLabel}
-            sx={chipSx(voiceChipBg, voiceChipColor)}
+            icon={<Box sx={dotSx(movementDotColor, true)} />}
+            label={movementChipLabel}
+            sx={chipSx(movementChipBg, movementChipColor)}
           />
         </Box>
       )}

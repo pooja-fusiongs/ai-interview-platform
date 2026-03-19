@@ -49,7 +49,7 @@ def _answer_response(a: InterviewAnswer) -> InterviewAnswerResponse:
         accuracy_score=a.accuracy_score,
         clarity_score=a.clarity_score,
         feedback=a.feedback,
-        question_text=q.question_text if q else None,
+        question_text=q.question_text if q else (a.question_text_override or None),
         sample_answer=q.sample_answer if q else None,
         created_at=a.created_at,
     )
@@ -474,7 +474,8 @@ def list_interviews(
 ):
     """
     List interview sessions.
-    Candidates see their own; recruiters/admins/experts see all.
+    Candidates see their own; recruiters see only sessions for jobs they created;
+    admins/experts see all.
     """
     from sqlalchemy import func as sa_func
 
@@ -485,6 +486,15 @@ def list_interviews(
     )
     if current_user.role == UserRole.CANDIDATE:
         query = query.filter(InterviewSession.candidate_id == current_user.id)
+    elif current_user.role == UserRole.RECRUITER:
+        # Recruiters see: sessions for jobs they created OR sessions where they are the candidate (test analysis)
+        from sqlalchemy import or_
+        query = query.outerjoin(Job, InterviewSession.job_id == Job.id).filter(
+            or_(
+                Job.created_by == current_user.id,
+                InterviewSession.candidate_id == current_user.id,
+            )
+        )
     sessions = query.order_by(InterviewSession.started_at.desc()).all()
 
     if not sessions:

@@ -325,8 +325,9 @@ class InterviewAnswer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("interview_sessions.id"), nullable=False)
-    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False)
-    answer_text = Column(Text, nullable=False)
+    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=True)
+    question_text_override = Column(Text, nullable=True)  # For transcript-extracted questions (no pre-defined question)
+    answer_text = Column(Text, nullable=True)
     score = Column(Float, nullable=True)
     relevance_score = Column(Float, nullable=True)
     completeness_score = Column(Float, nullable=True)
@@ -594,6 +595,17 @@ class FraudAnalysis(Base):
 
     video_interview = relationship("VideoInterview")
 
+class MovementTimeline(Base):
+    __tablename__ = "movement_timeline"
+
+    id = Column(Integer, primary_key=True, index=True)
+    video_interview_id = Column(Integer, ForeignKey("video_interviews.id"), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    movement_score = Column(String, nullable=False)  # CALM, MODERATE, HIGH
+    movement_intensity = Column(Float, nullable=False, default=0.0)
+    flags_json = Column(Text, nullable=True)  # JSON string
+
+    video_interview = relationship("VideoInterview")
 
 # ==================== Post-Hire Feedback Models ====================
 

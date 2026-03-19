@@ -36,6 +36,9 @@ WEIGHT_COMPLETENESS = float(os.getenv("WEIGHT_COMPLETENESS", "0.25"))
 WEIGHT_ACCURACY = float(os.getenv("WEIGHT_ACCURACY", "0.30"))
 WEIGHT_CLARITY = float(os.getenv("WEIGHT_CLARITY", "0.15"))
 
+# TEMPORARY TEST FEATURE - Remove after testing
+ENABLE_TEST_VIDEO_UPLOAD = os.getenv("ENABLE_TEST_VIDEO_UPLOAD", "true").lower() == "true"
+
 # GDPR / Encryption
 PII_ENCRYPTION_KEY = os.getenv("PII_ENCRYPTION_KEY", "")
 DATA_RETENTION_DEFAULT_DAYS = int(os.getenv("DATA_RETENTION_DEFAULT_DAYS", "365"))

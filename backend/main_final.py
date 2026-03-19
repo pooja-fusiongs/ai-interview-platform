@@ -1,3 +1,18 @@
+import sys
+import os
+import io
+
+# Fix Windows console encoding for emoji/unicode characters
+# Must be set before ANY import that prints unicode
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -5,8 +20,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import List, Optional
 import uvicorn
-import sys
-import os
 import json
 import uuid
 
@@ -37,8 +50,12 @@ print("📊 ONLY DATABASE DATA - NO SAMPLE DATA")
 print("🔧 All data loaded dynamically from your database")
 
 # Create database tables ONLY - NO SAMPLE DATA
-Base.metadata.create_all(bind=engine)
-print("✅ Database tables created/verified")
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created/verified")
+except Exception as e:
+    print(f"⚠️ Database table creation warning: {e}")
+    print("Tables may already exist or need manual creation via SQL editor.")
 
 # Auto-migrate: add missing columns to existing tables
 def auto_migrate():
@@ -94,6 +111,8 @@ def auto_migrate():
         # Face detection columns for fraud analysis
         ("fraud_analyses", "face_detection_score", "FLOAT"),
         ("fraud_analyses", "face_detection_details", "TEXT"),
+        # Transcript-extracted question text (for test analysis / direct scoring without pre-defined questions)
+        ("interview_answers", "question_text_override", "TEXT"),
     ]
 
     with engine.begin() as conn:
@@ -113,6 +132,17 @@ try:
     print("✅ Auto-migration complete")
 except Exception as e:
     print(f"⚠️ Auto-migration skipped: {e}")
+
+# Make interview_answers.question_id nullable (for transcript-extracted Q&A without pre-defined questions)
+try:
+    from sqlalchemy import text as _text_qa
+    with engine.begin() as conn:
+        conn.execute(_text_qa(
+            "ALTER TABLE interview_answers ALTER COLUMN question_id DROP NOT NULL"
+        ))
+    print("✅ Made interview_answers.question_id nullable")
+except Exception:
+    pass  # Already nullable or table doesn't exist yet
 
 # Migrate video_interviews.status from ENUM to VARCHAR (to support new statuses like no_show)
 try:
@@ -267,7 +297,14 @@ try:
     app.include_router(video_interviews_router, tags=["Video Interviews"])
     app.include_router(video_zoom_router, tags=["Zoom Integration"])
     app.include_router(video_fraud_router, prefix="/api/video/fraud", tags=["Fraud Detection"])
-    
+
+    from api.video.fraud.movement import router as movement_router
+    app.include_router(movement_router, prefix="/api", tags=["Movement Detection"])
+
+    # TEMPORARY TEST FEATURE - Remove after testing
+    from api.video.test_upload.app import router as video_test_router
+    app.include_router(video_test_router, prefix="/api/video/test", tags=["Test Video Upload"])
+
     print("✅ Video Interview & Fraud Detection endpoints included")
     print(f"   Routes registered: {len(video_interviews_router.routes)} video interview routes")
     print("   Video Interview Routes:")
@@ -1002,6 +1039,53 @@ def get_candidates(
             status_code=500,
             detail=f"Database error: {str(e)}"
         )
+
+@app.get("/api/candidates/candidates")
+def get_candidates_by_job(
+    job_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get candidates filtered by job_id (returns JobApplication records)."""
+    try:
+        query = db.query(JobApplication)
+
+        if job_id:
+            query = query.filter(JobApplication.job_id == job_id)
+
+        if search:
+            search_term = f"%{search.lower()}%"
+            query = query.filter(
+                or_(
+                    JobApplication.applicant_name.ilike(search_term),
+                    JobApplication.applicant_email.ilike(search_term),
+                )
+            )
+
+        applications = query.order_by(JobApplication.applied_at.desc()).offset(skip).limit(limit).all()
+
+        candidates = []
+        for app in applications:
+            candidates.append({
+                "id": app.id,
+                "name": app.applicant_name,
+                "candidate_name": app.applicant_name,
+                "email": app.applicant_email,
+                "candidate_email": app.applicant_email,
+                "position": app.current_position or "",
+                "status": app.status,
+            })
+
+        return candidates
+
+    except Exception as e:
+        print(f"Error fetching candidates by job: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 
 @app.patch("/api/candidates/{candidate_id}/toggle-status")
 def toggle_candidate_status(

@@ -9,6 +9,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  optimizeDeps: {
+    include: ['@mediapipe/face_detection'],
+  },
   server: {
     port: 3000,
     proxy: {

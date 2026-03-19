@@ -2,8 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
+from dotenv import load_dotenv
 
-# Check for DATABASE_URL environment variable (Render PostgreSQL)
+# Always load .env so DATABASE_URL is available regardless of import order
+load_dotenv()
+
+# Check for DATABASE_URL environment variable (Render PostgreSQL / Supabase)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
@@ -19,7 +23,8 @@ if DATABASE_URL:
         SQLALCHEMY_DATABASE_URL,
         connect_args={
             "sslmode": "require",
-            "connect_timeout": 10
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=60000"
         },
         pool_pre_ping=True,
         pool_recycle=120,

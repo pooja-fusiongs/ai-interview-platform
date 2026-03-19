@@ -352,8 +352,8 @@ class InterviewAnswerSubmit(BaseModel):
 class InterviewAnswerResponse(BaseModel):
     id: int
     session_id: int
-    question_id: int
-    answer_text: str
+    question_id: Optional[int] = None
+    answer_text: Optional[str] = None
     score: Optional[float] = None
     relevance_score: Optional[float] = None
     completeness_score: Optional[float] = None
@@ -743,6 +743,63 @@ class FraudAnalysisResponse(BaseModel):
     analysis_status: str = "pending"
     consent_granted: bool = False
     analyzed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class MovementFlags(BaseModel):
+    left_frame: bool = False
+    excessive_hands: bool = False
+    slouching: bool = False
+    fidgeting: bool = False
+
+class UnifiedDetectionPayload(BaseModel):
+    # Overall Context
+    interview_id: int
+    timestamp: str
+    
+    # Face Details
+    total_detections: int = 0
+    no_face_count: int = 0
+    multiple_face_count: int = 0
+    single_face_count: int = 0
+    no_face_seconds: float = 0
+    multiple_face_seconds: float = 0
+    max_faces_detected: int = 0
+    
+    # Lip Details
+    total_frames: int = 0
+    lip_moving_with_audio: int = 0
+    lip_still_with_audio: int = 0
+    lip_moving_no_audio: int = 0
+    lip_still_no_audio: int = 0
+    no_face_frames: int = 0
+    max_mouth_openness: float = 0
+    avg_mouth_openness: float = 0
+    mismatch_seconds: float = 0
+    
+    # Voice Details
+    total_segments: int = 0
+    consistent_segments: int = 0
+    inconsistent_segments: int = 0
+    silent_segments: int = 0
+    avg_pitch: float = 0
+    pitch_shift_count: int = 0
+    max_pitch_deviation: float = 0
+    inconsistent_seconds: float = 0
+    
+    # Body Movement Details
+    movement_score: str = "CALM"
+    movement_intensity: float = 0.0
+    flags: MovementFlags = MovementFlags()
+
+class MovementTimelineResponse(BaseModel):
+    id: int
+    video_interview_id: int
+    timestamp: datetime
+    movement_score: str
+    movement_intensity: float
+    flags_json: Optional[str] = None
 
     class Config:
         from_attributes = True

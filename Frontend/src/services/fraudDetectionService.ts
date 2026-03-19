@@ -63,6 +63,11 @@ export const fraudDetectionService = {
     const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/voice-events`, data);
     return response.data;
   },
+  submitUnifiedDetection: async (data: any) => {
+    // The unified payload has interview_id inside data
+    const response = await apiClient.post(`/api/movement-detection`, data);
+    return response.data;
+  },
 };
 
 export default fraudDetectionService;

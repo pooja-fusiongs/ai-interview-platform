@@ -443,3 +443,143 @@ Respond ONLY with valid JSON:
         traceback.print_exc()
         print(f"{'='*60}\n")
         return None
+
+
+def score_transcript_directly(
+    transcript_text: str,
+    job_title: str = "",
+    job_description: str = "",
+    skills_required: str = "",
+) -> Optional[Dict[str, Any]]:
+    """
+    Score a transcript WITHOUT pre-defined questions.
+    AI reads the transcript, extracts Q&A pairs from the recruiter-candidate conversation,
+    and scores the candidate's answers based on the job context.
+    """
+    print(f"\n{'='*60}")
+    print(f"[AI] [score_transcript_direct] Starting direct transcript scoring...")
+    print(f"   - Job: {job_title}")
+    print(f"   - Transcript length: {len(transcript_text)} chars")
+
+    try:
+        from groq import Groq
+        if not config.GROQ_API_KEY:
+            return None
+
+        job_context = f"Job Title: {job_title}"
+        if job_description:
+            job_context += f"\nJob Description: {job_description[:500]}"
+        if skills_required:
+            job_context += f"\nRequired Skills: {skills_required}"
+
+        prompt = f"""You are an expert interview evaluator. Read this interview transcript between a Recruiter and a Candidate.
+
+JOB CONTEXT:
+{job_context}
+
+TRANSCRIPT:
+{transcript_text}
+
+YOUR TASK:
+1. Identify each question the Recruiter asked
+2. Extract the Candidate's answer for each question
+3. Score each answer based on the job requirements
+
+SCORING (0-100 scale):
+- relevance_score: How relevant is the answer to the question and job? (0-100)
+- completeness_score: How thorough and complete is the answer? (0-100)
+- accuracy_score: How technically accurate is the answer? (0-100)
+- clarity_score: How clear and well-communicated? (0-100)
+- score: Overall = relevance*{config.WEIGHT_RELEVANCE} + completeness*{config.WEIGHT_COMPLETENESS} + accuracy*{config.WEIGHT_ACCURACY} + clarity*{config.WEIGHT_CLARITY}
+
+SCORING GUIDELINES:
+- 80-100: Excellent, comprehensive answer showing deep knowledge
+- 60-80: Good answer with minor gaps
+- 40-60: Adequate but missing key points
+- 20-40: Poor answer with significant gaps
+- 0-20: Very weak or no real answer given
+
+Respond ONLY with valid JSON:
+{{
+  "per_question": [
+    {{
+      "question_id": 1,
+      "question_text": "The actual question the recruiter asked",
+      "extracted_answer": "The candidate's actual answer (1-4 sentences)",
+      "score": 75,
+      "relevance_score": 80,
+      "completeness_score": 70,
+      "accuracy_score": 75,
+      "clarity_score": 80,
+      "feedback": "Brief specific feedback about this answer"
+    }}
+  ],
+  "overall_score": 72,
+  "recommendation": "select|next_round|reject",
+  "strengths": "Summary of candidate's strengths shown in the interview",
+  "weaknesses": "Summary of areas where candidate could improve"
+}}"""
+
+        client = Groq(api_key=config.GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=4000,
+        )
+
+        result_text = response.choices[0].message.content
+        result = _extract_json(result_text)
+
+        if not result or not isinstance(result, dict):
+            print(f"[WARN] [score_transcript_direct] Invalid JSON returned")
+            return None
+
+        if "per_question" not in result or "overall_score" not in result:
+            print("[WARN] [score_transcript_direct] Missing required fields")
+            return None
+
+        # Validate and clamp scores
+        for pq in result.get("per_question", []):
+            for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                val = pq.get(key)
+                if val is None or not isinstance(val, (int, float)):
+                    pq[key] = 0.0
+                else:
+                    pq[key] = round(max(0.0, min(100.0, float(val))), 1)
+
+        # Auto-detect 0-10 scale
+        all_scores = [pq.get(k, 0) for pq in result.get("per_question", [])
+                      for k in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]
+                      if pq.get(k, 0) > 0]
+        if all_scores and all(s <= 10.0 for s in all_scores):
+            for pq in result.get("per_question", []):
+                for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                    if pq.get(key, 0) > 0:
+                        pq[key] = round(pq[key] * 10.0, 1)
+
+        overall = float(result.get("overall_score", 0))
+        if all_scores and all(s <= 10.0 for s in all_scores) and overall <= 10.0 and overall > 0:
+            overall = overall * 10.0
+        result["overall_score"] = round(max(0.0, min(100.0, overall)), 1)
+
+        ov = result["overall_score"]
+        result["recommendation"] = (
+            "select" if ov >= config.SCORE_SELECT_THRESHOLD
+            else "next_round" if ov >= config.SCORE_NEXT_ROUND_THRESHOLD
+            else "reject"
+        )
+
+        print(f"[OK] [score_transcript_direct] SCORING COMPLETED!")
+        print(f"   Overall Score: {result['overall_score']}")
+        print(f"   Recommendation: {result['recommendation']}")
+        print(f"   Questions found: {len(result.get('per_question', []))}")
+        print(f"{'='*60}\n")
+
+        return result
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] [score_transcript_direct] {e}")
+        traceback.print_exc()
+        return None

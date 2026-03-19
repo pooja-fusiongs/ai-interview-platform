@@ -180,7 +180,8 @@ const Jobs = () => {
         experience_level: job.experience_level,
         number_of_questions: job.number_of_questions,
         interview_type: job.interview_type,
-        created_at: job.created_at
+        created_at: job.created_at,
+        created_by: job.created_by
       }))
       console.log('🔍 Mapped jobs:', apiJobs)
       setAllJobs(apiJobs)

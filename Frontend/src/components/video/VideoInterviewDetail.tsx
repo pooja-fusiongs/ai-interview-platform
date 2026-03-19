@@ -46,6 +46,7 @@ const VideoInterviewDetail: React.FC = () => {
   const [transcript, setTranscript] = useState<string | null>(null);
   const [scoreResult, setScoreResult] = useState<any>(null);
   const [scoring, setScoring] = useState(false);
+  const [generatingTranscript, setGeneratingTranscript] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,21 +80,43 @@ const VideoInterviewDetail: React.FC = () => {
     return () => { cancelled = true; };
   }, [videoId]);
 
-  // const fetchTranscript = async () => {
-  //   try {
-  //     setTranscriptLoading(true);
-  //     const data = await videoInterviewService.getTranscript(Number(videoId));
-  //     setTranscript(data.transcript);
-  //     toast.success('Transcript loaded successfully');
-  //   } catch (err: any) {
-  //     toast.error(err.response?.data?.detail || 'Failed to load transcript');
-  //   } finally {
-  //     setTranscriptLoading(false);
-  //   }
-  // };
+  const handleGenerateTranscript = async () => {
+    try {
+      setGeneratingTranscript(true);
+      toast('Generating transcript from recording...', { icon: '🎙️', duration: 5000 });
+      const data = await videoInterviewService.getTranscript(Number(videoId));
+      setTranscript(data.transcript);
+      toast.success('Transcript generated successfully!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to generate transcript');
+    } finally {
+      setGeneratingTranscript(false);
+    }
+  };
 
+  // Auto-poll for transcript if recording exists but transcript is missing (background thread may be generating)
+  useEffect(() => {
+    if (transcript || !interview?.recording_url || interview?.status !== 'completed') return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 8; // Poll for ~2 minutes
 
+    const poll = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts || cancelled) { clearInterval(poll); return; }
+      try {
+        const data = await videoInterviewService.getInterview(Number(videoId));
+        if (data.transcript && !cancelled) {
+          setTranscript(data.transcript);
+          setInterview(data);
+          clearInterval(poll);
+          toast.success('Transcript is ready!');
+        }
+      } catch { /* ignore polling errors */ }
+    }, 15000); // every 15 seconds
 
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [interview?.recording_url, interview?.status, transcript, videoId]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -399,9 +422,51 @@ const VideoInterviewDetail: React.FC = () => {
                   </Box>
                 ) : (
                   <Box sx={{ textAlign: 'center', py: 3 }}>
-                    <Typography sx={{ color: '#94a3b8', fontSize: '14px' }}>
+                    <Typography sx={{ color: '#94a3b8', fontSize: '14px', mb: interview.recording_url ? 2 : 0 }}>
                       No transcript available yet. Transcript will appear here after the interview.
                     </Typography>
+                    {interview.recording_url && (
+                      <Button
+                        variant="contained"
+                        disabled={generatingTranscript}
+                        onClick={async () => {
+                          setGeneratingTranscript(true);
+                          try {
+                            const result = await videoInterviewService.generateTranscriptFromRecording(interview.id);
+                            toast.success(`Transcript generated! (${result.transcript_length} chars)`);
+                            setTranscript(result.transcript);
+                            setInterview((prev: any) => ({
+                              ...prev,
+                              transcript: result.transcript,
+                              transcript_source: 'recording',
+                              transcript_generated_at: new Date().toISOString(),
+                            }));
+                          } catch (err: any) {
+                            toast.error(err.response?.data?.detail || 'Failed to generate transcript');
+                          } finally {
+                            setGeneratingTranscript(false);
+                          }
+                        }}
+                        sx={{
+                          background: '#020291', borderRadius: '10px', textTransform: 'none',
+                          fontWeight: 600, fontSize: '13px', px: 3, height: 40,
+                          '&:hover': { background: '#06109E' },
+                          '&:disabled': { opacity: 0.7, color: 'white', background: '#020291' },
+                        }}
+                      >
+                        {generatingTranscript ? (
+                          <>
+                            <CircularProgress size={16} sx={{ mr: 1, color: 'white' }} />
+                            Generating from recording...
+                          </>
+                        ) : (
+                          <>
+                            <Description sx={{ fontSize: 16, mr: 1 }} />
+                            Generate Transcript from Recording
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </Box>
                 )}
 

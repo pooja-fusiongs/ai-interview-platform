@@ -39,48 +39,184 @@ def transcribe_audio_file(file_path: str) -> str:
     
     logger.info(f"[transcribe] Starting real transcription of {os.path.basename(file_path)} ({file_size} bytes)")
     
-    # Try Groq Whisper first (free, fast, reliable)
+    # Try Groq Whisper (free, fast, reliable — accepts video files directly, no ffmpeg needed)
+    if config.GROQ_API_KEY:
+        return _transcribe_with_groq(file_path)
+
+    # No transcription service configured
+    raise TranscriptionError("No transcription service configured. Set GROQ_API_KEY in .env")
+
+def _extract_audio_from_video(video_path: str) -> str:
+    """
+    Extract full audio from video as a single compressed MP3 file using ffmpeg.
+    Handles Chrome-recorded .webm files that have Duration: N/A (no duration header).
+    Returns path to the extracted audio file.
+    """
+    import tempfile
+    import subprocess
+
+    # Find ffmpeg binary (bundled with imageio-ffmpeg or system PATH)
+    ffmpeg_bin = None
     try:
-        if config.GROQ_API_KEY:
-            return _transcribe_with_groq(file_path)
-    except Exception as e:
-        logger.warning(f"[transcribe] Groq transcription failed: {e}")
-    
-    # Try other services as fallback
-    try:
-        # Add other transcription services here if needed
+        import imageio_ffmpeg
+        ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
         pass
-    except Exception as e:
-        logger.warning(f"[transcribe] Fallback transcription failed: {e}")
-    
-    # If all fail, raise error - NO MOCK DATA
-    raise TranscriptionError("All transcription services failed. No transcript generated.")
+
+    if not ffmpeg_bin:
+        # Try system ffmpeg
+        ffmpeg_bin = "ffmpeg"
+
+    output_path = os.path.join(
+        tempfile.gettempdir(),
+        f"audio_{os.path.splitext(os.path.basename(video_path))[0]}.mp3"
+    )
+
+    logger.info(f"[transcribe] Extracting audio from video using ffmpeg: {os.path.basename(video_path)}")
+
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_bin, "-y",
+                "-i", video_path,
+                "-vn",                  # No video
+                "-ac", "1",             # Mono
+                "-ar", "16000",         # 16kHz sample rate (optimal for Whisper)
+                "-b:a", "32k",          # Low bitrate to keep file small
+                "-f", "mp3",
+                output_path
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"[transcribe] ffmpeg stderr: {result.stderr[-500:]}")
+            raise TranscriptionError(f"ffmpeg audio extraction failed (exit code {result.returncode})")
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+            raise TranscriptionError("ffmpeg produced no valid audio output")
+
+        size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        logger.info(f"[transcribe] Audio extracted: {size_mb:.1f} MB")
+        return output_path
+
+    except subprocess.TimeoutExpired:
+        raise TranscriptionError("ffmpeg audio extraction timed out (>5 min)")
+    except FileNotFoundError:
+        raise TranscriptionError("ffmpeg not found. Install ffmpeg or pip install imageio-ffmpeg")
+
 
 def _transcribe_with_groq(file_path: str) -> str:
-    """Transcribe using Groq Whisper API"""
+    """
+    Transcribe using Groq Whisper API.
+    For video files, extracts audio as small chunks and transcribes each.
+    """
     try:
         from groq import Groq
         client = Groq(api_key=config.GROQ_API_KEY)
-        
-        with open(file_path, "rb") as audio_file:
-            transcription = client.audio.transcriptions.create(
-                file=(os.path.basename(file_path), audio_file),
-                model="whisper-large-v3",
-                language="en",
-                response_format="text",
-                temperature=0.0  # More deterministic output
+
+        file_ext = os.path.splitext(file_path)[1].lower()
+
+        supported_extensions = {'.mp3', '.mp4', '.mpeg', '.mpga', '.m4a', '.ogg', '.wav', '.webm', '.flac'}
+        if file_ext not in supported_extensions:
+            raise TranscriptionError(
+                f"Unsupported format {file_ext}. "
+                f"Supported: mp3, mp4, m4a, ogg, wav, webm, flac"
             )
-        
+
+        # For video files: extract audio first (handles Chrome webm with no duration header)
+        # For audio files: send directly
+        video_extensions = {'.mp4', '.mpeg', '.webm'}
+        temp_files = []
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+        if file_ext in video_extensions:
+            if file_size_mb > 24:
+                # Large video — must extract audio (Groq 25MB limit)
+                logger.info(f"[transcribe] Large video ({file_size_mb:.1f} MB), extracting audio...")
+                try:
+                    audio_path = _extract_audio_from_video(file_path)
+                    temp_files = [audio_path]
+                    files_to_transcribe = temp_files
+                except Exception as extract_err:
+                    logger.warning(f"[transcribe] Audio extraction failed: {extract_err}, trying direct upload...")
+                    temp_files = []
+                    files_to_transcribe = [file_path]
+            else:
+                # Small video — try direct upload first (faster)
+                files_to_transcribe = [file_path]
+        else:
+            # Audio file — send directly
+            files_to_transcribe = [file_path]
+
+        # Transcribe each chunk
+        all_text = []
+        model_name = "whisper-large-v3-turbo"  # Turbo is faster and handles chunks better
+
+        for idx, chunk_path in enumerate(files_to_transcribe):
+            chunk_size = os.path.getsize(chunk_path) / (1024 * 1024)
+            logger.info(f"[transcribe] Transcribing chunk {idx+1}/{len(files_to_transcribe)} ({chunk_size:.1f} MB) with {model_name}")
+
+            # Use original filename for direct uploads, "audio.mp3" for extracted chunks
+            upload_filename = os.path.basename(chunk_path) if temp_files else os.path.basename(file_path)
+
+            try:
+                with open(chunk_path, "rb") as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        file=(upload_filename, audio_file),
+                        model=model_name,
+                        language="en",
+                        response_format="text",
+                        temperature=0.0,
+                    )
+                chunk_text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+                if chunk_text:
+                    all_text.append(chunk_text)
+                    logger.info(f"[transcribe] Chunk {idx+1} done: {len(chunk_text)} chars")
+            except Exception as e:
+                logger.warning(f"[transcribe] Chunk {idx+1} failed: {e}")
+                # Try fallback model for this chunk
+                try:
+                    with open(chunk_path, "rb") as audio_file:
+                        transcription = client.audio.transcriptions.create(
+                            file=(upload_filename, audio_file),
+                            model="whisper-large-v3",
+                            language="en",
+                            response_format="text",
+                            temperature=0.0,
+                        )
+                    chunk_text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+                    if chunk_text:
+                        all_text.append(chunk_text)
+                except Exception as e2:
+                    logger.warning(f"[transcribe] Chunk {idx+1} fallback also failed: {e2}")
+
+        # Clean up temp files
+        for f in temp_files:
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+
+        if not all_text:
+            raise TranscriptionError("Groq transcription failed: no chunks were transcribed successfully")
+
+        transcription = " ".join(all_text)
+
         text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
-        
+
         if not text or len(text) < 10:
             raise TranscriptionError("Transcription result is empty or too short")
-        
+
         logger.info(f"[transcribe] Groq transcription successful ({len(text)} chars)")
         return text
-        
+
     except ImportError:
         raise TranscriptionError("Groq library not installed")
+    except TranscriptionError:
+        raise
     except Exception as e:
         raise TranscriptionError(f"Groq transcription failed: {str(e)}")
 
@@ -308,10 +444,10 @@ def validate_recording_file(file_path: str) -> bool:
     if file_size < 1000:
         raise TranscriptionError(f"Recording file too small: {file_size} bytes")
     
-    # Check file extension
-    valid_extensions = ['.webm', '.mp4', '.wav', '.mp3', '.m4a', '.ogg']
+    # Check file extension — Groq Whisper accepts these directly (video + audio, no ffmpeg needed)
+    valid_extensions = ['.mp3', '.mp4', '.mpeg', '.mpga', '.m4a', '.ogg', '.wav', '.webm', '.flac']
     file_ext = os.path.splitext(file_path)[1].lower()
     if file_ext not in valid_extensions:
-        raise TranscriptionError(f"Unsupported file format: {file_ext}")
+        raise TranscriptionError(f"Unsupported file format: {file_ext}. Supported: mp3, mp4, m4a, ogg, wav, webm, flac")
     
     return True

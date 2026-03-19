@@ -419,6 +419,9 @@ def list_video_interviews(
         if current_user.role == UserRole.CANDIDATE:
             query = query.filter(VideoInterview.candidate_id == current_user.id)
             print(f"[DEBUG] Filtering for candidate_id: {current_user.id}")
+        elif current_user.role == UserRole.RECRUITER:
+            query = query.filter(VideoInterview.interviewer_id == current_user.id)
+            print(f"[DEBUG] Filtering for interviewer_id: {current_user.id}")
 
         interviews = query.order_by(VideoInterview.scheduled_at.desc()).limit(100).all()
         print(f"[DEBUG] Found {len(interviews)} interviews")
@@ -878,6 +881,94 @@ def guest_update_recording_consent(
     return {"message": "Recording consent updated", "recording_consent": vi.recording_consent}
 
 
+
+def process_interview_completion_task(video_id: int):
+    print(f"[background_task] Starting async completion for video {video_id}")
+    from database import SessionLocal
+    from models import VideoInterview, InterviewQuestion, JobApplication, InterviewSession, InterviewSessionStatus
+    from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+    import os
+    from datetime import datetime, timezone
+    
+    db = SessionLocal()
+    try:
+        vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+        if not vi:
+            return
+            
+        if vi.recording_url and not vi.transcript:
+            try:
+                # Resolve path
+                recording_filename = os.path.basename(vi.recording_url)
+                recordings_dir = os.path.normpath(os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
+                ))
+                recording_path = os.path.join(recordings_dir, recording_filename)
+                
+                actual_questions = []
+                if vi.job_id:
+                    questions = db.query(InterviewQuestion).filter(
+                        InterviewQuestion.job_id == vi.job_id,
+                        InterviewQuestion.is_approved == True
+                    ).all()
+                    if questions:
+                        actual_questions = [{"question_text": q.question_text, "sample_answer": q.sample_answer or ""} for q in questions]
+                        
+                if os.path.exists(recording_path):
+                    validate_recording_file(recording_path)
+                    transcript_data = create_real_transcript(
+                        interview_id=vi.id,
+                        recording_path=recording_path,
+                        interview_start_time=vi.started_at or vi.scheduled_at,
+                        interview_end_time=datetime.now(timezone.utc),
+                        question_timestamps=actual_questions if actual_questions else None
+                    )
+                    vi.transcript = transcript_data["transcript_text"]
+                    vi.transcript_source = "recording"
+                    vi.transcript_generated_at = datetime.now(timezone.utc)
+                    print(f"[background_task] Transcript generated successfully for {video_id}")
+                else:
+                    vi.transcript_source = "failed"
+                    vi.transcript_error = "Recording file not found"
+            except Exception as e:
+                vi.transcript_source = "failed"
+                vi.transcript_error = str(e)
+                print(f"[background_task] Transcript error: {e}")
+                
+        # Create InterviewSession
+        if vi.transcript and not vi.session_id:
+            try:
+                application = None
+                if vi.candidate:
+                    application = db.query(JobApplication).filter(
+                        JobApplication.job_id == vi.job_id,
+                        JobApplication.applicant_email == vi.candidate.email
+                    ).first()
+                    if application:
+                        application.status = "Interview Completed"
+                        
+                session = InterviewSession(
+                    job_id=vi.job_id,
+                    candidate_id=vi.candidate_id,
+                    application_id=application.id if application else None,
+                    status=InterviewSessionStatus.IN_PROGRESS,
+                    interview_mode="video_interview",
+                    transcript_text=vi.transcript,
+                    started_at=vi.started_at or vi.scheduled_at,
+                )
+                db.add(session)
+                db.flush()
+                vi.session_id = session.id
+            except Exception as e:
+                print(f"[background_task] Session error: {e}")
+                
+        db.commit()
+    except Exception as e:
+        print(f"[background_task] Fatal error: {e}")
+    finally:
+        db.close()
+
+
 @router.post("/api/video/guest/{video_id}/end")
 async def guest_end_interview(
     video_id: int,
@@ -895,85 +986,153 @@ async def guest_end_interview(
         vi.status = VideoInterviewStatus.COMPLETED.value
         vi.ended_at = datetime.now(timezone.utc)
 
-    # Generate transcript from recording (same logic as authenticated end)
-    if vi.recording_url and not vi.transcript:
+    # Create InterviewSession immediately (fast)
+    try:
+        application = None
+        if vi.candidate:
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email
+            ).first()
+            if application:
+                application.status = "Interview Completed"
+
+        session = InterviewSession(
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            application_id=application.id if application else None,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="video_interview",
+            started_at=vi.started_at or vi.scheduled_at,
+        )
+        db.add(session)
+        db.flush()
+        vi.session_id = session.id
+        print(f"[guest_end] Created InterviewSession id={session.id}")
+    except Exception as e:
+        print(f"[guest_end] Failed to create InterviewSession: {e}")
+
+    db.commit()
+    db.refresh(vi)
+
+    # Generate transcript in background (heavy operation)
+    vi_id = vi.id
+    job_id = vi.job_id
+    started_at = vi.started_at or vi.scheduled_at
+    recording_url = vi.recording_url
+    session_id = vi.session_id
+    has_transcript = vi.transcript is not None
+
+    import threading, time as _time
+    def _bg_guest_transcript(vi_id, job_id, started_at, recording_url_hint, session_id):
+        import traceback
+        bg_db = None
         try:
-            recording_filename = os.path.basename(vi.recording_url)
+            from database import SessionLocal
+            bg_db = SessionLocal()
+
+            # Wait for recording upload to commit
+            _time.sleep(3)
+
+            print(f"[guest_end BG] Starting transcript for vi_id={vi_id}")
+            bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+            if not bg_vi:
+                return
+
+            if bg_vi.transcript:
+                print(f"[guest_end BG] Transcript already exists, skipping")
+                return
+
+            # Re-read recording_url from DB
+            actual_recording_url = bg_vi.recording_url or recording_url_hint
+            if not actual_recording_url:
+                _time.sleep(10)
+                bg_db.refresh(bg_vi)
+                actual_recording_url = bg_vi.recording_url
+
+            if not actual_recording_url:
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = "No recording file available"
+                bg_db.commit()
+                return
+
+            recording_filename = os.path.basename(actual_recording_url)
             recordings_dir = os.path.normpath(os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
             ))
             recording_path = os.path.join(recordings_dir, recording_filename)
 
-            if os.path.exists(recording_path):
-                # Fetch interview questions for context
-                actual_questions = []
-                if vi.job_id:
-                    questions = db.query(InterviewQuestion).filter(
-                        InterviewQuestion.job_id == vi.job_id,
-                        InterviewQuestion.is_approved == True
-                    ).all()
-                    if questions:
-                        actual_questions = [
-                            {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
-                            for q in questions
-                        ]
+            # Wait for file to appear on disk
+            for attempt in range(6):
+                if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
+                    break
+                print(f"[guest_end BG] Recording file not ready, waiting... ({attempt+1}/6)")
+                _time.sleep(5)
 
-                from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+            if not os.path.exists(recording_path):
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
+                bg_db.commit()
+                return
 
-                validate_recording_file(recording_path)
-                transcript_data = create_real_transcript(
-                    interview_id=vi.id,
-                    recording_path=recording_path,
-                    interview_start_time=vi.started_at or vi.scheduled_at,
-                    interview_end_time=datetime.now(timezone.utc),
-                    question_timestamps=actual_questions if actual_questions else None
-                )
-                vi.transcript = transcript_data["transcript_text"]
-                vi.transcript_source = "recording"
-                vi.transcript_generated_at = datetime.now(timezone.utc)
-                print(f"[guest_end] Transcript generated for interview {video_id} ({len(vi.transcript)} chars)")
+            actual_questions = []
+            if job_id:
+                questions = bg_db.query(InterviewQuestion).filter(
+                    InterviewQuestion.job_id == job_id,
+                    InterviewQuestion.is_approved == True
+                ).all()
+                if questions:
+                    actual_questions = [
+                        {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+                        for q in questions
+                    ]
 
-                # Create InterviewSession for scoring pipeline
-                try:
-                    application = None
-                    if vi.candidate:
-                        application = db.query(JobApplication).filter(
-                            JobApplication.job_id == vi.job_id,
-                            JobApplication.applicant_email == vi.candidate.email
-                        ).first()
-                        if application:
-                            application.status = "Interview Completed"
+            from services.transcript_generator import create_real_transcript, validate_recording_file
 
-                    session = InterviewSession(
-                        job_id=vi.job_id,
-                        candidate_id=vi.candidate_id,
-                        application_id=application.id if application else None,
-                        status=InterviewSessionStatus.IN_PROGRESS,
-                        interview_mode="video_interview",
-                        transcript_text=vi.transcript,
-                        started_at=vi.started_at or vi.scheduled_at,
-                    )
-                    db.add(session)
-                    db.flush()
-                    vi.session_id = session.id
-                    print(f"[guest_end] Created InterviewSession id={session.id}")
-                except Exception as e:
-                    print(f"[guest_end] Failed to create InterviewSession: {e}")
+            validate_recording_file(recording_path)
+            transcript_data = create_real_transcript(
+                interview_id=vi_id,
+                recording_path=recording_path,
+                interview_start_time=started_at,
+                interview_end_time=bg_vi.ended_at or datetime.now(timezone.utc),
+                question_timestamps=actual_questions if actual_questions else None
+            )
+            bg_vi.transcript = transcript_data["transcript_text"]
+            bg_vi.transcript_source = "recording"
+            bg_vi.transcript_generated_at = datetime.now(timezone.utc)
+            print(f"[guest_end BG] Transcript generated ({len(bg_vi.transcript)} chars)")
 
-            else:
-                print(f"[guest_end] Recording file not found: {recording_path}")
-                vi.transcript_source = "failed"
-                vi.transcript_error = f"Recording file not found: {recording_filename}"
+            sid = session_id or bg_vi.session_id
+            if sid:
+                bg_session = bg_db.query(InterviewSession).filter(InterviewSession.id == sid).first()
+                if bg_session:
+                    bg_session.transcript_text = transcript_data["transcript_text"]
 
+            bg_db.commit()
         except Exception as e:
-            print(f"[guest_end] Transcript generation failed: {e}")
-            import traceback
+            print(f"[guest_end BG] Failed: {e}")
             traceback.print_exc()
-            vi.transcript_source = "failed"
-            vi.transcript_error = str(e)
+            try:
+                if bg_db:
+                    bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+                    if bg_vi and not bg_vi.transcript:
+                        bg_vi.transcript_source = "failed"
+                        bg_vi.transcript_error = f"Thread error: {str(e)[:400]}"
+                        bg_db.commit()
+            except Exception:
+                pass
+        finally:
+            if bg_db:
+                bg_db.close()
 
-    db.commit()
-    db.refresh(vi)
+    # Always start background thread (don't gate on recording_url — it might arrive late)
+    thread = threading.Thread(
+        target=_bg_guest_transcript,
+        args=(vi_id, job_id, started_at, recording_url, session_id),
+        daemon=True,
+    )
+    thread.start()
+
     return {"message": "Interview ended", "status": vi.status}
 
 
@@ -1059,143 +1218,7 @@ def end_video_interview(
 
     print(f"[end_interview] recording_url={vi.recording_url}")
 
-    # Generate transcript from recording
-    try:
-        candidate_name = None
-        interviewer_name = None
-        job_title = None
-
-        if vi.candidate:
-            candidate_name = vi.candidate.full_name or vi.candidate.username
-        if vi.interviewer:
-            interviewer_name = vi.interviewer.full_name or vi.interviewer.username
-        if vi.job:
-            job_title = vi.job.title
-
-        # Fetch actual interview questions for this candidate/job
-        actual_questions = []
-        if vi.job_id:
-            # Get ALL questions for this job first
-            all_job_questions = db.query(InterviewQuestion).filter(
-                InterviewQuestion.job_id == vi.job_id
-            ).all()
-
-            # Try to find the right candidate_id
-            possible_candidate_ids = []
-
-            # Method 1: Find JobApplication by email
-            if vi.candidate:
-                application = db.query(JobApplication).filter(
-                    JobApplication.job_id == vi.job_id,
-                    JobApplication.applicant_email == vi.candidate.email
-                ).first()
-                if application:
-                    possible_candidate_ids.append(application.id)
-
-            # Method 2: Use vi.candidate_id
-            if vi.candidate_id and vi.candidate_id not in possible_candidate_ids:
-                possible_candidate_ids.append(vi.candidate_id)
-
-            # Method 3: Try all candidate_ids that exist in questions for this job
-            existing_candidate_ids = set(q.candidate_id for q in all_job_questions)
-            for ecid in existing_candidate_ids:
-                if ecid not in possible_candidate_ids:
-                    possible_candidate_ids.append(ecid)
-
-            # Try each candidate_id until we find approved questions
-            questions = []
-            for cid in possible_candidate_ids:
-                questions = db.query(InterviewQuestion).filter(
-                    InterviewQuestion.job_id == vi.job_id,
-                    InterviewQuestion.candidate_id == cid,
-                    InterviewQuestion.is_approved == True
-                ).all()
-                if questions:
-                    print(f"[end_interview] Found {len(questions)} approved questions with candidate_id={cid}")
-                    break
-
-            # If no approved questions, try all questions
-            if not questions:
-                for cid in possible_candidate_ids:
-                    questions = db.query(InterviewQuestion).filter(
-                        InterviewQuestion.job_id == vi.job_id,
-                        InterviewQuestion.candidate_id == cid
-                    ).all()
-                    if questions:
-                        print(f"[end_interview] Found {len(questions)} questions (not all approved) with candidate_id={cid}")
-                        break
-
-            if questions:
-                actual_questions = [
-                    {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
-                    for q in questions
-                ]
-                print(f"[end_interview] Using {len(actual_questions)} questions for transcript generation")
-
-        # --- REAL transcription from recording file ---
-        if not vi.recording_url:
-            print(f"[end_interview] ERROR: No recording_url for video {video_id}")
-            vi.transcript = None
-            vi.transcript_source = "failed"
-            vi.transcript_error = "No recording file available"
-            raise Exception("No recording file available")
-        
-        # Resolve recording file path (recording_url is like "/uploads/recordings/file.webm")
-        recording_url = vi.recording_url
-        # Extract just the filename from the URL
-        recording_filename = os.path.basename(recording_url)
-        # Build absolute path using same directory structure as upload endpoint
-        recordings_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"))
-        recording_path = os.path.join(recordings_dir, recording_filename)
-
-        print(f"[end_interview] Recording URL: {recording_url}")
-        print(f"[end_interview] Resolved recording path: {recording_path}")
-        print(f"[end_interview] File exists: {os.path.exists(recording_path)}")
-
-        if not os.path.exists(recording_path):
-            print(f"[end_interview] ERROR: Recording file not found at {recording_path}")
-            print(f"[end_interview] Recordings dir contents: {os.listdir(recordings_dir) if os.path.exists(recordings_dir) else 'DIR NOT FOUND'}")
-            vi.transcript = None
-            vi.transcript_source = "failed"
-            vi.transcript_error = f"Recording file not found: {recording_filename}"
-            raise Exception(f"Recording file not found: {recording_path}")
-        
-        # Use the new real transcript service
-        from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
-        
-        try:
-            # Validate recording file
-            validate_recording_file(recording_path)
-            
-            # Create real transcript with actual timestamps
-            transcript_data = create_real_transcript(
-                interview_id=vi.id,
-                recording_path=recording_path,
-                interview_start_time=vi.started_at or vi.scheduled_at,
-                interview_end_time=datetime.now(timezone.utc),
-                question_timestamps=actual_questions if actual_questions else None
-            )
-            
-            vi.transcript = transcript_data["transcript_text"]
-            vi.transcript_source = "recording"
-            print(f"[end_interview] REAL transcript generated successfully ({len(transcript_data['transcript_text'])} chars)")
-            
-        except TranscriptionError as e:
-            print(f"[end_interview] Transcription failed: {e}")
-            import traceback
-            traceback.print_exc()
-            vi.transcript = None
-            vi.transcript_source = "failed"
-            vi.transcript_error = str(e)
-
-        vi.transcript_generated_at = datetime.now(timezone.utc)
-        print(f"[end_interview] Transcript saved for video interview {video_id}")
-    except Exception as e:
-        print(f"[end_interview] Failed to generate transcript: {e}")
-        import traceback
-        traceback.print_exc()
-
-    # Create InterviewSession to link video interview with scoring pipeline
+    # Create InterviewSession immediately (fast)
     try:
         application = None
         if vi.candidate:
@@ -1212,7 +1235,6 @@ def end_video_interview(
             application_id=application.id if application else None,
             status=InterviewSessionStatus.IN_PROGRESS,
             interview_mode="video_interview",
-            transcript_text=vi.transcript,
             started_at=vi.started_at or vi.scheduled_at,
         )
         db.add(session)
@@ -1226,6 +1248,182 @@ def end_video_interview(
 
     db.commit()
     db.refresh(vi)
+
+    # --- Generate transcript in BACKGROUND THREAD (heavy operation) ---
+    vi_id = vi.id
+    job_id = vi.job_id
+    candidate_id = vi.candidate_id
+    candidate_email = vi.candidate.email if vi.candidate else None
+    started_at = vi.started_at or vi.scheduled_at
+    recording_url = vi.recording_url
+    session_id = vi.session_id
+
+    import threading, time as _time
+    def _bg_transcript(vi_id, job_id, candidate_id, candidate_email, started_at, recording_url_hint, session_id):
+        import traceback
+        bg_db = None
+        try:
+            from database import SessionLocal
+            bg_db = SessionLocal()
+            print(f"[end_interview BG] Starting transcript generation for vi_id={vi_id}")
+
+            # Wait a moment for recording upload to commit (race condition fix)
+            _time.sleep(3)
+
+            bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+            if not bg_vi:
+                print(f"[end_interview BG] VideoInterview {vi_id} not found")
+                return
+
+            # Already has transcript (another thread may have finished)
+            if bg_vi.transcript:
+                print(f"[end_interview BG] Transcript already exists for vi_id={vi_id}, skipping")
+                return
+
+            # Re-read recording_url from DB (may have been updated after end was called)
+            actual_recording_url = bg_vi.recording_url or recording_url_hint
+
+            # If still no recording_url, wait and retry (upload might be in progress)
+            if not actual_recording_url:
+                print(f"[end_interview BG] No recording_url yet, waiting 10s for upload...")
+                _time.sleep(10)
+                bg_db.refresh(bg_vi)
+                actual_recording_url = bg_vi.recording_url
+
+            # Fetch questions for context
+            actual_questions = []
+            if job_id:
+                all_job_questions = bg_db.query(InterviewQuestion).filter(
+                    InterviewQuestion.job_id == job_id
+                ).all()
+
+                possible_candidate_ids = []
+                if candidate_email:
+                    application = bg_db.query(JobApplication).filter(
+                        JobApplication.job_id == job_id,
+                        JobApplication.applicant_email == candidate_email
+                    ).first()
+                    if application:
+                        possible_candidate_ids.append(application.id)
+
+                if candidate_id and candidate_id not in possible_candidate_ids:
+                    possible_candidate_ids.append(candidate_id)
+
+                existing_candidate_ids = set(q.candidate_id for q in all_job_questions)
+                for ecid in existing_candidate_ids:
+                    if ecid not in possible_candidate_ids:
+                        possible_candidate_ids.append(ecid)
+
+                questions = []
+                for cid in possible_candidate_ids:
+                    questions = bg_db.query(InterviewQuestion).filter(
+                        InterviewQuestion.job_id == job_id,
+                        InterviewQuestion.candidate_id == cid,
+                        InterviewQuestion.is_approved == True
+                    ).all()
+                    if questions:
+                        break
+
+                if not questions:
+                    for cid in possible_candidate_ids:
+                        questions = bg_db.query(InterviewQuestion).filter(
+                            InterviewQuestion.job_id == job_id,
+                            InterviewQuestion.candidate_id == cid
+                        ).all()
+                        if questions:
+                            break
+
+                if questions:
+                    actual_questions = [
+                        {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+                        for q in questions
+                    ]
+                    print(f"[end_interview BG] Using {len(actual_questions)} questions for transcript")
+
+            # Resolve recording file path
+            if not actual_recording_url:
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = "No recording file available"
+                bg_db.commit()
+                return
+
+            recording_filename = os.path.basename(actual_recording_url)
+            recordings_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"))
+            recording_path = os.path.join(recordings_dir, recording_filename)
+
+            # Wait for recording file to appear on disk (upload may still be writing)
+            for attempt in range(6):
+                if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
+                    break
+                print(f"[end_interview BG] Recording file not ready yet, waiting... (attempt {attempt+1}/6)")
+                _time.sleep(5)
+
+            if not os.path.exists(recording_path):
+                print(f"[end_interview BG] Recording file not found: {recording_path}")
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
+                bg_db.commit()
+                return
+
+            from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+
+            try:
+                validate_recording_file(recording_path)
+                transcript_data = create_real_transcript(
+                    interview_id=vi_id,
+                    recording_path=recording_path,
+                    interview_start_time=started_at,
+                    interview_end_time=bg_vi.ended_at or datetime.now(timezone.utc),
+                    question_timestamps=actual_questions if actual_questions else None
+                )
+
+                bg_vi.transcript = transcript_data["transcript_text"]
+                bg_vi.transcript_source = "recording"
+                bg_vi.transcript_generated_at = datetime.now(timezone.utc)
+                print(f"[end_interview BG] Transcript generated ({len(transcript_data['transcript_text'])} chars)")
+
+                # Update InterviewSession with transcript
+                sid = session_id or bg_vi.session_id
+                if sid:
+                    bg_session = bg_db.query(InterviewSession).filter(InterviewSession.id == sid).first()
+                    if bg_session:
+                        bg_session.transcript_text = transcript_data["transcript_text"]
+
+            except (TranscriptionError, Exception) as e:
+                print(f"[end_interview BG] Transcription failed: {e}")
+                traceback.print_exc()
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = str(e)[:500]
+                bg_vi.transcript_generated_at = datetime.now(timezone.utc)
+
+            bg_db.commit()
+            print(f"[end_interview BG] Done for vi_id={vi_id}")
+
+        except Exception as e:
+            print(f"[end_interview BG] FATAL Error: {e}")
+            traceback.print_exc()
+            # Try to save the error to DB
+            try:
+                if bg_db:
+                    bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+                    if bg_vi and not bg_vi.transcript:
+                        bg_vi.transcript_source = "failed"
+                        bg_vi.transcript_error = f"Thread error: {str(e)[:400]}"
+                        bg_db.commit()
+            except Exception:
+                pass
+        finally:
+            if bg_db:
+                bg_db.close()
+
+    thread = threading.Thread(
+        target=_bg_transcript,
+        args=(vi_id, job_id, candidate_id, candidate_email, started_at, recording_url, session_id),
+        daemon=True,
+    )
+    thread.start()
+    print(f"[end_interview] Response sent, transcript generating in background")
+
     return _build_response(vi, db)
 
 
@@ -1706,6 +1904,90 @@ def submit_ai_interview_answers(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/generate-transcript  -- Generate transcript from recording
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/generate-transcript")
+def generate_transcript_from_recording(
+    video_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Generate transcript from interview recording (when auto-generation failed)."""
+    from services.transcript_generator import create_real_transcript, validate_recording_file, TranscriptionError
+    from models import InterviewQuestion, InterviewSession, InterviewSessionStatus, JobApplication
+
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    if not vi.recording_url:
+        raise HTTPException(status_code=400, detail="No recording available for this interview")
+
+    # Resolve recording path
+    recording_filename = os.path.basename(vi.recording_url)
+    recordings_dir = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
+    ))
+    recording_path = os.path.join(recordings_dir, recording_filename)
+
+    if not os.path.exists(recording_path):
+        raise HTTPException(status_code=404, detail=f"Recording file not found: {recording_filename}")
+
+    # Get questions for context
+    actual_questions = []
+    if vi.job_id:
+        questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == vi.job_id,
+            InterviewQuestion.is_approved == True
+        ).all()
+        if questions:
+            actual_questions = [
+                {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+                for q in questions
+            ]
+
+    try:
+        validate_recording_file(recording_path)
+        transcript_data = create_real_transcript(
+            interview_id=vi.id,
+            recording_path=recording_path,
+            interview_start_time=vi.started_at or vi.scheduled_at,
+            interview_end_time=vi.ended_at or datetime.now(timezone.utc),
+            question_timestamps=actual_questions if actual_questions else None
+        )
+
+        vi.transcript = transcript_data["transcript_text"]
+        vi.transcript_source = "recording"
+        vi.transcript_generated_at = datetime.now(timezone.utc)
+        vi.transcript_error = None
+
+        # Update session transcript too
+        if vi.session_id:
+            session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
+            if session:
+                session.transcript_text = transcript_data["transcript_text"]
+
+        db.commit()
+        db.refresh(vi)
+
+        print(f"[generate-transcript] Transcript generated for vi_id={video_id} ({len(vi.transcript)} chars)")
+        return {
+            "success": True,
+            "message": "Transcript generated successfully",
+            "transcript_length": len(vi.transcript),
+            "transcript": vi.transcript,
+        }
+
+    except TranscriptionError as e:
+        vi.transcript_source = "failed"
+        vi.transcript_error = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Transcript generation failed: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
 # POST /api/video/interviews/{video_id}/generate-score  -- Manual score generation
 # ---------------------------------------------------------------------------
 
@@ -1720,18 +2002,18 @@ def generate_interview_score(
     Requires transcript to be present.
     """
     from models import InterviewQuestion, InterviewSession, InterviewAnswer, Recommendation, InterviewSessionStatus, JobApplication
-    from services.groq_service import score_transcript_with_groq
+    from services.groq_service import score_transcript_with_groq, score_transcript_directly
     from services.gemini_service import score_transcript_with_gemini
     import config
-    
+
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
-    
+
     if not vi.transcript:
         raise HTTPException(status_code=400, detail="No transcript available. Complete the interview first.")
-    
-    # Get questions for scoring
+
+    # Get questions for scoring (may be empty for test uploads / real interviews)
     application = None
     if vi.candidate:
         application = db.query(JobApplication).filter(
@@ -1745,11 +2027,7 @@ def generate_interview_score(
         InterviewQuestion.job_id == vi.job_id,
         InterviewQuestion.candidate_id == candidate_id_for_questions
     ).all()
-    
-    if not questions:
-        raise HTTPException(status_code=400, detail="No questions found for this interview")
 
-    # Prepare questions for scoring
     questions_for_scoring = [
         {
             "question_id": q.id,
@@ -1759,23 +2037,55 @@ def generate_interview_score(
         for q in questions
     ]
 
+    # Use direct scoring if: no pre-defined questions OR transcript came from recording (test upload)
+    is_recording_transcript = vi.transcript_source in ("recording",)
+    use_direct_scoring = len(questions_for_scoring) == 0 or is_recording_transcript
+
     # Get or create interview session
-    session = db.query(InterviewSession).filter(
-        InterviewSession.job_id == vi.job_id,
-        InterviewSession.candidate_id == vi.candidate_id
-    ).first()
+    session = None
+    if vi.session_id:
+        session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
 
     if not session:
-        raise HTTPException(status_code=400, detail="No interview session found")
+        session = db.query(InterviewSession).filter(
+            InterviewSession.job_id == vi.job_id,
+            InterviewSession.candidate_id == vi.candidate_id
+        ).first()
+
+    if not session:
+        session = InterviewSession(
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="video_interview",
+            transcript_text=vi.transcript,
+            started_at=vi.started_at or vi.scheduled_at,
+        )
+        db.add(session)
+        db.flush()
+        vi.session_id = session.id
 
     # Score with AI
     try:
         llm_result = None
-        if config.GROQ_API_KEY:
-            llm_result = score_transcript_with_groq(vi.transcript, questions_for_scoring)
-        elif config.GEMINI_API_KEY:
-            llm_result = score_transcript_with_gemini(vi.transcript, questions_for_scoring)
-        
+
+        if use_direct_scoring:
+            # No pre-defined questions — AI extracts Q&A from transcript directly
+            job = db.query(Job).filter(Job.id == vi.job_id).first()
+            print(f"[generate-score] No pre-defined questions, using direct transcript scoring")
+            llm_result = score_transcript_directly(
+                transcript_text=vi.transcript,
+                job_title=job.title if job else "",
+                job_description=job.description if job else "",
+                skills_required=job.skills_required if job else "",
+            )
+        else:
+            # Standard scoring with pre-defined questions
+            if config.GROQ_API_KEY:
+                llm_result = score_transcript_with_groq(vi.transcript, questions_for_scoring)
+            elif config.GEMINI_API_KEY:
+                llm_result = score_transcript_with_gemini(vi.transcript, questions_for_scoring)
+
         if not llm_result:
             raise HTTPException(status_code=500, detail="AI scoring service unavailable")
 
@@ -1785,23 +2095,32 @@ def generate_interview_score(
         session.strengths = llm_result.get("strengths", "")
         session.weaknesses = llm_result.get("weaknesses", "")
         session.status = InterviewSessionStatus.SCORED
-        
+
         # Save per-question scores
         per_question_scores = llm_result.get("per_question", [])
         for pq in per_question_scores:
-            answer = db.query(InterviewAnswer).filter(
-                InterviewAnswer.session_id == session.id,
-                InterviewAnswer.question_id == pq.get("question_id")
-            ).first()
-            
-            if not answer:
+            q_id = pq.get("question_id")
+
+            if use_direct_scoring:
+                # Direct scoring: save extracted Q&A without linking to pre-defined questions
                 answer = InterviewAnswer(
                     session_id=session.id,
-                    question_id=pq.get("question_id"),
                     answer_text=pq.get("extracted_answer", "[From transcript]")
                 )
                 db.add(answer)
-            
+            else:
+                answer = db.query(InterviewAnswer).filter(
+                    InterviewAnswer.session_id == session.id,
+                    InterviewAnswer.question_id == q_id
+                ).first()
+                if not answer:
+                    answer = InterviewAnswer(
+                        session_id=session.id,
+                        question_id=q_id,
+                        answer_text=pq.get("extracted_answer", "[From transcript]")
+                    )
+                    db.add(answer)
+
             answer.score = float(pq.get("score", 0))
             answer.relevance_score = float(pq.get("relevance_score", 0))
             answer.completeness_score = float(pq.get("completeness_score", 0))
@@ -1971,20 +2290,33 @@ def upload_transcript_and_score(
         ).limit(10).all()
         print(f"📝 Found {len(approved_questions)} job-level questions")
 
-    # Error if no questions found for this candidate
-    if not approved_questions:
-        print(f"❌ No questions found for job_id={vi.job_id} with any candidate_id tried: {possible_candidate_ids}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"No questions found for this candidate (tried IDs: {possible_candidate_ids}). Please generate and approve questions in Manage Candidates before uploading transcript."
-        )
-
     score_result = None
     scoring_error = None
     llm_result = None
 
-    if approved_questions:
-        # Prepare questions for LLM scoring
+    # Use direct scoring if: no pre-defined questions OR transcript came from recording (test upload)
+    is_recording_transcript = vi.transcript_source in ("recording", "failed")
+    use_direct_scoring = len(approved_questions) == 0 or is_recording_transcript
+    if is_recording_transcript and approved_questions:
+        print(f"[upload-transcript] Transcript from recording — using direct scoring (ignoring {len(approved_questions)} pre-defined questions)")
+
+    import config
+    from services.groq_service import score_transcript_directly
+
+    if use_direct_scoring:
+        # No pre-defined questions — AI extracts Q&A from transcript directly
+        print(f"[upload-transcript] No pre-defined questions, using direct transcript scoring")
+        job = db.query(Job).filter(Job.id == vi.job_id).first()
+        llm_result = score_transcript_directly(
+            transcript_text=transcript_text,
+            job_title=job.title if job else "",
+            job_description=job.description if job else "",
+            skills_required=job.skills_required if job else "",
+        )
+        if not llm_result:
+            scoring_error = "AI direct scoring failed."
+    else:
+        # Standard scoring with pre-defined questions
         questions_for_scoring = [
             {
                 "question_id": q.id,
@@ -1994,10 +2326,6 @@ def upload_transcript_and_score(
             for q in approved_questions
         ]
 
-        # Score with Groq (primary), Gemini (fallback)
-        import config
-
-        # Try Groq first (free, fast)
         if config.GROQ_API_KEY:
             try:
                 print(f"[AI] Scoring transcript with Groq API (primary)...")
@@ -2008,7 +2336,6 @@ def upload_transcript_and_score(
                 print(f"[WARN] Groq scoring failed: {e}")
                 llm_result = None
 
-        # Fallback to Gemini
         if not llm_result and config.GEMINI_API_KEY:
             try:
                 print(f"[AI] Trying Gemini (fallback)...")
@@ -2079,47 +2406,45 @@ def upload_transcript_and_score(
             }
 
             # Save per-question answers with extracted answers from transcript
-            # Build a map of question IDs from the approved questions for validation
-            valid_question_ids = {q.id for q in approved_questions}
-
             for pq in llm_result.get("per_question", []):
-                q_id = pq.get("question_id")
-                if not q_id:
-                    continue
-
-                # Ensure question_id is int (LLM may return string)
-                try:
-                    q_id = int(q_id)
-                except (ValueError, TypeError):
-                    print(f"⚠️ Invalid question_id from LLM: {q_id}, skipping")
-                    continue
-
-                # Validate question_id exists in our approved questions
-                if q_id not in valid_question_ids:
-                    print(f"⚠️ question_id {q_id} not in approved questions, skipping")
-                    continue
-
-                # Find or create answer record
-                existing_answer = db.query(InterviewAnswer).filter(
-                    InterviewAnswer.session_id == session.id,
-                    InterviewAnswer.question_id == q_id
-                ).first()
-
-                if existing_answer:
-                    answer = existing_answer
-                else:
-                    answer = InterviewAnswer(session_id=session.id, question_id=q_id)
+                if use_direct_scoring:
+                    # Direct scoring: no pre-defined question IDs, save extracted Q&A
+                    answer = InterviewAnswer(
+                        session_id=session.id,
+                        answer_text=pq.get("extracted_answer", "Answer not extracted")
+                    )
                     db.add(answer)
-
-                # Save extracted answer from transcript
-                extracted = pq.get("extracted_answer", "")
-                # Don't save placeholder texts - keep the actual extracted answer
-                if extracted and extracted not in ("[Extracted from Transcript]", "No answer found in transcript", ""):
-                    answer.answer_text = extracted
-                elif existing_answer and existing_answer.answer_text and existing_answer.answer_text not in ("[Extracted from Transcript]", ""):
-                    pass  # Keep existing non-placeholder answer
                 else:
-                    answer.answer_text = extracted or "Answer not extracted from transcript"
+                    q_id = pq.get("question_id")
+                    if not q_id:
+                        continue
+                    try:
+                        q_id = int(q_id)
+                    except (ValueError, TypeError):
+                        continue
+
+                    valid_question_ids = {q.id for q in approved_questions}
+                    if q_id not in valid_question_ids:
+                        continue
+
+                    existing_answer = db.query(InterviewAnswer).filter(
+                        InterviewAnswer.session_id == session.id,
+                        InterviewAnswer.question_id == q_id
+                    ).first()
+
+                    if existing_answer:
+                        answer = existing_answer
+                    else:
+                        answer = InterviewAnswer(session_id=session.id, question_id=q_id)
+                        db.add(answer)
+
+                    extracted = pq.get("extracted_answer", "")
+                    if extracted and extracted not in ("[Extracted from Transcript]", "No answer found in transcript", ""):
+                        answer.answer_text = extracted
+                    elif existing_answer and existing_answer.answer_text and existing_answer.answer_text not in ("[Extracted from Transcript]", ""):
+                        pass
+                    else:
+                        answer.answer_text = extracted or "Answer not extracted from transcript"
 
                 # Store scores on 0-100 scale (internal standard)
                 answer.score = float(pq.get("score", 0))

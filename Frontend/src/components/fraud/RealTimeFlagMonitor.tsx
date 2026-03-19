@@ -116,7 +116,7 @@ const RealTimeFlagMonitor: React.FC = () => {
           voiceScore: Math.round((a.voice_consistency_score || 0) * 100),
           lipSyncScore: Math.round((a.lip_sync_score || 0) * 100),
           bodyScore: Math.round((a.body_movement_score || 0) * 100),
-          faceDetectionScore: Math.round((a.face_detection_score || 0) * 100),
+          faceDetectionScore: a.face_detection_score != null ? Math.round(a.face_detection_score * 100) : 0,
           analyzedAt: a.analyzed_at,
         };
       });

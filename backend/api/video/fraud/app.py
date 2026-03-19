@@ -120,7 +120,11 @@ def submit_face_events(
         raise HTTPException(status_code=400, detail="Interview is no longer active")
 
     # Calculate face detection score (0-1, higher = better/more trustworthy)
-    total = payload.total_detections or 1
+    # Skip if detector sent no meaningful data (total_detections=0 means model failed to run)
+    if payload.total_detections == 0:
+        return {"status": "skipped", "reason": "no face detections in payload"}
+
+    total = payload.total_detections
     single_ratio = payload.single_face_count / total
     no_face_ratio = payload.no_face_count / total
     multi_face_ratio = payload.multiple_face_count / total
