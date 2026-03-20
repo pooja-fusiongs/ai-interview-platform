@@ -18,6 +18,8 @@ import '@livekit/components-styles';
 import { Track, DisconnectReason } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
 import FaceDetectionOverlay from './FaceDetectionOverlay';
+import TranscriptionCapture from './TranscriptionCapture';
+import { TranscriptEntry } from '../../hooks/useRealtimeTranscript';
 import { getMediaDevices } from '../../utils/mediaDeviceUtils';
 import Navigation from '../layout/Sidebar';
 
@@ -349,6 +351,8 @@ const VideoInterviewRoom: React.FC = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [gracePeriodTimer, setGracePeriodTimer] = useState<number | null>(null);
+  const [, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
+  const [, setTranscriptConnected] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const graceCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -590,9 +594,7 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   // Recording callback for InterviewRecorder component
-  const handleRecordingChange = React.useCallback((recording: boolean) => {
-    setIsRecording(recording);
-  }, []);
+ 
 
   const stopAndUploadRecording = async () => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
@@ -679,11 +681,7 @@ const VideoInterviewRoom: React.FC = () => {
       // Clean up all video call elements
       cleanupVideoCall();
 
-      // Stop timer
-      setIsActive(false);
-      setCallJoined(false);
-
-      // Tell backend the interview is completed (send max participant count)
+      // Tell backend the interview is completed BEFORE changing UI state
       let result;
       if (isGuest) {
         result = await videoInterviewService.guestEndInterview(Number(videoId));
@@ -692,7 +690,12 @@ const VideoInterviewRoom: React.FC = () => {
           max_participants: maxParticipantsRef.current
         });
       }
-      setInterview(result);
+
+      // Set all states together so React renders "Completed" page directly
+      // (not "Interview Ready" → "Completed" flash)
+      setInterview({ ...interview, ...result, status: 'completed' });
+      setIsActive(false);
+      setCallJoined(false);
 
       if (result.status === 'no_show') {
         toast.error('Interview marked as No Show — candidate did not join');
@@ -710,7 +713,7 @@ const VideoInterviewRoom: React.FC = () => {
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     } finally {
       setEnding(false);
-      endingRef.current = false;
+      // Keep endingRef.current = true so onDisconnected won't try to reconnect
     }
   };
 
@@ -1062,18 +1065,30 @@ const VideoInterviewRoom: React.FC = () => {
                           }
 
                           // If candidate has an active recording and got disconnected
-                          // (recruiter ended the call), save the recording before reconnecting
+                          // (recruiter ended the call), save the recording and end
                           if (isUserCandidate && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                            console.log('🎬 Candidate disconnected with active recording — uploading before reconnect');
+                            console.log('🎬 Candidate disconnected — uploading recording');
                             await stopAndUploadRecording();
+                            // Recruiter ended the call — don't reconnect
+                            endingRef.current = true;
+                            setIsActive(false);
+                            setCallJoined(false);
+                            try {
+                              await videoInterviewService.guestEndInterview(Number(videoId));
+                            } catch {}
+                            const data = isGuest
+                              ? await videoInterviewService.guestGetInterview(Number(videoId)).catch(() => null)
+                              : await videoInterviewService.getInterview(Number(videoId)).catch(() => null);
+                            if (data) setInterview(data);
+                            toast.success('Interview completed!');
+                            return;
                           }
 
-                          // Attempt reconnection for unexpected disconnects
+                          // Only reconnect for unexpected disconnects (not after interview ended)
                           if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
                             reconnectAttemptsRef.current += 1;
                             const attempt = reconnectAttemptsRef.current;
                             toast.error(`Connection lost. Reconnecting (${attempt}/${MAX_RECONNECT_ATTEMPTS})...`);
-                            // Clear token to trigger re-fetch
                             setLkToken(null);
                           } else {
                             toast.error('Connection lost. Please refresh the page to rejoin.');
@@ -1094,6 +1109,13 @@ const VideoInterviewRoom: React.FC = () => {
                           mediaRecorderRef={mediaRecorderRef}
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
+                        />
+                        <TranscriptionCapture
+                          interviewId={videoId || ''}
+                          userRole={isUserCandidate ? 'candidate' : 'recruiter'}
+                          enabled={callJoined}
+                          onTranscriptUpdate={setTranscriptEntries}
+                          onConnectionChange={setTranscriptConnected}
                         />
                         {isUserCandidate && <FaceDetectionOverlay enabled={callJoined} videoInterviewId={videoId ? parseInt(videoId) : undefined} />}
                         <VideoTilesGrid onEndCall={handleEnd} />
@@ -1205,7 +1227,6 @@ const VideoInterviewRoom: React.FC = () => {
           </Box>
         </Box>
 
-        {/* Uploading Recording Overlay */}
         {/* Uploading Recording Overlay */}
         {uploadingRecording && (
           <Box sx={{

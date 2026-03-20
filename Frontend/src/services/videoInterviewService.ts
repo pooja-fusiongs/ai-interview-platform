@@ -56,6 +56,10 @@ export const videoInterviewService = {
     const response = await apiClient.get(`/api/video/interviews/${id}/transcript`);
     return response.data;
   },
+  getTranscriptChunks: async (id: number) => {
+    const response = await apiClient.get(`/api/video/interviews/${id}/transcript-chunks`);
+    return response.data;
+  },
   createDemoInterview: async () => {
     const response = await apiClient.post('/api/video/interviews/demo');
     return response.data;

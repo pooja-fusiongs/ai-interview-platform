@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey, Float, LargeBinary
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
@@ -551,6 +551,7 @@ class VideoInterview(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     ended_at = Column(DateTime(timezone=True), nullable=True)
     recording_url = Column(String, nullable=True)
+    recording_data = Column(LargeBinary, nullable=True)  # Store recording binary in DB
     recording_consent = Column(Boolean, default=False)
     notes = Column(Text, nullable=True)
     transcript = Column(Text, nullable=True)
@@ -606,6 +607,25 @@ class MovementTimeline(Base):
     flags_json = Column(Text, nullable=True)  # JSON string
 
     video_interview = relationship("VideoInterview")
+
+
+# ==================== Real-Time Transcript Models ====================
+
+class TranscriptChunk(Base):
+    __tablename__ = "transcript_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    video_interview_id = Column(Integer, ForeignKey("video_interviews.id"), nullable=False)
+    speaker = Column(String, nullable=False)  # "recruiter" or "candidate"
+    text = Column(Text, nullable=False)
+    timestamp_start = Column(Float, nullable=True)
+    timestamp_end = Column(Float, nullable=True)
+    is_final = Column(Boolean, default=True)
+    sequence_number = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    video_interview = relationship("VideoInterview")
+
 
 # ==================== Post-Hire Feedback Models ====================
 

@@ -638,7 +638,8 @@ def fraud_dashboard(
     flagged count, average trust score, and severity breakdown.
     Auto-analyzes completed interviews that haven't been analyzed yet.
     """
-    # Auto-analyze completed interviews with recordings but no analysis
+    # Auto-analyze completed interviews with recordings but no completed analysis
+    # Case 1: No FraudAnalysis record at all
     unanalyzed = (
         db.query(VideoInterview)
         .filter(
@@ -650,6 +651,19 @@ def fraud_dashboard(
         )
         .all()
     )
+    # Case 2: FraudAnalysis exists but still "pending" (real-time data only, no recording analysis)
+    pending_analyses = (
+        db.query(FraudAnalysis)
+        .join(VideoInterview, FraudAnalysis.video_interview_id == VideoInterview.id)
+        .filter(
+            FraudAnalysis.analysis_status == "pending",
+            VideoInterview.status == "completed",
+            VideoInterview.recording_url.isnot(None),
+        )
+        .all()
+    )
+
+    # Run real analysis for interviews with no record
     for vi in unanalyzed:
         try:
             base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
@@ -675,6 +689,31 @@ def fraud_dashboard(
         except Exception as e:
             db.rollback()
             print(f"[FraudDashboard] Auto-analysis failed for VI {vi.id}: {e}")
+
+    # Upgrade pending analyses with real recording analysis
+    for fa in pending_analyses:
+        try:
+            vi = fa.video_interview
+            base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+            recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
+            recording_path = os.path.normpath(recording_path)
+            results = run_real_analysis(vi.id, recording_path)
+            fa.voice_consistency_score = results["voice_consistency_score"]
+            fa.voice_consistency_details = results["voice_consistency_details"]
+            fa.lip_sync_score = results["lip_sync_score"]
+            fa.lip_sync_details = results["lip_sync_details"]
+            fa.body_movement_score = results["body_movement_score"]
+            fa.body_movement_details = results["body_movement_details"]
+            fa.overall_trust_score = results["overall_trust_score"]
+            fa.flags = results["flags"]
+            fa.flag_count = results["flag_count"]
+            fa.analysis_status = "completed"
+            fa.analyzed_at = results["analyzed_at"]
+            db.commit()
+            print(f"[FraudDashboard] Upgraded pending analysis for VI {vi.id} to completed")
+        except Exception as e:
+            db.rollback()
+            print(f"[FraudDashboard] Upgrade failed for VI {fa.video_interview_id}: {e}")
 
     total_interviews = db.query(VideoInterview).count()
     analyzed_count = (

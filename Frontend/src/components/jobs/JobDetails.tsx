@@ -140,7 +140,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canViewCandidates = user?.role === 'admin' || user?.id === selectedJob.created_by
 
   // Fetch candidates for this job
   const fetchCandidates = async () => {
@@ -681,10 +680,8 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         })()}
       </Box>{/* End Job Summary Card */}
 
-      {canViewCandidates && (
-        <>
-          {/* Mobile Similar Candidates - shown only on xs, hidden on md+ where right column shows */}
-          <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
+      {/* Mobile Similar Candidates - shown only on xs, hidden on md+ where right column shows */}
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
         <Box sx={{
           borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff',
           overflow: 'hidden',
@@ -1233,12 +1230,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           </>
         )
       })()}
-        </>
-      )}
+
       </Box>{/* End Left Column */}
 
-      {canViewCandidates && (
-        <Box sx={{ /* Right Column - Similar Candidates */
+      {/* Right Column - Similar Candidates */}
+      <Box sx={{
         width: { md: 220, lg: 300 }, flexShrink: 0,
         display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
         alignSelf: 'flex-start',
@@ -1370,7 +1366,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           </Box>
         </Box>
       </Box>
-      )}
       </Box>{/* End Two Column Layout */}
 
       {/* ─── Add Candidate Dialog ─── */}

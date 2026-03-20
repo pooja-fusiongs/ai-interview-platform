@@ -205,11 +205,8 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
   let faceVisible = false;
 
   if (status === 'error') {
-    faceChipLabel = 'AI Detector failed — retrying on next join';
-    faceChipColor = '#fca5a5';
-    faceChipBg = 'rgba(220,38,38,0.7)';
-    faceDotColor = '#ef4444';
-    faceVisible = true;
+    // Silent — don't show error to candidate
+    faceVisible = false;
   } else if (status === 'loading') {
     faceChipLabel = 'AI Detector loading...';
     faceChipColor = '#94a3b8';

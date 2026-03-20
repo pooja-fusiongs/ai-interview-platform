@@ -23,6 +23,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Groq API (Alternative to Gemini for transcript scoring - FREE, FAST, NO QUOTA LIMITS)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
+# Deepgram API (Real-time speech-to-text transcription)
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
+
 # Question generation mode: "live" (use LLM APIs) or "preview" (rule-based/mock)
 QUESTION_GENERATION_MODE = os.getenv("QUESTION_GENERATION_MODE", "live")
 

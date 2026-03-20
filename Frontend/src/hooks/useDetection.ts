@@ -504,8 +504,9 @@ export function useDetection({
 
       if (!holistic || cancelled) {
         if (!cancelled) {
-          console.error("[useDetection] All CDN sources failed. Check network connectivity.");
+          console.warn("[useDetection] All CDN sources failed. Retrying in 10s...");
           setStatus('error');
+          setTimeout(() => { if (!cancelled) init(); }, 10000);
         }
         return;
       }

@@ -27,9 +27,9 @@ if DATABASE_URL:
             "options": "-c statement_timeout=60000"
         },
         pool_pre_ping=True,
-        pool_recycle=120,
+        pool_recycle=60,
         pool_size=2,
-        max_overflow=3,
+        max_overflow=2,
         pool_timeout=30,
     )
     print("PostgreSQL connected successfully")

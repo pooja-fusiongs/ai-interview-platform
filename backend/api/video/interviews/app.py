@@ -1015,80 +1015,138 @@ async def guest_end_interview(
     db.commit()
     db.refresh(vi)
 
-    # Generate transcript in background (heavy operation)
-    vi_id = vi.id
-    job_id = vi.job_id
-    started_at = vi.started_at or vi.scheduled_at
-    recording_url = vi.recording_url
-    session_id = vi.session_id
-    has_transcript = vi.transcript is not None
+    # Always start background thread (don't gate on recording_url — it might arrive late)
+    _start_background_transcription_task(
+        vi_id=video_id,
+        job_id=vi.job_id,
+        started_at=vi.started_at or vi.scheduled_at,
+        recording_url_hint=vi.recording_url,
+        session_id=vi.session_id
+    )
 
-    import threading, time as _time
-    def _bg_guest_transcript(vi_id, job_id, started_at, recording_url_hint, session_id):
-        import traceback
-        bg_db = None
-        try:
-            from database import SessionLocal
-            bg_db = SessionLocal()
+    return {"message": "Interview ended", "status": vi.status}
 
-            # Wait for recording upload to commit
-            _time.sleep(3)
 
-            print(f"[guest_end BG] Starting transcript for vi_id={vi_id}")
-            bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
-            if not bg_vi:
-                return
+def _start_background_transcription_task(vi_id, job_id, started_at, recording_url_hint, session_id, candidate_id=None, candidate_email=None):
+    """Starts a background thread to generate transcript from recording."""
+    import threading
+    thread = threading.Thread(
+        target=_bg_transcription_worker,
+        args=(vi_id, job_id, started_at, recording_url_hint, session_id, candidate_id, candidate_email),
+        daemon=True,
+    )
+    thread.start()
 
-            if bg_vi.transcript:
-                print(f"[guest_end BG] Transcript already exists, skipping")
-                return
 
-            # Re-read recording_url from DB
-            actual_recording_url = bg_vi.recording_url or recording_url_hint
-            if not actual_recording_url:
-                _time.sleep(10)
-                bg_db.refresh(bg_vi)
-                actual_recording_url = bg_vi.recording_url
+def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, session_id, candidate_id=None, candidate_email=None):
+    """Worker function for background transcription."""
+    import traceback
+    import os
+    import threading
+    import time as _time
+    from datetime import datetime, timezone
+    from database import SessionLocal
+    from models import VideoInterview, InterviewQuestion, JobApplication, InterviewSession, VideoInterviewStatus
 
-            if not actual_recording_url:
-                bg_vi.transcript_source = "failed"
-                bg_vi.transcript_error = "No recording file available"
-                bg_db.commit()
-                return
+    bg_db = None
+    try:
+        bg_db = SessionLocal()
+        print(f"[BG Transcription] Starting for vi_id={vi_id}")
 
-            recording_filename = os.path.basename(actual_recording_url)
-            recordings_dir = os.path.normpath(os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
-            ))
-            recording_path = os.path.join(recordings_dir, recording_filename)
+        # Wait a moment for recording upload to commit (race condition fix)
+        _time.sleep(1)
 
-            # Wait for file to appear on disk
-            for attempt in range(6):
-                if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
-                    break
-                print(f"[guest_end BG] Recording file not ready, waiting... ({attempt+1}/6)")
-                _time.sleep(5)
+        bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+        if not bg_vi:
+            print(f"[BG Transcription] VideoInterview {vi_id} not found")
+            return
 
-            if not os.path.exists(recording_path):
-                bg_vi.transcript_source = "failed"
-                bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
-                bg_db.commit()
-                return
+        # Already has transcript (another thread may have finished)
+        if bg_vi.transcript:
+            print(f"[BG Transcription] Transcript already exists for vi_id={vi_id}, skipping")
+            return
 
-            actual_questions = []
-            if job_id:
-                questions = bg_db.query(InterviewQuestion).filter(
-                    InterviewQuestion.job_id == job_id,
-                    InterviewQuestion.is_approved == True
-                ).all()
+        # Re-read recording_url from DB
+        actual_recording_url = bg_vi.recording_url or recording_url_hint
+
+        # If still no recording_url, wait and retry (upload might be in progress)
+        if not actual_recording_url:
+            print(f"[BG Transcription] No recording_url yet, waiting 10s for upload...")
+            _time.sleep(10)
+            bg_db.refresh(bg_vi)
+            actual_recording_url = bg_vi.recording_url
+
+        if not actual_recording_url:
+            bg_vi.transcript_source = "failed"
+            bg_vi.transcript_error = "No recording file available"
+            bg_db.commit()
+            return
+
+        # Fetch questions for context
+        actual_questions = []
+        if job_id:
+            try:
+                # Optimized question fetching
+                possible_candidate_ids = []
+                if candidate_email:
+                    app = bg_db.query(JobApplication).filter(
+                        JobApplication.job_id == job_id,
+                        JobApplication.applicant_email == candidate_email
+                    ).first()
+                    if app: possible_candidate_ids.append(app.id)
+                
+                if candidate_id and candidate_id not in possible_candidate_ids:
+                    possible_candidate_ids.append(candidate_id)
+
+                questions = []
+                if possible_candidate_ids:
+                    for cid in possible_candidate_ids:
+                        questions = bg_db.query(InterviewQuestion).filter(
+                            InterviewQuestion.job_id == job_id,
+                            InterviewQuestion.candidate_id == cid,
+                            InterviewQuestion.is_approved == True
+                        ).all()
+                        if questions: break
+                
+                if not questions:
+                    # Fallback to any approved questions for this job
+                    questions = bg_db.query(InterviewQuestion).filter(
+                        InterviewQuestion.job_id == job_id,
+                        InterviewQuestion.is_approved == True
+                    ).all()
+
                 if questions:
                     actual_questions = [
                         {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
                         for q in questions
                     ]
+                    print(f"[BG Transcription] Using {len(actual_questions)} questions for context")
+            except Exception as q_err:
+                print(f"[BG Transcription] Question fetch error: {q_err}")
 
-            from services.transcript_generator import create_real_transcript, validate_recording_file
+        # Resolve recording file path
+        recording_filename = os.path.basename(actual_recording_url)
+        recordings_dir = os.path.normpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
+        ))
+        recording_path = os.path.join(recordings_dir, recording_filename)
 
+        # Wait for recording file to appear on disk
+        for attempt in range(6):
+            if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
+                break
+            print(f"[BG Transcription] File not ready, waiting... (attempt {attempt+1}/6)")
+            _time.sleep(5)
+
+        if not os.path.exists(recording_path):
+            bg_vi.transcript_source = "failed"
+            bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
+            bg_db.commit()
+            return
+
+        from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
+
+        try:
             validate_recording_file(recording_path)
             transcript_data = create_real_transcript(
                 interview_id=vi_id,
@@ -1097,41 +1155,85 @@ async def guest_end_interview(
                 interview_end_time=bg_vi.ended_at or datetime.now(timezone.utc),
                 question_timestamps=actual_questions if actual_questions else None
             )
+
             bg_vi.transcript = transcript_data["transcript_text"]
             bg_vi.transcript_source = "recording"
             bg_vi.transcript_generated_at = datetime.now(timezone.utc)
-            print(f"[guest_end BG] Transcript generated ({len(bg_vi.transcript)} chars)")
+            print(f"[BG Transcription] Success ({len(bg_vi.transcript)} chars)")
 
+            # Update InterviewSession
             sid = session_id or bg_vi.session_id
             if sid:
                 bg_session = bg_db.query(InterviewSession).filter(InterviewSession.id == sid).first()
                 if bg_session:
                     bg_session.transcript_text = transcript_data["transcript_text"]
-
+            
             bg_db.commit()
         except Exception as e:
-            print(f"[guest_end BG] Failed: {e}")
-            traceback.print_exc()
-            try:
-                if bg_db:
-                    bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
-                    if bg_vi and not bg_vi.transcript:
-                        bg_vi.transcript_source = "failed"
-                        bg_vi.transcript_error = f"Thread error: {str(e)[:400]}"
-                        bg_db.commit()
-            except Exception:
-                pass
-        finally:
-            if bg_db:
-                bg_db.close()
+            print(f"[BG Transcription] Extraction failed: {e}")
+            bg_vi.transcript_source = "failed"
+            bg_vi.transcript_error = str(e)[:500]
+            bg_vi.transcript_generated_at = datetime.now(timezone.utc)
+            bg_db.commit()
 
-    # Always start background thread (don't gate on recording_url — it might arrive late)
-    thread = threading.Thread(
-        target=_bg_guest_transcript,
-        args=(vi_id, job_id, started_at, recording_url, session_id),
-        daemon=True,
-    )
-    thread.start()
+        # Close DB connection before fraud analysis (free up pool for live interview)
+        bg_db.close()
+        bg_db = None
+
+        # Auto-run fraud analysis on recording (upgrade pending → completed)
+        if recording_path:
+            try:
+                from models import FraudAnalysis
+                from services.biometric_analyzer import run_real_analysis
+
+                # Run analysis WITHOUT DB connection (CPU-bound, takes 30-60 sec)
+                print(f"[BG Fraud] Running biometric analysis for vi_id={vi_id}")
+                results = run_real_analysis(vi_id, recording_path)
+
+                # Open fresh DB connection only for saving results
+                fraud_db = SessionLocal()
+                try:
+                    existing_fa = fraud_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
+                    if existing_fa:
+                        existing_fa.voice_consistency_score = results["voice_consistency_score"]
+                        existing_fa.voice_consistency_details = results["voice_consistency_details"]
+                        existing_fa.lip_sync_score = results["lip_sync_score"]
+                        existing_fa.lip_sync_details = results["lip_sync_details"]
+                        existing_fa.body_movement_score = results["body_movement_score"]
+                        existing_fa.body_movement_details = results["body_movement_details"]
+                        existing_fa.overall_trust_score = results["overall_trust_score"]
+                        existing_fa.flags = results["flags"]
+                        existing_fa.flag_count = results["flag_count"]
+                        existing_fa.analysis_status = "completed"
+                        existing_fa.analyzed_at = results.get("analyzed_at") or datetime.now(timezone.utc)
+                    else:
+                        new_fa = FraudAnalysis(
+                            video_interview_id=vi_id,
+                            voice_consistency_score=results["voice_consistency_score"],
+                            voice_consistency_details=results["voice_consistency_details"],
+                            lip_sync_score=results["lip_sync_score"],
+                            lip_sync_details=results["lip_sync_details"],
+                            body_movement_score=results["body_movement_score"],
+                            body_movement_details=results["body_movement_details"],
+                            overall_trust_score=results["overall_trust_score"],
+                            flags=results["flags"],
+                            flag_count=results["flag_count"],
+                            analysis_status="completed",
+                            analyzed_at=results.get("analyzed_at") or datetime.now(timezone.utc),
+                        )
+                        fraud_db.add(new_fa)
+                    fraud_db.commit()
+                    print(f"[BG Fraud] Completed for vi_id={vi_id}, trust={results['overall_trust_score']}")
+                finally:
+                    fraud_db.close()
+            except Exception as fraud_err:
+                print(f"[BG Fraud] Failed for vi_id={vi_id}: {fraud_err}")
+
+    except Exception as e:
+        print(f"[BG Transcription] Fatal error: {e}")
+        traceback.print_exc()
+    finally:
+        if bg_db: bg_db.close()
 
     return {"message": "Interview ended", "status": vi.status}
 
@@ -1158,10 +1260,21 @@ async def guest_upload_recording(
         f.write(contents)
 
     vi.recording_url = f"/uploads/recordings/{filename}"
+    vi.recording_data = contents  # Store in DB for cross-machine access
     db.commit()
     db.refresh(vi)
 
-    print(f"🎥 Guest recording saved: {file_path} ({len(contents)} bytes)")
+    print(f"🎥 Guest recording saved: {file_path} + DB ({len(contents)} bytes)")
+
+    # AUTOMATIC TRANSCRIPTION: Trigger immediately after upload
+    _start_background_transcription_task(
+        vi_id=video_id,
+        job_id=vi.job_id,
+        started_at=vi.started_at or vi.scheduled_at,
+        recording_url_hint=vi.recording_url,
+        session_id=vi.session_id
+    )
+
     return {"message": "Recording uploaded successfully", "recording_url": vi.recording_url}
 
 
@@ -1250,179 +1363,15 @@ def end_video_interview(
     db.refresh(vi)
 
     # --- Generate transcript in BACKGROUND THREAD (heavy operation) ---
-    vi_id = vi.id
-    job_id = vi.job_id
-    candidate_id = vi.candidate_id
-    candidate_email = vi.candidate.email if vi.candidate else None
-    started_at = vi.started_at or vi.scheduled_at
-    recording_url = vi.recording_url
-    session_id = vi.session_id
-
-    import threading, time as _time
-    def _bg_transcript(vi_id, job_id, candidate_id, candidate_email, started_at, recording_url_hint, session_id):
-        import traceback
-        bg_db = None
-        try:
-            from database import SessionLocal
-            bg_db = SessionLocal()
-            print(f"[end_interview BG] Starting transcript generation for vi_id={vi_id}")
-
-            # Wait a moment for recording upload to commit (race condition fix)
-            _time.sleep(3)
-
-            bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
-            if not bg_vi:
-                print(f"[end_interview BG] VideoInterview {vi_id} not found")
-                return
-
-            # Already has transcript (another thread may have finished)
-            if bg_vi.transcript:
-                print(f"[end_interview BG] Transcript already exists for vi_id={vi_id}, skipping")
-                return
-
-            # Re-read recording_url from DB (may have been updated after end was called)
-            actual_recording_url = bg_vi.recording_url or recording_url_hint
-
-            # If still no recording_url, wait and retry (upload might be in progress)
-            if not actual_recording_url:
-                print(f"[end_interview BG] No recording_url yet, waiting 10s for upload...")
-                _time.sleep(10)
-                bg_db.refresh(bg_vi)
-                actual_recording_url = bg_vi.recording_url
-
-            # Fetch questions for context
-            actual_questions = []
-            if job_id:
-                all_job_questions = bg_db.query(InterviewQuestion).filter(
-                    InterviewQuestion.job_id == job_id
-                ).all()
-
-                possible_candidate_ids = []
-                if candidate_email:
-                    application = bg_db.query(JobApplication).filter(
-                        JobApplication.job_id == job_id,
-                        JobApplication.applicant_email == candidate_email
-                    ).first()
-                    if application:
-                        possible_candidate_ids.append(application.id)
-
-                if candidate_id and candidate_id not in possible_candidate_ids:
-                    possible_candidate_ids.append(candidate_id)
-
-                existing_candidate_ids = set(q.candidate_id for q in all_job_questions)
-                for ecid in existing_candidate_ids:
-                    if ecid not in possible_candidate_ids:
-                        possible_candidate_ids.append(ecid)
-
-                questions = []
-                for cid in possible_candidate_ids:
-                    questions = bg_db.query(InterviewQuestion).filter(
-                        InterviewQuestion.job_id == job_id,
-                        InterviewQuestion.candidate_id == cid,
-                        InterviewQuestion.is_approved == True
-                    ).all()
-                    if questions:
-                        break
-
-                if not questions:
-                    for cid in possible_candidate_ids:
-                        questions = bg_db.query(InterviewQuestion).filter(
-                            InterviewQuestion.job_id == job_id,
-                            InterviewQuestion.candidate_id == cid
-                        ).all()
-                        if questions:
-                            break
-
-                if questions:
-                    actual_questions = [
-                        {"question_text": q.question_text, "sample_answer": q.sample_answer or ""}
-                        for q in questions
-                    ]
-                    print(f"[end_interview BG] Using {len(actual_questions)} questions for transcript")
-
-            # Resolve recording file path
-            if not actual_recording_url:
-                bg_vi.transcript_source = "failed"
-                bg_vi.transcript_error = "No recording file available"
-                bg_db.commit()
-                return
-
-            recording_filename = os.path.basename(actual_recording_url)
-            recordings_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"))
-            recording_path = os.path.join(recordings_dir, recording_filename)
-
-            # Wait for recording file to appear on disk (upload may still be writing)
-            for attempt in range(6):
-                if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
-                    break
-                print(f"[end_interview BG] Recording file not ready yet, waiting... (attempt {attempt+1}/6)")
-                _time.sleep(5)
-
-            if not os.path.exists(recording_path):
-                print(f"[end_interview BG] Recording file not found: {recording_path}")
-                bg_vi.transcript_source = "failed"
-                bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
-                bg_db.commit()
-                return
-
-            from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
-
-            try:
-                validate_recording_file(recording_path)
-                transcript_data = create_real_transcript(
-                    interview_id=vi_id,
-                    recording_path=recording_path,
-                    interview_start_time=started_at,
-                    interview_end_time=bg_vi.ended_at or datetime.now(timezone.utc),
-                    question_timestamps=actual_questions if actual_questions else None
-                )
-
-                bg_vi.transcript = transcript_data["transcript_text"]
-                bg_vi.transcript_source = "recording"
-                bg_vi.transcript_generated_at = datetime.now(timezone.utc)
-                print(f"[end_interview BG] Transcript generated ({len(transcript_data['transcript_text'])} chars)")
-
-                # Update InterviewSession with transcript
-                sid = session_id or bg_vi.session_id
-                if sid:
-                    bg_session = bg_db.query(InterviewSession).filter(InterviewSession.id == sid).first()
-                    if bg_session:
-                        bg_session.transcript_text = transcript_data["transcript_text"]
-
-            except (TranscriptionError, Exception) as e:
-                print(f"[end_interview BG] Transcription failed: {e}")
-                traceback.print_exc()
-                bg_vi.transcript_source = "failed"
-                bg_vi.transcript_error = str(e)[:500]
-                bg_vi.transcript_generated_at = datetime.now(timezone.utc)
-
-            bg_db.commit()
-            print(f"[end_interview BG] Done for vi_id={vi_id}")
-
-        except Exception as e:
-            print(f"[end_interview BG] FATAL Error: {e}")
-            traceback.print_exc()
-            # Try to save the error to DB
-            try:
-                if bg_db:
-                    bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
-                    if bg_vi and not bg_vi.transcript:
-                        bg_vi.transcript_source = "failed"
-                        bg_vi.transcript_error = f"Thread error: {str(e)[:400]}"
-                        bg_db.commit()
-            except Exception:
-                pass
-        finally:
-            if bg_db:
-                bg_db.close()
-
-    thread = threading.Thread(
-        target=_bg_transcript,
-        args=(vi_id, job_id, candidate_id, candidate_email, started_at, recording_url, session_id),
-        daemon=True,
+    _start_background_transcription_task(
+        vi_id=vi.id,
+        job_id=vi.job_id,
+        candidate_id=vi.candidate_id,
+        candidate_email=vi.candidate.email if vi.candidate else None,
+        started_at=vi.started_at or vi.scheduled_at,
+        recording_url_hint=vi.recording_url,
+        session_id=vi.session_id
     )
-    thread.start()
-    print(f"[end_interview] Response sent, transcript generating in background")
 
     return _build_response(vi, db)
 
@@ -2554,10 +2503,23 @@ async def upload_recording(
         f.write(contents)
 
     vi.recording_url = f"/uploads/recordings/{filename}"
+    vi.recording_data = contents  # Store in DB for cross-machine access
     db.commit()
     db.refresh(vi)
 
-    print(f"🎥 Recording saved: {file_path} ({len(contents)} bytes)")
+    print(f"🎥 Recording saved: {file_path} + DB ({len(contents)} bytes)")
+
+    # AUTOMATIC TRANSCRIPTION: Trigger immediately after upload
+    _start_background_transcription_task(
+        vi_id=video_id,
+        job_id=vi.job_id,
+        candidate_id=vi.candidate_id,
+        candidate_email=vi.candidate.email if vi.candidate else None,
+        started_at=vi.started_at or vi.scheduled_at,
+        recording_url_hint=vi.recording_url,
+        session_id=vi.session_id
+    )
+
     return {"message": "Recording uploaded successfully", "recording_url": vi.recording_url}
 
 
@@ -2583,8 +2545,41 @@ def get_recording(
     if current_user.role == UserRole.CANDIDATE and vi.candidate_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # Try local file first
     file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", vi.recording_url.lstrip("/"))
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Recording file not found")
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type="video/webm", filename=os.path.basename(file_path))
 
-    return FileResponse(file_path, media_type="video/webm", filename=os.path.basename(file_path))
+    # Fallback: serve from DB
+    if vi.recording_data:
+        from fastapi.responses import Response
+        return Response(
+            content=vi.recording_data,
+            media_type="video/webm",
+            headers={"Content-Disposition": f"inline; filename=interview_{video_id}.webm"}
+        )
+
+    raise HTTPException(status_code=404, detail="Recording file not found")
+
+
+@router.get("/api/video/interviews/{video_id}/recording-stream")
+def stream_recording(video_id: int, db: Session = Depends(get_db)):
+    """Serve recording without auth — for video player src attribute."""
+    from fastapi.responses import Response
+
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi or not vi.recording_url:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    # 1. Try local file
+    file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", vi.recording_url.lstrip("/"))
+    if os.path.exists(file_path):
+        mime = "video/mp4" if file_path.endswith(".mp4") else "video/webm"
+        return FileResponse(file_path, media_type=mime)
+
+    # 2. Try DB
+    if vi.recording_data:
+        mime = "video/mp4" if vi.recording_url.endswith(".mp4") else "video/webm"
+        return Response(content=vi.recording_data, media_type=mime)
+
+    raise HTTPException(status_code=404, detail="Recording file not found")

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+uploads/
+*.db
+.env
+.env.local
+nul
+*.webm
+*.mp4
+*.png
+*.jpg
+*.pdf
+*.gif
+scripts/
+*.log

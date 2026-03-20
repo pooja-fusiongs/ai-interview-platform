@@ -20,6 +20,67 @@ from typing import Dict, Any, Optional
 
 # ---------- lazy dependency checks ----------
 
+_ffmpeg_configured = False
+
+def _get_ffmpeg_exe():
+    """Get ffmpeg executable path (system or imageio_ffmpeg)."""
+    from pydub.utils import which
+    sys_ffmpeg = which("ffmpeg")
+    if sys_ffmpeg:
+        return sys_ffmpeg
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        return None
+
+def _ensure_ffmpeg_path():
+    """Configure pydub to use imageio_ffmpeg binary if system ffmpeg not found."""
+    global _ffmpeg_configured
+    if _ffmpeg_configured:
+        return
+    _ffmpeg_configured = True
+
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        return
+
+    import pydub
+    pydub.AudioSegment.converter = ffmpeg_exe
+
+    ffmpeg_dir = os.path.dirname(ffmpeg_exe)
+    if ffmpeg_dir not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+
+
+def load_audio_from_file(file_path: str):
+    """Load audio using ffmpeg directly, bypassing pydub's ffprobe requirement."""
+    import subprocess
+    from pydub import AudioSegment
+
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        raise FileNotFoundError("ffmpeg not found")
+
+    # Convert to wav using ffmpeg directly (skip pydub's mediainfo_json/ffprobe)
+    tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_wav.close()
+    try:
+        result = subprocess.run(
+            [ffmpeg_exe, "-y", "-i", file_path, "-vn", "-ac", "1", "-ar", "16000", tmp_wav.name],
+            capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed: {result.stderr[-300:]}")
+        # Load wav (pydub handles wav natively without ffprobe)
+        audio = AudioSegment.from_wav(tmp_wav.name)
+        return audio
+    finally:
+        try:
+            os.unlink(tmp_wav.name)
+        except OSError:
+            pass
+
 def _check_deps():
     """Return True if all heavy deps are importable."""
     try:
@@ -27,6 +88,7 @@ def _check_deps():
         import numpy        # noqa: F401
         import mediapipe     # noqa: F401
         from pydub import AudioSegment  # noqa: F401
+        _ensure_ffmpeg_path()
         return True
     except ImportError:
         return False
@@ -130,7 +192,7 @@ def analyze_voice(audio_path: str) -> Dict[str, Any]:
 
 def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
     """
-    Correlate mouth openness (MediaPipe Face Mesh) with audio energy.
+    Correlate mouth openness (MediaPipe Face Landmarker) with audio energy.
     High correlation → real speaker; low → possible dubbing/proxy.
     """
     import cv2
@@ -138,7 +200,7 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
     import mediapipe as mp
     from pydub import AudioSegment
 
-    audio = AudioSegment.from_file(audio_path)
+    audio = AudioSegment.from_wav(audio_path)
     audio_samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
     if audio.channels > 1:
         audio_samples = audio_samples.reshape(-1, audio.channels).mean(axis=1)
@@ -148,8 +210,15 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    face_mesh = mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5
+    # Use new tasks API with downloaded model
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "face_landmarker.task")
+    face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
+        mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+            running_mode=mp.tasks.vision.RunningMode.IMAGE,
+            num_faces=1,
+            min_face_detection_confidence=0.5,
+        )
     )
 
     # Sample every ~0.5 sec
@@ -166,10 +235,11 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
         frames_analyzed += 1
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = face_mesh.process(rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = face_landmarker.detect(mp_image)
 
-        if result.multi_face_landmarks:
-            lm = result.multi_face_landmarks[0].landmark
+        if result.face_landmarks:
+            lm = result.face_landmarks[0]
             # Landmarks 13 (upper lip) and 14 (lower lip)
             mouth_gap = abs(lm[13].y - lm[14].y)
             mouth_openness.append(mouth_gap)
@@ -187,7 +257,7 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
             audio_energy.append(0.0)
 
     cap.release()
-    face_mesh.close()
+    face_landmarker.close()
 
     if len(mouth_openness) < 3:
         return {"score": 0.80, "details": {
@@ -239,7 +309,7 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
 
 def analyze_body_movement(video_path: str) -> Dict[str, Any]:
     """
-    Use MediaPipe Pose + Face Mesh to evaluate:
+    Use MediaPipe Pose Landmarker + Face Landmarker to evaluate:
       - posture_consistency : shoulder midpoint stability
       - eye_contact_pct : nose landmark roughly centred → facing camera
       - head_movement_variance : nose landmark drift
@@ -252,15 +322,28 @@ def analyze_body_movement(video_path: str) -> Dict[str, Any]:
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
-    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
 
-    pose = mp.solutions.pose.Pose(
-        static_image_mode=False, min_detection_confidence=0.5
+    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models")
+
+    pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
+        mp.tasks.vision.PoseLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=os.path.join(models_dir, "pose_landmarker.task")),
+            running_mode=mp.tasks.vision.RunningMode.IMAGE,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
+        )
     )
-    face_mesh = mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5
+    face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
+        mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=os.path.join(models_dir, "face_landmarker.task")),
+            running_mode=mp.tasks.vision.RunningMode.IMAGE,
+            num_faces=1,
+            min_face_detection_confidence=0.5,
+        )
     )
+
+    LEFT_SHOULDER = mp.tasks.vision.PoseLandmark.LEFT_SHOULDER
+    RIGHT_SHOULDER = mp.tasks.vision.PoseLandmark.RIGHT_SHOULDER
 
     sample_interval = max(1, int(fps * 0.5))
     shoulder_midpoints = []
@@ -275,21 +358,22 @@ def analyze_body_movement(video_path: str) -> Dict[str, Any]:
             break
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
         # Pose
-        pose_result = pose.process(rgb)
+        pose_result = pose_landmarker.detect(mp_image)
         if pose_result.pose_landmarks:
-            lm = pose_result.pose_landmarks.landmark
-            left_sh = lm[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER]
-            right_sh = lm[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER]
+            lm = pose_result.pose_landmarks[0]
+            left_sh = lm[LEFT_SHOULDER]
+            right_sh = lm[RIGHT_SHOULDER]
             mid_x = (left_sh.x + right_sh.x) / 2
             mid_y = (left_sh.y + right_sh.y) / 2
             shoulder_midpoints.append((mid_x, mid_y))
 
-        # Face mesh for eye contact
-        face_result = face_mesh.process(rgb)
-        if face_result.multi_face_landmarks:
-            lm = face_result.multi_face_landmarks[0].landmark
+        # Face landmarker for eye contact
+        face_result = face_landmarker.detect(mp_image)
+        if face_result.face_landmarks:
+            lm = face_result.face_landmarks[0]
             nose = lm[1]  # nose tip
             nose_positions.append((nose.x, nose.y))
             total_face_frames += 1
@@ -298,8 +382,8 @@ def analyze_body_movement(video_path: str) -> Dict[str, Any]:
                 eye_contact_frames += 1
 
     cap.release()
-    pose.close()
-    face_mesh.close()
+    pose_landmarker.close()
+    face_landmarker.close()
 
     if not shoulder_midpoints or total_face_frames == 0:
         return {"score": 0.80, "details": {
@@ -411,12 +495,10 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
         return run_full_simulated_analysis(video_interview_id)
 
     try:
-        from pydub import AudioSegment
-
-        # Extract audio to temp wav
+        # Extract audio to temp wav (using ffmpeg directly, bypasses ffprobe requirement)
         tmp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp_audio.close()
-        audio = AudioSegment.from_file(recording_path)
+        audio = load_audio_from_file(recording_path)
         audio.export(tmp_audio.name, format="wav")
 
         print(f"[biometric] Analyzing voice for interview {video_interview_id}...")
@@ -428,6 +510,9 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
         print(f"[biometric] Analyzing body movement for interview {video_interview_id}...")
         body = analyze_body_movement(recording_path)
 
+        # Face detection score from body movement analysis (eye_contact + face visibility)
+        face_score = body["details"].get("eye_contact_pct", 0.8)
+
         # Cleanup temp file
         try:
             os.unlink(tmp_audio.name)
@@ -436,10 +521,10 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
 
         flags = _generate_flags(voice["score"], lip["score"], body["score"])
         overall_trust = round(
-            voice["score"] * 0.35 + lip["score"] * 0.35 + body["score"] * 0.30, 3
+            voice["score"] * 0.30 + lip["score"] * 0.30 + body["score"] * 0.20 + face_score * 0.20, 3
         )
 
-        print(f"[biometric] Analysis complete: trust={overall_trust}, flags={len(flags)}")
+        print(f"[biometric] Analysis complete: trust={overall_trust}, face={face_score}, flags={len(flags)}")
 
         return {
             "voice_consistency_score": voice["score"],
@@ -448,6 +533,8 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
             "lip_sync_details": json.dumps(lip["details"]),
             "body_movement_score": body["score"],
             "body_movement_details": json.dumps(body["details"]),
+            "face_detection_score": face_score,
+            "face_detection_details": json.dumps({"eye_contact_pct": face_score, "source": "recording_analysis"}),
             "overall_trust_score": overall_trust,
             "flags": json.dumps(flags),
             "flag_count": len(flags),

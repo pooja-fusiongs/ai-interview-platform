@@ -32,7 +32,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from database import engine, get_db
-from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, InterviewQuestionVersion, InterviewRating, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis, ATSCandidateMapping, PostHireFeedback
+from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, InterviewQuestionVersion, InterviewRating, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis, ATSCandidateMapping, PostHireFeedback, TranscriptChunk
 from schemas import (
     JobCreate, JobUpdate, JobResponse,
     CandidateProfileResponse
@@ -113,6 +113,8 @@ def auto_migrate():
         ("fraud_analyses", "face_detection_details", "TEXT"),
         # Transcript-extracted question text (for test analysis / direct scoring without pre-defined questions)
         ("interview_answers", "question_text_override", "TEXT"),
+        # Recording binary data stored in DB
+        ("video_interviews", "recording_data", "BYTEA"),
     ]
 
     with engine.begin() as conn:
@@ -182,6 +184,7 @@ app.add_middleware(
         "https://ai-interview-platform.vercel.app",
         "https://ai-interview-platform.netlify.app",
         "https://ai-interview-platform-unqg.vercel.app",
+        "https://interview-frontend-1081442053080.us-central1.run.app",
     ],
     allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.netlify\.app|https://.*\.onrender\.com",
     allow_credentials=True,
@@ -329,6 +332,14 @@ except Exception as e:
     import traceback
     print(f"⚠️ Could not load LiveKit endpoints: {e}")
     traceback.print_exc()
+
+# Import and mount Real-Time Transcription WebSocket endpoints
+try:
+    from routers.transcription_ws import router as transcription_ws_router
+    app.include_router(transcription_ws_router, tags=["Real-Time Transcription"])
+    print("✅ Real-Time Transcription WebSocket endpoint included")
+except Exception as e:
+    print(f"⚠️ Could not load Real-Time Transcription endpoints: {e}")
 
 # Import and mount Interview Rating endpoints (from client merge)
 try:

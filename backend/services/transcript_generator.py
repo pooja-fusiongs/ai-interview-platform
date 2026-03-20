@@ -7,6 +7,7 @@ No mock/simulated data - all transcripts must come from real speech-to-text.
 
 import os
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import config
@@ -39,12 +40,22 @@ def transcribe_audio_file(file_path: str) -> str:
     
     logger.info(f"[transcribe] Starting real transcription of {os.path.basename(file_path)} ({file_size} bytes)")
     
-    # Try Groq Whisper (free, fast, reliable — accepts video files directly, no ffmpeg needed)
+    # Try Groq Whisper first (free, fast)
     if config.GROQ_API_KEY:
-        return _transcribe_with_groq(file_path)
+        try:
+            return _transcribe_with_groq(file_path)
+        except TranscriptionError as e:
+            logger.warning(f"[transcribe] Groq failed: {e}, trying Deepgram fallback...")
 
-    # No transcription service configured
-    raise TranscriptionError("No transcription service configured. Set GROQ_API_KEY in .env")
+    # Fallback: Deepgram pre-recorded API
+    if config.DEEPGRAM_API_KEY:
+        try:
+            return _transcribe_with_deepgram(file_path)
+        except TranscriptionError as e:
+            logger.warning(f"[transcribe] Deepgram also failed: {e}")
+
+    # No transcription service configured or all failed
+    raise TranscriptionError("Transcription failed. Check GROQ_API_KEY and DEEPGRAM_API_KEY in .env")
 
 def _extract_audio_from_video(video_path: str) -> str:
     """
@@ -108,6 +119,64 @@ def _extract_audio_from_video(video_path: str) -> str:
         raise TranscriptionError("ffmpeg not found. Install ffmpeg or pip install imageio-ffmpeg")
 
 
+def _transcribe_with_deepgram(file_path: str) -> str:
+    """
+    Transcribe using Deepgram pre-recorded API (fallback).
+    Fast and reliable REST API.
+    """
+    import requests
+
+    api_key = config.DEEPGRAM_API_KEY
+    if not api_key:
+        raise TranscriptionError("Deepgram API key not configured")
+
+    url = "https://api.deepgram.com/v1/listen"
+    params = {
+        "model": "nova-2",
+        "smart_format": "true",
+        "punctuate": "true",
+        "diarize": "true",
+        "language": "en",
+    }
+    headers = {
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "application/octet-stream",
+    }
+
+    file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    logger.info(f"[transcribe] Using Deepgram for {os.path.basename(file_path)} ({file_size_mb:.1f} MB)")
+
+    try:
+        with open(file_path, "rb") as f:
+            response = requests.post(url, params=params, headers=headers, data=f, timeout=120)
+
+        if response.status_code != 200:
+            raise TranscriptionError(f"Deepgram API error {response.status_code}: {response.text[:200]}")
+
+        result = response.json()
+        channels = result.get("results", {}).get("channels", [])
+        if not channels:
+            raise TranscriptionError("Deepgram returned no channels")
+
+        alternatives = channels[0].get("alternatives", [])
+        if not alternatives:
+            raise TranscriptionError("Deepgram returned no alternatives")
+
+        transcript = alternatives[0].get("transcript", "")
+        if not transcript or len(transcript.strip()) < 10:
+            raise TranscriptionError("Deepgram transcript too short or empty")
+
+        logger.info(f"[transcribe] Deepgram transcription successful ({len(transcript)} chars)")
+        return transcript.strip()
+
+    except requests.exceptions.RequestException as e:
+        raise TranscriptionError(f"Deepgram connection error: {e}")
+    except TranscriptionError:
+        raise
+    except Exception as e:
+        raise TranscriptionError(f"Deepgram transcription failed: {e}")
+
+
 def _transcribe_with_groq(file_path: str) -> str:
     """
     Transcribe using Groq Whisper API.
@@ -162,22 +231,36 @@ def _transcribe_with_groq(file_path: str) -> str:
             # Use original filename for direct uploads, "audio.mp3" for extracted chunks
             upload_filename = os.path.basename(chunk_path) if temp_files else os.path.basename(file_path)
 
-            try:
-                with open(chunk_path, "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
-                        file=(upload_filename, audio_file),
-                        model=model_name,
-                        language="en",
-                        response_format="text",
-                        temperature=0.0,
-                    )
-                chunk_text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
-                if chunk_text:
-                    all_text.append(chunk_text)
-                    logger.info(f"[transcribe] Chunk {idx+1} done: {len(chunk_text)} chars")
-            except Exception as e:
-                logger.warning(f"[transcribe] Chunk {idx+1} failed: {e}")
-                # Try fallback model for this chunk
+            # Retry loop with exponential backoff for connection errors
+            chunk_transcribed = False
+            for attempt in range(3):
+                try:
+                    with open(chunk_path, "rb") as audio_file:
+                        transcription = client.audio.transcriptions.create(
+                            file=(upload_filename, audio_file),
+                            model=model_name,
+                            language="en",
+                            response_format="text",
+                            temperature=0.0,
+                        )
+                    chunk_text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+                    if chunk_text:
+                        all_text.append(chunk_text)
+                        logger.info(f"[transcribe] Chunk {idx+1} done: {len(chunk_text)} chars")
+                    chunk_transcribed = True
+                    break
+                except Exception as e:
+                    is_connection_error = "connection" in str(e).lower() or "timeout" in str(e).lower()
+                    if is_connection_error and attempt < 2:
+                        wait_time = 2 ** attempt  # 1s, 2s
+                        logger.warning(f"[transcribe] Chunk {idx+1} attempt {attempt+1} failed (connection error), retrying in {wait_time}s: {e}")
+                        time.sleep(wait_time)
+                        continue
+                    logger.warning(f"[transcribe] Chunk {idx+1} failed after attempt {attempt+1}: {e}")
+                    break
+
+            # Try fallback model if primary model failed
+            if not chunk_transcribed:
                 try:
                     with open(chunk_path, "rb") as audio_file:
                         transcription = client.audio.transcriptions.create(
@@ -340,8 +423,8 @@ def _process_transcript_with_timestamps(
     if not raw_text or not raw_text.strip():
         raise TranscriptionError("No valid text found in transcription")
 
-    # Add speaker labels using LLM
-    labeled_text = _add_speaker_labels(raw_text.strip(), question_timestamps)
+    # Skip LLM speaker labeling (too slow) — use raw text directly
+    labeled_text = raw_text.strip()
 
     start_str = start_time.strftime("%H:%M:%S")
     end_str = end_time.strftime("%H:%M:%S")
