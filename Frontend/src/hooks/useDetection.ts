@@ -351,12 +351,16 @@ export function useDetection({
         console.log(`[FaceDetection] Frame #${w.total_detections}: hasFace=${hasFace}, landmarks=${results.faceLandmarks?.length ?? 0}, pose=${!!results.poseLandmarks}`);
       }
 
-      if (!hasFace) {
+      if (faceCountCurrent === 0) {
         w.no_face_count += 1;
         w.no_face_seconds += intervalSeconds;
         flagsRef.current.left_frame = true;
-      } else {
+      } else if (faceCountCurrent === 1) {
         w.single_face_count += 1;
+      } else {
+        // 2+ faces detected
+        w.multiple_face_count += 1;
+        w.multiple_face_seconds += intervalSeconds;
       }
       if (faceCountCurrent > w.max_faces_detected) w.max_faces_detected = faceCountCurrent;
 

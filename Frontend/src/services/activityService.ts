@@ -23,10 +23,10 @@ class ActivityService {
     // Update activity immediately
     this.updateActivity();
 
-    // Set up periodic activity updates (every 2 minutes)
+    // Set up periodic activity updates (every 5 minutes — reduce DB load)
     this.activityInterval = setInterval(() => {
       this.updateActivity();
-    }, 120000); // 2 minutes
+    }, 300000); // 5 minutes
 
     // Track user interactions
     this.setupEventListeners();
@@ -82,10 +82,8 @@ class ActivityService {
    */
   private setupEventListeners() {
     // Track various user interactions
-    const events = ['click', 'keypress', 'scroll', 'mousemove'];
-    events.forEach(event => {
-      document.addEventListener(event, this.handleUserInteraction, { passive: true });
-    });
+    // Only track clicks — mousemove/scroll cause too many API calls
+    document.addEventListener('click', this.handleUserInteraction, { passive: true });
 
     // Set user offline when browser/tab is closed
     window.addEventListener('beforeunload', this.handleBeforeUnload);
@@ -95,11 +93,7 @@ class ActivityService {
    * Remove event listeners
    */
   private removeEventListeners() {
-    const events = ['click', 'keypress', 'scroll', 'mousemove'];
-
-    events.forEach(event => {
-      document.removeEventListener(event, this.handleUserInteraction);
-    });
+    document.removeEventListener('click', this.handleUserInteraction);
 
     window.removeEventListener('beforeunload', this.handleBeforeUnload);
   }
@@ -128,7 +122,7 @@ class ActivityService {
    */
   private handleUserInteraction = (() => {
     let lastUpdate = 0;
-    const throttleDelay = 60000; // 1 minute throttle
+    const throttleDelay = 300000; // 5 minute throttle
 
     return () => {
       const now = Date.now();

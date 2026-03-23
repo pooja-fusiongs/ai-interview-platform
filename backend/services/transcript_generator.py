@@ -57,6 +57,89 @@ def transcribe_audio_file(file_path: str) -> str:
     # No transcription service configured or all failed
     raise TranscriptionError("Transcription failed. Check GROQ_API_KEY and DEEPGRAM_API_KEY in .env")
 
+
+def transcribe_audio_file_with_timestamps(file_path: str) -> tuple:
+    """
+    Transcribe and return BOTH raw text AND timestamped segments.
+    Used for PyAnnote alignment.
+
+    Returns: (raw_text: str, segments: List[Dict])
+        segments: [{"start": float, "end": float, "text": str}, ...]
+    Falls back to (raw_text, []) if timestamps unavailable.
+    """
+    if not os.path.exists(file_path):
+        raise TranscriptionError(f"Recording file not found: {file_path}")
+
+    file_size = os.path.getsize(file_path)
+    if file_size < 1000:
+        raise TranscriptionError(f"Recording file too small ({file_size} bytes)")
+
+    if not config.GROQ_API_KEY:
+        raise TranscriptionError("GROQ_API_KEY not configured")
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=config.GROQ_API_KEY)
+
+        file_ext = os.path.splitext(file_path)[1].lower()
+        video_extensions = {'.mp4', '.mpeg', '.webm'}
+        file_size_mb = file_size / (1024 * 1024)
+
+        # Extract audio if large video
+        upload_path = file_path
+        temp_file = None
+        if file_ext in video_extensions and file_size_mb > 24:
+            try:
+                upload_path = _extract_audio_from_video(file_path)
+                temp_file = upload_path
+            except Exception:
+                upload_path = file_path
+
+        logger.info(f"[transcribe+timestamps] Using verbose_json for {os.path.basename(file_path)}")
+
+        # Request verbose_json for timestamps
+        with open(upload_path, "rb") as audio_file:
+            response = client.audio.transcriptions.create(
+                file=(os.path.basename(upload_path), audio_file),
+                model="whisper-large-v3-turbo",
+                language="en",
+                response_format="verbose_json",
+                temperature=0.0,
+            )
+
+        # Clean up temp file
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+            except OSError:
+                pass
+
+        # Parse response — verbose_json returns segments with timestamps
+        raw_text = ""
+        segments = []
+
+        if hasattr(response, 'text'):
+            raw_text = response.text.strip()
+        if hasattr(response, 'segments') and response.segments:
+            for seg in response.segments:
+                segments.append({
+                    "start": getattr(seg, 'start', 0),
+                    "end": getattr(seg, 'end', 0),
+                    "text": getattr(seg, 'text', '').strip(),
+                })
+
+        if not raw_text:
+            raise TranscriptionError("Empty transcription result")
+
+        logger.info(f"[transcribe+timestamps] Got {len(segments)} segments, {len(raw_text)} chars")
+        return raw_text, segments
+
+    except TranscriptionError:
+        raise
+    except Exception as e:
+        raise TranscriptionError(f"Timestamped transcription failed: {e}")
+
+
 def _extract_audio_from_video(video_path: str) -> str:
     """
     Extract full audio from video as a single compressed MP3 file using ffmpeg.

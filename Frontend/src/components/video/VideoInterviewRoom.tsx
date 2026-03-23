@@ -345,7 +345,7 @@ const VideoInterviewRoom: React.FC = () => {
   const [, setEnding] = useState(false);
   const [showConsentDialog, setShowConsentDialog] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [uploadingRecording, setUploadingRecording] = useState(false);
+  // Recording upload is now non-blocking (background)
   const [, setParticipantCount] = useState(0);
   const [lkToken, setLkToken] = useState<string | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -596,49 +596,36 @@ const VideoInterviewRoom: React.FC = () => {
   // Recording callback for InterviewRecorder component
  
 
-  const stopAndUploadRecording = async () => {
+  // Stop recorder and return blob (non-blocking — does NOT upload)
+  const stopRecorderAndGetBlob = (): Promise<Blob | null> => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-      return;
+      return Promise.resolve(null);
     }
-
-    return new Promise<void>((resolve) => {
+    return new Promise((resolve) => {
       const recorder = mediaRecorderRef.current!;
-
-      recorder.onstop = async () => {
-        // Don't stop LiveKit tracks — LiveKit manages them
-        // Just stop the MediaRecorder
-
+      recorder.onstop = () => {
         setIsRecording(false);
-
         if (recordedChunksRef.current.length === 0) {
-          console.warn('No recording data collected');
-          resolve();
+          resolve(null);
           return;
         }
-
         const blob = new Blob(recordedChunksRef.current, {
           type: recordedChunksRef.current[0]?.type || 'video/webm'
         });
-        console.log(`🎬 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB, type: ${blob.type}`);
-
-        try {
-          setUploadingRecording(true);
-          toast('Uploading recording...', { icon: '📤' });
-          await (isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording)(Number(videoId), blob);
-          toast.success('Recording uploaded successfully!');
-        } catch (err) {
-          console.error('Failed to upload recording:', err);
-          toast.error('Failed to upload recording.');
-        } finally {
-          setUploadingRecording(false);
-          recordedChunksRef.current = [];
-        }
-
-        resolve();
+        recordedChunksRef.current = [];
+        resolve(blob);
       };
-
       recorder.stop();
     });
+  };
+
+  // Upload recording in background (fire-and-forget, non-blocking)
+  const uploadRecordingInBackground = (blob: Blob) => {
+    const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
+    console.log(`🎬 Background upload: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+    upload(Number(videoId), blob)
+      .then(() => console.log('✅ Recording uploaded'))
+      .catch((err) => console.error('❌ Recording upload failed:', err));
   };
 
   const cleanupVideoCall = () => {
@@ -649,39 +636,32 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const handleEnd = async () => {
-    // Use ref to prevent double execution (React state isn't immediate)
+    // Idempotent — prevent double execution
     if (endingRef.current) return;
     endingRef.current = true;
+
+    // 1) INSTANT UI update — user sees "completed" immediately
+    setIsActive(false);
+    setCallJoined(false);
+    setIsRecording(false);
+    setEnding(false);
+
+    // 2) Stop recorder (fast — just stops MediaRecorder, no upload)
+    let recordingBlob: Blob | null = null;
     try {
-      setEnding(true);
+      recordingBlob = await stopRecorderAndGetBlob();
+    } catch {}
 
-      // Upload recording if MediaRecorder exists
-      if (mediaRecorderRef.current) {
-        if (mediaRecorderRef.current.state !== 'inactive') {
-          // Recorder is still active — stop and upload
-          console.log(`🎬 Stopping recorder (state: ${mediaRecorderRef.current.state}, isRecording: ${isRecording})`);
-          await stopAndUploadRecording();
-        } else if (recordedChunksRef.current.length > 0) {
-          // Recorder already inactive but has chunks (e.g., silently errored) — upload what we have
-          console.log(`🎬 Recorder inactive but has ${recordedChunksRef.current.length} chunks — uploading`);
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          console.log(`🎬 Recording blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
-          try {
-            await (isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording)(Number(videoId), blob);
-            toast.success('Recording uploaded successfully!');
-          } catch (err) {
-            console.error('Failed to upload recording:', err);
-            toast.error('Failed to upload recording.');
-          }
-          recordedChunksRef.current = [];
-          setIsRecording(false);
-        }
-      }
+    // 3) Clean up video call
+    cleanupVideoCall();
 
-      // Clean up all video call elements
-      cleanupVideoCall();
+    // 4) Upload recording in BACKGROUND (non-blocking)
+    if (recordingBlob) {
+      uploadRecordingInBackground(recordingBlob);
+    }
 
-      // Tell backend the interview is completed BEFORE changing UI state
+    // 5) Tell backend — in background (don't block UI)
+    try {
       let result;
       if (isGuest) {
         result = await videoInterviewService.guestEndInterview(Number(videoId));
@@ -690,30 +670,22 @@ const VideoInterviewRoom: React.FC = () => {
           max_participants: maxParticipantsRef.current
         });
       }
-
-      // Set all states together so React renders "Completed" page directly
-      // (not "Interview Ready" → "Completed" flash)
       setInterview({ ...interview, ...result, status: 'completed' });
-      setIsActive(false);
-      setCallJoined(false);
 
       if (result.status === 'no_show') {
         toast.error('Interview marked as No Show — candidate did not join');
       } else {
         toast.success('Interview completed!');
       }
-
-      if (!isGuest) {
-        setTimeout(() => {
-          navigate(`/video-detail/${videoId}`);
-        }, 1500);
-      }
-      // Guest stays on the page — will see "Interview Completed" state
     } catch (err: any) {
+      // Still mark as completed locally even if backend call fails
+      setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
       toast.error(err.response?.data?.detail || 'Failed to end interview');
-    } finally {
-      setEnding(false);
-      // Keep endingRef.current = true so onDisconnected won't try to reconnect
+    }
+
+    // 6) Navigate (recruiter only)
+    if (!isGuest) {
+      setTimeout(() => navigate(`/video-detail/${videoId}`), 1500);
     }
   };
 
@@ -1064,23 +1036,43 @@ const VideoInterviewRoom: React.FC = () => {
                             return;
                           }
 
-                          // If candidate has an active recording and got disconnected
-                          // (recruiter ended the call), save the recording and end
-                          if (isUserCandidate && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                            console.log('🎬 Candidate disconnected — uploading recording');
-                            await stopAndUploadRecording();
-                            // Recruiter ended the call — don't reconnect
+                          // Candidate disconnected (recruiter ended the call)
+                          if (isUserCandidate) {
                             endingRef.current = true;
                             setIsActive(false);
                             setCallJoined(false);
-                            try {
-                              await videoInterviewService.guestEndInterview(Number(videoId));
-                            } catch {}
-                            const data = isGuest
-                              ? await videoInterviewService.guestGetInterview(Number(videoId)).catch(() => null)
-                              : await videoInterviewService.getInterview(Number(videoId)).catch(() => null);
-                            if (data) setInterview(data);
+                            setIsRecording(false);
                             toast.success('Interview completed!');
+
+                            // Candidate stays on page — safe to await upload
+                            (async () => {
+                              try {
+                                const blob = await stopRecorderAndGetBlob();
+                                if (blob) {
+                                  const upload = isGuest
+                                    ? videoInterviewService.guestUploadRecording
+                                    : videoInterviewService.uploadRecording;
+                                  await upload(Number(videoId), blob);
+                                  console.log('✅ Candidate recording uploaded');
+                                }
+                              } catch (err) {
+                                console.error('Recording upload failed:', err);
+                              }
+
+                              // End interview after upload
+                              try {
+                                await videoInterviewService.guestEndInterview(Number(videoId));
+                              } catch {}
+
+                              // Refresh interview data
+                              const fetchFn = isGuest
+                                ? videoInterviewService.guestGetInterview
+                                : videoInterviewService.getInterview;
+                              try {
+                                const data = await fetchFn(Number(videoId));
+                                if (data) setInterview(data);
+                              } catch {}
+                            })();
                             return;
                           }
 
@@ -1227,20 +1219,7 @@ const VideoInterviewRoom: React.FC = () => {
           </Box>
         </Box>
 
-        {/* Uploading Recording Overlay */}
-        {uploadingRecording && (
-          <Box sx={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <Paper sx={{ p: 4, borderRadius: '16px', textAlign: 'center' }}>
-              <CircularProgress sx={{ color: '#020291', mb: 2 }} />
-              <Typography sx={{ fontWeight: 600, color: '#1e293b' }}>Uploading Recording...</Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '13px', mt: 1 }}>Please wait, do not close this page.</Typography>
-            </Paper>
-          </Box>
-        )}
+        {/* Recording upload happens in background — no blocking overlay */}
 
         {/* Recording Consent Dialog */}
         <Dialog

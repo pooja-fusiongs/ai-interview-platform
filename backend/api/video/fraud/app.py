@@ -832,11 +832,10 @@ def list_all_analyses(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """All completed fraud analyses with interview context."""
+    """All fraud analyses (live + completed) for monitor dashboard."""
     analyses = (
         db.query(FraudAnalysis)
-        .filter(FraudAnalysis.analysis_status == "completed")
-        .order_by(FraudAnalysis.analyzed_at.desc())
+        .order_by(FraudAnalysis.analyzed_at.desc().nullslast())
         .all()
     )
     results = []
@@ -849,6 +848,9 @@ def list_all_analyses(
                 candidate_name = vi.candidate.full_name or vi.candidate.username or ""
             if vi.job:
                 job_title = vi.job.title or ""
+        interview_status = ""
+        if vi:
+            interview_status = vi.status.value if hasattr(vi.status, "value") else (vi.status or "")
         results.append({
             "fraud_analysis_id": fa.id,
             "video_interview_id": fa.video_interview_id,
@@ -863,6 +865,7 @@ def list_all_analyses(
             "face_detection_score": fa.face_detection_score,
             "face_detection_details": fa.face_detection_details,
             "analysis_status": fa.analysis_status,
+            "interview_status": interview_status,
             "analyzed_at": fa.analyzed_at.isoformat() if fa.analyzed_at else None,
         })
     return {"analyses": results, "total": len(results)}

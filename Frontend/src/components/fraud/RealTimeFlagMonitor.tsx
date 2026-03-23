@@ -54,10 +54,11 @@ interface MonitorSession {
   jobTitle: string;
   trustScore: number;
   flags: ParsedFlag[];
-  status: 'flagged' | 'completed';
+  status: 'live' | 'flagged' | 'completed';
   voiceScore: number;
   lipSyncScore: number;
   bodyScore: number;
+  interviewStatus: string;
   faceDetectionScore: number;
   analyzedAt: string | null;
 }
@@ -106,19 +107,35 @@ const RealTimeFlagMonitor: React.FC = () => {
       const analyses = data.analyses || [];
       const mapped: MonitorSession[] = analyses.map((a: any) => {
         const flags = parseFlags(a.flags, a.candidate_name || 'Unknown');
+        const isLive = a.interview_status === 'in_progress' || a.interview_status === 'waiting';
+        let status: 'live' | 'flagged' | 'completed';
+        if (isLive) {
+          status = 'live';
+        } else if ((a.flag_count || 0) > 0) {
+          status = 'flagged';
+        } else {
+          status = 'completed';
+        }
         return {
           videoInterviewId: a.video_interview_id,
           candidateName: a.candidate_name || 'Unknown',
           jobTitle: a.job_title || '',
           trustScore: Math.round((a.overall_trust_score || 0) * 100),
           flags,
-          status: (a.flag_count || 0) > 0 ? 'flagged' as const : 'completed' as const,
+          status,
           voiceScore: Math.round((a.voice_consistency_score || 0) * 100),
           lipSyncScore: Math.round((a.lip_sync_score || 0) * 100),
           bodyScore: Math.round((a.body_movement_score || 0) * 100),
           faceDetectionScore: a.face_detection_score != null ? Math.round(a.face_detection_score * 100) : 0,
           analyzedAt: a.analyzed_at,
+          interviewStatus: a.interview_status || '',
         };
+      });
+      // Sort: live interviews first, then by date
+      mapped.sort((a, b) => {
+        if (a.status === 'live' && b.status !== 'live') return -1;
+        if (a.status !== 'live' && b.status === 'live') return 1;
+        return 0;
       });
       setSessions(mapped);
       setError('');
@@ -132,12 +149,16 @@ const RealTimeFlagMonitor: React.FC = () => {
 
   useEffect(() => {
     loadSessions();
-    intervalRef.current = setInterval(() => loadSessions(), 15000);
+    intervalRef.current = setInterval(() => {
+      // Only poll when tab is visible — saves DB connections
+      if (!document.hidden) loadSessions();
+    }, 15000); // 15s
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
   const totalFlags = sessions.reduce((sum, s) => sum + s.flags.length, 0);
   const flaggedSessions = sessions.filter((s) => s.status === 'flagged').length;
+  const liveSessions = sessions.filter((s) => s.status === 'live').length;
 
   // Main view tab: 0=Interviews, 1=Flag Activity Log
   const [mainTab, setMainTab] = useState(0);
@@ -260,9 +281,10 @@ const RealTimeFlagMonitor: React.FC = () => {
         {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '12px', border: '1px solid #fecaca' }}>{error}</Alert>}
 
         {/* Stats */}
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: '16px', mb: '24px' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(4, 1fr)' }, gap: '16px', mb: '24px' }}>
           {[
-            { value: sessions.length, label: 'Analyzed Interviews', icon: <Circle sx={{ color: '#22c55e', fontSize: '20px' }} />, bg: '#f0fdf4' },
+            { value: liveSessions, label: 'Live Now', icon: <MonitorHeart sx={{ color: '#8b5cf6', fontSize: '20px' }} />, bg: '#f5f3ff' },
+            { value: sessions.length, label: 'Total Interviews', icon: <Circle sx={{ color: '#22c55e', fontSize: '20px' }} />, bg: '#f0fdf4' },
             { value: flaggedSessions, label: 'Flagged Sessions', icon: <Error sx={{ color: '#ef4444', fontSize: '20px' }} />, bg: '#fef2f2' },
             { value: totalFlags, label: 'Total Flags', icon: <Warning sx={{ color: '#020291', fontSize: '20px' }} />, bg: '#EEF0FF' },
           ].map((stat, i) => (
@@ -317,19 +339,20 @@ const RealTimeFlagMonitor: React.FC = () => {
                 {paginatedSessions.map((session, index) => {
                   const trustColor = getScoreColor(session.trustScore);
                   const isFlagged = session.status === 'flagged';
+                  const isLive = session.status === 'live';
                   return (
                     <Grow in key={session.videoInterviewId} timeout={300 + index * 100}>
                       <Card sx={{
                         borderRadius: '16px',
-                        border: isFlagged ? '2px solid #ef4444' : '1px solid #e5e7eb',
-                        boxShadow: isFlagged ? '0 4px 20px rgba(239, 68, 68, 0.15)' : '0 4px 12px rgba(0,0,0,0.04)',
+                        border: isLive ? '2px solid #8b5cf6' : isFlagged ? '2px solid #ef4444' : '1px solid #e5e7eb',
+                        boxShadow: isLive ? '0 4px 20px rgba(139, 92, 246, 0.2)' : isFlagged ? '0 4px 20px rgba(239, 68, 68, 0.15)' : '0 4px 12px rgba(0,0,0,0.04)',
                         transition: 'all 0.25s ease', overflow: 'hidden',
                         '&:hover': { boxShadow: '0 8px 28px rgba(0,0,0,0.1)', transform: 'translateY(-2px)' },
                       }}>
                         <Box sx={{
                           padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          background: isFlagged ? '#fef2f2' : '#fafbfc',
+                          background: isLive ? '#f5f3ff' : isFlagged ? '#fef2f2' : '#fafbfc',
                         }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <Box sx={{
@@ -348,10 +371,11 @@ const RealTimeFlagMonitor: React.FC = () => {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Box sx={{
                                   width: 8, height: 8, borderRadius: '50%',
-                                  backgroundColor: isFlagged ? '#ef4444' : '#22c55e',
+                                  backgroundColor: isLive ? '#8b5cf6' : isFlagged ? '#ef4444' : '#22c55e',
+                                  ...(isLive ? { animation: 'blink 1.2s infinite', '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } } } : {}),
                                 }} />
                                 <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                                  {isFlagged ? 'Flagged' : 'Cleared'} • Interview #{session.videoInterviewId}
+                                  {isLive ? 'LIVE' : isFlagged ? 'Flagged' : 'Cleared'} • Interview #{session.videoInterviewId}
                                   {session.jobTitle ? ` • ${session.jobTitle}` : ''}
                                 </Typography>
                               </Box>

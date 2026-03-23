@@ -26,6 +26,9 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 # Deepgram API (Real-time speech-to-text transcription)
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 
+# HuggingFace (PyAnnote speaker diarization)
+HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
+
 # Question generation mode: "live" (use LLM APIs) or "preview" (rule-based/mock)
 QUESTION_GENERATION_MODE = os.getenv("QUESTION_GENERATION_MODE", "live")
 

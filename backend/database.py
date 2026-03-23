@@ -1,8 +1,12 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 import os
+import logging
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Always load .env so DATABASE_URL is available regardless of import order
 load_dotenv()
@@ -15,24 +19,62 @@ if DATABASE_URL:
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-    print("Using PostgreSQL from DATABASE_URL")
+    is_supabase = "supabase" in DATABASE_URL or "pooler" in DATABASE_URL
+    is_transaction_mode = ":6543/" in DATABASE_URL
+
+    if is_supabase:
+        mode = "transaction" if is_transaction_mode else "session"
+        print(f"Using Supabase PostgreSQL ({mode} mode pooler)")
+    else:
+        print("Using PostgreSQL from DATABASE_URL")
+
     SQLALCHEMY_DATABASE_URL = DATABASE_URL
-    
-    # Add SSL configuration for cloud PostgreSQL (Supabase/Render)
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        connect_args={
-            "sslmode": "require",
-            "connect_timeout": 10,
-            "options": "-c statement_timeout=60000"
-        },
-        pool_pre_ping=True,
-        pool_recycle=60,
-        pool_size=2,
-        max_overflow=2,
-        pool_timeout=30,
-    )
-    print("PostgreSQL connected successfully")
+
+    if is_supabase and is_transaction_mode:
+        # TRANSACTION MODE (port 6543) — Supabase pgbouncer handles pooling
+        # Use NullPool: SQLAlchemy does NOT pool, each request gets fresh connection
+        # This prevents SSL drops and pool exhaustion
+        engine = create_engine(
+            SQLALCHEMY_DATABASE_URL,
+            connect_args={
+                "sslmode": "require",
+                "connect_timeout": 10,
+                "options": "-c statement_timeout=60000"
+            },
+            poolclass=NullPool,           # Let Supabase pgbouncer handle pooling
+            use_native_hstore=False,      # Prevent hstore OID query that breaks pgbouncer SSL
+        )
+        print("PostgreSQL connected (NullPool — Supabase pgbouncer manages connections)")
+    elif is_supabase:
+        # SESSION MODE (port 5432) — use NullPool to prevent MaxClients error
+        # Each request opens fresh connection, uses it, closes immediately
+        engine = create_engine(
+            SQLALCHEMY_DATABASE_URL,
+            connect_args={
+                "sslmode": "require",
+                "connect_timeout": 10,
+                "options": "-c statement_timeout=60000"
+            },
+            poolclass=NullPool,
+        )
+        print("PostgreSQL connected (NullPool — no connection hoarding)")
+    else:
+        # Non-Supabase (Render, etc.)
+        engine = create_engine(
+            SQLALCHEMY_DATABASE_URL,
+            connect_args={
+                "sslmode": "require",
+                "connect_timeout": 10,
+                "options": "-c statement_timeout=60000"
+            },
+            pool_pre_ping=True,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
+            pool_recycle=120,
+            pool_reset_on_return="rollback",
+        )
+        print("PostgreSQL connected (pool_size=5, max_overflow=10)")
 else:
     # Local development: try local PostgreSQL, fallback to SQLite
     POSTGRES_USER = "postgres"
@@ -45,7 +87,14 @@ else:
         SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
         print(f"Attempting PostgreSQL connection: {POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}")
 
-        engine = create_engine(SQLALCHEMY_DATABASE_URL)
+        engine = create_engine(
+            SQLALCHEMY_DATABASE_URL,
+            pool_pre_ping=True,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
+            pool_reset_on_return="rollback",
+        )
         engine.connect()
         print("PostgreSQL connected successfully")
 
@@ -59,13 +108,21 @@ else:
             connect_args={"check_same_thread": False}
         )
         print("SQLite database initialized")
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
 def get_db():
+    """FastAPI dependency — yields a DB session and guarantees cleanup."""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+
+def get_safe_db():
+    """For background threads — returns a session that MUST be manually closed."""
+    return SessionLocal()

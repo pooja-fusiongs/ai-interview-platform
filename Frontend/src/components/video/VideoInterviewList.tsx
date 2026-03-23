@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, Paper, Chip, IconButton, Tooltip, CircularProgress, Alert,
+  TableRow, Paper, Chip, IconButton, Tooltip, CircularProgress, Alert, Skeleton,
   TablePagination, TextField, InputAdornment, FormControl, Select, MenuItem,
   Button, Popover, Badge, Card, CardContent, useMediaQuery, useTheme
 } from '@mui/material';
@@ -324,7 +324,72 @@ const VideoInterviewList: React.FC = () => {
         </Box>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
+          isMobile ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {[...Array(5)].map((_, i) => (
+                <Card key={i} sx={{ borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
+                      <Skeleton width="60%" height={24} />
+                      <Skeleton width={70} height={24} sx={{ borderRadius: '12px' }} />
+                    </Box>
+                    <Skeleton width="40%" height={18} sx={{ mb: 1 }} />
+                    <Skeleton width="50%" height={18} sx={{ mb: 1 }} />
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                      <Skeleton variant="rounded" width={80} height={32} />
+                      <Skeleton variant="rounded" width={80} height={32} />
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          ) : (
+            <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>#</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Job Title</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Candidate</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', sm: 'table-cell' } }}>Scheduled At</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', md: 'table-cell' } }}>Duration</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', display: { xs: 'none', md: 'table-cell' } }}>Flags</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {[...Array(6)].map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton width={20} /></TableCell>
+                        <TableCell><Skeleton width="80%" /></TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Skeleton variant="circular" width={32} height={32} />
+                            <Box>
+                              <Skeleton width={100} />
+                              <Skeleton width={140} height={14} />
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell><Skeleton width={80} height={26} sx={{ borderRadius: '12px' }} /></TableCell>
+                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}><Skeleton width={120} /></TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}><Skeleton width={50} /></TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}><Skeleton width={30} /></TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Skeleton variant="circular" width={32} height={32} />
+                            <Skeleton variant="circular" width={32} height={32} />
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          )
         ) : isMobile ? (
           /* Mobile Card View */
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

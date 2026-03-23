@@ -1050,7 +1050,8 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
 
     bg_db = None
     try:
-        bg_db = SessionLocal()
+        from database import get_safe_db
+        bg_db = get_safe_db()
         print(f"[BG Transcription] Starting for vi_id={vi_id}")
 
         # Wait a moment for recording upload to commit (race condition fix)
@@ -1148,26 +1149,60 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
 
         try:
             validate_recording_file(recording_path)
-            transcript_data = create_real_transcript(
-                interview_id=vi_id,
-                recording_path=recording_path,
-                interview_start_time=started_at,
-                interview_end_time=bg_vi.ended_at or datetime.now(timezone.utc),
-                question_timestamps=actual_questions if actual_questions else None
-            )
 
-            bg_vi.transcript = transcript_data["transcript_text"]
+            transcript_text = None
+
+            # === TRY 1: PyAnnote diarization + Whisper timestamps (best quality) ===
+            try:
+                from services.speaker_diarization import (
+                    diarize_audio, assign_speaker_roles,
+                    align_transcript_with_diarization, DiarizationError
+                )
+                from services.transcript_generator import transcribe_audio_file_with_timestamps
+
+                print(f"[BG Transcription] Trying PyAnnote diarization...")
+                raw_text, whisper_segments = transcribe_audio_file_with_timestamps(recording_path)
+
+                if whisper_segments:
+                    diar_segments = diarize_audio(recording_path)
+                    role_map = assign_speaker_roles(diar_segments)
+                    labeled_text = align_transcript_with_diarization(
+                        whisper_segments, diar_segments, role_map
+                    )
+
+                    start_str = (started_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                    end_str = (bg_vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                    transcript_text = f"[Interview Start: {start_str}]\n\n{labeled_text}\n\n[Interview End: {end_str}]"
+                    print(f"[BG Transcription] PyAnnote diarization success ({len(transcript_text)} chars)")
+                else:
+                    print(f"[BG Transcription] No whisper segments, falling back...")
+
+            except Exception as diar_err:
+                print(f"[BG Transcription] Diarization failed (falling back): {diar_err}")
+
+            # === TRY 2: Fallback to existing method (no speaker diarization) ===
+            if not transcript_text:
+                transcript_data = create_real_transcript(
+                    interview_id=vi_id,
+                    recording_path=recording_path,
+                    interview_start_time=started_at,
+                    interview_end_time=bg_vi.ended_at or datetime.now(timezone.utc),
+                    question_timestamps=actual_questions if actual_questions else None
+                )
+                transcript_text = transcript_data["transcript_text"]
+                print(f"[BG Transcription] Fallback success ({len(transcript_text)} chars)")
+
+            bg_vi.transcript = transcript_text
             bg_vi.transcript_source = "recording"
             bg_vi.transcript_generated_at = datetime.now(timezone.utc)
-            print(f"[BG Transcription] Success ({len(bg_vi.transcript)} chars)")
 
             # Update InterviewSession
             sid = session_id or bg_vi.session_id
             if sid:
                 bg_session = bg_db.query(InterviewSession).filter(InterviewSession.id == sid).first()
                 if bg_session:
-                    bg_session.transcript_text = transcript_data["transcript_text"]
-            
+                    bg_session.transcript_text = transcript_text
+
             bg_db.commit()
         except Exception as e:
             print(f"[BG Transcription] Extraction failed: {e}")
@@ -1191,7 +1226,7 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                 results = run_real_analysis(vi_id, recording_path)
 
                 # Open fresh DB connection only for saving results
-                fraud_db = SessionLocal()
+                fraud_db = get_safe_db()
                 try:
                     existing_fa = fraud_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
                     if existing_fa:

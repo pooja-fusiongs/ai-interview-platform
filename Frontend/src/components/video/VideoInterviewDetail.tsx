@@ -76,21 +76,7 @@ const VideoInterviewDetail: React.FC = () => {
     };
     if (videoId) fetchInterview();
 
-    // Auto-poll for transcript if recording exists but transcript not yet generated
-    const pollInterval = setInterval(async () => {
-      if (cancelled) return;
-      try {
-        const data = await videoInterviewService.getInterview(Number(videoId));
-        if (cancelled) return;
-        if (data.transcript && !transcript) {
-          setInterview(data);
-          setTranscript(data.transcript);
-          clearInterval(pollInterval);
-        }
-      } catch { /* ignore poll errors */ }
-    }, 5000); // Check every 5 seconds
-
-    return () => { cancelled = true; clearInterval(pollInterval); };
+    return () => { cancelled = true; };
   }, [videoId]);
 
  

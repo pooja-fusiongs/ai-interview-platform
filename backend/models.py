@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey, Float, LargeBinary
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from database import Base
 import enum
 
@@ -551,7 +551,7 @@ class VideoInterview(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     ended_at = Column(DateTime(timezone=True), nullable=True)
     recording_url = Column(String, nullable=True)
-    recording_data = Column(LargeBinary, nullable=True)  # Store recording binary in DB
+    recording_data = deferred(Column(LargeBinary, nullable=True))  # Deferred — only loaded when explicitly accessed
     recording_consent = Column(Boolean, default=False)
     notes = Column(Text, nullable=True)
     transcript = Column(Text, nullable=True)

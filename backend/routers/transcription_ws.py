@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from database import SessionLocal
+from database import get_safe_db
 from models import VideoInterview, TranscriptChunk
 from services.realtime_transcription import DeepgramStreamer
 
@@ -63,7 +63,7 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
     local_speaker = role
     remote_speaker = "candidate" if role == "recruiter" else "recruiter"
 
-    db = SessionLocal()
+    db = get_safe_db()
     chunk_counter = [0]
 
     # Verify interview exists
@@ -206,7 +206,7 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
 @router.get("/api/video/interviews/{interview_id}/transcript-chunks")
 async def get_transcript_chunks(interview_id: int):
     """Retrieve all saved transcript chunks for an interview."""
-    db = SessionLocal()
+    db = get_safe_db()
     try:
         chunks = (
             db.query(TranscriptChunk)
