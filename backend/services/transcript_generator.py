@@ -77,6 +77,7 @@ def transcribe_audio_file_with_timestamps(file_path: str) -> tuple:
     if not config.GROQ_API_KEY:
         raise TranscriptionError("GROQ_API_KEY not configured")
 
+    temp_file = None
     try:
         from groq import Groq
         client = Groq(api_key=config.GROQ_API_KEY)
@@ -87,7 +88,6 @@ def transcribe_audio_file_with_timestamps(file_path: str) -> tuple:
 
         # Extract audio if large video
         upload_path = file_path
-        temp_file = None
         if file_ext in video_extensions and file_size_mb > 24:
             try:
                 upload_path = _extract_audio_from_video(file_path)
@@ -106,13 +106,6 @@ def transcribe_audio_file_with_timestamps(file_path: str) -> tuple:
                 response_format="verbose_json",
                 temperature=0.0,
             )
-
-        # Clean up temp file
-        if temp_file and os.path.exists(temp_file):
-            try:
-                os.unlink(temp_file)
-            except OSError:
-                pass
 
         # Parse response — verbose_json returns segments with timestamps
         raw_text = ""
@@ -138,6 +131,13 @@ def transcribe_audio_file_with_timestamps(file_path: str) -> tuple:
         raise
     except Exception as e:
         raise TranscriptionError(f"Timestamped transcription failed: {e}")
+    finally:
+        # Always clean up temp file (even on exception)
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+            except OSError:
+                pass
 
 
 def _extract_audio_from_video(video_path: str) -> str:

@@ -511,7 +511,8 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
         body = analyze_body_movement(recording_path)
 
         # Face detection score from body movement analysis (eye_contact + face visibility)
-        face_score = body["details"].get("eye_contact_pct", 0.8)
+        # Default to 0.5 (not 0.8) — don't inflate score when data is missing
+        face_score = body["details"].get("eye_contact_pct", 0.5)
 
         # Cleanup temp file
         try:

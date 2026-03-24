@@ -129,8 +129,12 @@ def submit_face_events(
     no_face_ratio = payload.no_face_count / total
     multi_face_ratio = payload.multiple_face_count / total
 
-    # Score: penalize no_face and multiple_faces heavily
-    face_score = max(0.0, min(1.0, single_ratio - (no_face_ratio * 0.5) - (multi_face_ratio * 1.0)))
+    # Score: single_face_ratio IS the score — no face detected = low score
+    face_score = max(0.0, single_ratio)
+    if multi_face_ratio > 0:
+        face_score = max(0.0, face_score - (multi_face_ratio * 0.8))
+    if payload.no_face_seconds > 2:
+        face_score = max(0.0, face_score - 0.3)
 
     details = json.dumps({
         "total_detections": payload.total_detections,
@@ -555,6 +559,21 @@ def trigger_fraud_analysis(
         all_flags = new_flags + existing_realtime_flags
         existing.flags = json.dumps(all_flags)
         existing.flag_count = len(all_flags)
+
+        # Update face_detection_score from recording analysis (eye_contact_pct)
+        # If no real-time face data exists (0 or None), use recording-based eye contact
+        try:
+            body_details = json.loads(results["body_movement_details"]) if results["body_movement_details"] else {}
+            recording_face_score = body_details.get("eye_contact_pct")
+            if recording_face_score is not None:
+                if existing.face_detection_score is None or existing.face_detection_score == 0:
+                    # No real-time data — use recording analysis
+                    existing.face_detection_score = round(recording_face_score, 3)
+                else:
+                    # Real-time data exists — use worst of both
+                    existing.face_detection_score = round(min(existing.face_detection_score, recording_face_score), 3)
+        except (json.JSONDecodeError, TypeError):
+            pass
 
         # Recalculate overall trust score including real-time scores if available
         # Use worst of: analysis scores vs real-time scores

@@ -216,7 +216,8 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       try {
         const viRes = await apiClient.get('/api/video/interviews')
         const interviews = viRes.data || []
-        const vMapping: Record<number, number> = {}
+        // IMPORTANT: Merge with existing mapping — don't replace (prevents button disappearing)
+        const vMapping: Record<number, number> = { ...candidateVideoIds }
         for (const vi of interviews) {
           if (vi.job_id === selectedJob.id) {
             const matched = vi.candidate_email ? candidates.find((c: any) =>
@@ -225,7 +226,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             if (matched) vMapping[matched.id] = vi.id
           }
         }
-        // Also use direct result if available
+        // Also use direct result if available (most reliable)
         if (genResult.video_interview_id) {
           vMapping[candidateId] = genResult.video_interview_id
         }

@@ -21,6 +21,11 @@ import {
   Pagination,
   Tabs,
   Tab,
+  TextField,
+  InputAdornment,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import {
   Warning,
@@ -34,6 +39,9 @@ import {
   Timeline,
   MonitorHeart,
   Circle,
+  Search,
+  Clear,
+  FilterList,
 } from '@mui/icons-material';
 import Navigation from '../layout/Sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
@@ -163,15 +171,42 @@ const RealTimeFlagMonitor: React.FC = () => {
   // Main view tab: 0=Interviews, 1=Flag Activity Log
   const [mainTab, setMainTab] = useState(0);
 
+  // Search & filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Filtered sessions
+  const filteredSessions = useMemo(() => {
+    let result = sessions;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((s) =>
+        s.candidateName.toLowerCase().includes(q) ||
+        s.jobTitle.toLowerCase().includes(q) ||
+        String(s.videoInterviewId).includes(q)
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      result = result.filter((s) => s.status === statusFilter);
+    }
+
+    return result;
+  }, [sessions, searchQuery, statusFilter]);
+
   // Pagination state
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  const totalPages = Math.ceil(sessions.length / ITEMS_PER_PAGE);
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [searchQuery, statusFilter]);
+
+  const totalPages = Math.ceil(filteredSessions.length / ITEMS_PER_PAGE);
   const paginatedSessions = useMemo(() => {
     const start = (page - 1) * ITEMS_PER_PAGE;
-    return sessions.slice(start, start + ITEMS_PER_PAGE);
-  }, [sessions, page]); 
+    return filteredSessions.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredSessions, page]); 
 
   const ScoreBar = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => {
     const scoreColor = getScoreColor(value);
@@ -304,6 +339,57 @@ const RealTimeFlagMonitor: React.FC = () => {
           ))}
         </Box>
 
+        {/* Search & Filter Bar */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', mb: '16px', flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            placeholder="Search by candidate, job title, or ID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{
+              flex: 1, minWidth: 220, maxWidth: 360,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '10px', backgroundColor: '#fff', fontSize: '13px',
+                '& fieldset': { borderColor: '#e5e7eb' },
+                '&:hover fieldset': { borderColor: '#d1d5db' },
+                '&.Mui-focused fieldset': { borderColor: '#8b5cf6', borderWidth: '1.5px' },
+              },
+            }}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: '18px', color: '#94a3b8' }} /></InputAdornment>,
+              endAdornment: searchQuery ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setSearchQuery('')} sx={{ padding: '2px' }}>
+                    <Clear sx={{ fontSize: '16px', color: '#94a3b8' }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              startAdornment={<FilterList sx={{ fontSize: '16px', color: '#94a3b8', mr: 0.5 }} />}
+              sx={{
+                borderRadius: '10px', backgroundColor: '#fff', fontSize: '13px',
+                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e5e7eb' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
+              }}
+            >
+              <MenuItem value="all">All Status</MenuItem>
+              <MenuItem value="live">Live</MenuItem>
+              <MenuItem value="flagged">Flagged</MenuItem>
+              <MenuItem value="completed">Cleared</MenuItem>
+            </Select>
+          </FormControl>
+          <Chip
+            label={`${filteredSessions.length} of ${sessions.length} interviews`}
+            size="small"
+            sx={{ backgroundColor: '#f1f5f9', color: '#64748b', fontWeight: 500, fontSize: '12px' }}
+          />
+        </Box>
+
         {/* Main View Tabs */}
         <Box sx={{ mb: 3, borderBottom: '2px solid #e5e7eb' }}>
           <Tabs
@@ -315,7 +401,7 @@ const RealTimeFlagMonitor: React.FC = () => {
               '& .MuiTabs-indicator': { borderRadius: 2, height: 3 },
             }}
           >
-            <Tab label={`Interviews (${sessions.length})`} />
+            <Tab label={`Interviews (${filteredSessions.length})`} />
             <Tab label={`Flag Activity Log (${totalFlags})`} />
           </Tabs>
         </Box>

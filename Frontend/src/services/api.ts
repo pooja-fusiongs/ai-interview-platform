@@ -20,12 +20,11 @@ if (import.meta.env.DEV) {
 }
 
 // Create axios instance
+// NOTE: Do NOT set default Content-Type — it breaks FormData uploads (recording upload)
+// Axios auto-sets Content-Type: application/json for objects and multipart/form-data for FormData
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Flags and queues for token refresh

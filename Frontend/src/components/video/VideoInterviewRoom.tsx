@@ -149,10 +149,19 @@ const InterviewRecorder: React.FC<{
 
   // Start recording when mic track becomes available
   useEffect(() => {
-    if (!shouldRecord || startedRef.current || mediaRecorderRef.current) return;
-    if (!micMediaTrack) return;
+    console.log(`🔍 [Recorder Check] shouldRecord=${shouldRecord}, started=${startedRef.current}, hasRecorder=${!!mediaRecorderRef.current}, hasMic=${!!micMediaTrack}, hasCam=${!!camMediaTrack}, remoteCount=${remoteParticipants.length}`);
+    if (!shouldRecord || startedRef.current || mediaRecorderRef.current) {
+      if (!shouldRecord) console.warn('⏸️ [Recorder] shouldRecord=false — recording NOT starting (callJoined is false?)');
+      if (startedRef.current) console.log('✅ [Recorder] Already started, skipping');
+      if (mediaRecorderRef.current) console.log('✅ [Recorder] MediaRecorder already exists, skipping');
+      return;
+    }
+    if (!micMediaTrack) {
+      console.warn('⏸️ [Recorder] No mic track yet — waiting for mic permission...');
+      return;
+    }
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       if (startedRef.current || mediaRecorderRef.current) return;
       startedRef.current = true;
 
@@ -162,6 +171,13 @@ const InterviewRecorder: React.FC<{
         // --- Audio setup ---
         const audioCtx = new AudioContext();
         audioCtxRef.current = audioCtx;
+
+        // Resume AudioContext (required on mobile browsers where it starts suspended)
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+          console.log('🔊 AudioContext resumed from suspended state');
+        }
+
         const destination = audioCtx.createMediaStreamDestination();
         destinationRef.current = destination;
 
@@ -173,10 +189,31 @@ const InterviewRecorder: React.FC<{
           const remoteMicPub = remote.getTrackPublication(Track.Source.Microphone);
           const remoteTrack = remoteMicPub?.track?.mediaStreamTrack;
           if (remoteTrack) {
-            const src = audioCtx.createMediaStreamSource(new MediaStream([remoteTrack]));
-            src.connect(destination);
+            // IMPORTANT: Clone the track! Original track gets consumed by RoomAudioRenderer for playback.
+            // Without clone, AudioContext stops receiving data after a few seconds.
+            const clonedTrack = remoteTrack.clone();
+            const remoteSrc = audioCtx.createMediaStreamSource(new MediaStream([clonedTrack]));
+            remoteSrc.connect(destination);
             connectedRemotesRef.current.add(remote.identity);
             console.log(`🎙️ Remote participant audio connected: ${remote.identity}`);
+
+            // Monitor remote audio level
+            const remoteAnalyser = audioCtx.createAnalyser();
+            remoteAnalyser.fftSize = 256;
+            remoteSrc.connect(remoteAnalyser);
+            const remoteData = new Uint8Array(remoteAnalyser.frequencyBinCount);
+            const remoteMonitor = setInterval(() => {
+              if (audioCtx.state === 'closed') { clearInterval(remoteMonitor); return; }
+              remoteAnalyser.getByteFrequencyData(remoteData);
+              const avg = remoteData.reduce((sum, v) => sum + v, 0) / remoteData.length;
+              if (avg > 1) {
+                console.log(`🎙️ Remote Audio [${remote.identity}]: ${avg.toFixed(1)} — Voice detected ✅`);
+              } else {
+                console.warn(`🔇 Remote Audio [${remote.identity}]: ${avg.toFixed(1)} — No voice ❌`);
+              }
+            }, 2000);
+          } else {
+            console.warn(`⚠️ Remote participant ${remote.identity} has NO mic track`);
           }
         }
 
@@ -260,7 +297,9 @@ const InterviewRecorder: React.FC<{
         const canvasStream = canvas.captureStream(30); // 30fps
         const combinedStream = new MediaStream();
         canvasStream.getVideoTracks().forEach(t => combinedStream.addTrack(t));
-        destination.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+        const audioTracks = destination.stream.getAudioTracks();
+        audioTracks.forEach(t => combinedStream.addTrack(t));
+        console.log(`🔊 Audio tracks in recording: ${audioTracks.length}, AudioContext state: ${audioCtx.state}`);
 
         recordedChunksRef.current = [];
 
@@ -273,8 +312,21 @@ const InterviewRecorder: React.FC<{
         console.log(`🎬 Recording: ${combinedStream.getVideoTracks().length} video + ${combinedStream.getAudioTracks().length} audio, MIME: ${mimeType}`);
 
         const mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+        let chunkCount = 0;
+        let totalBytes = 0;
         mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+          if (event.data.size > 0) {
+            recordedChunksRef.current.push(event.data);
+            chunkCount++;
+            totalBytes += event.data.size;
+            // Log every 10 chunks (~10 seconds)
+            if (chunkCount % 10 === 0) {
+              console.log(`📦 [Recording] ${chunkCount} chunks, ${(totalBytes / 1024 / 1024).toFixed(2)} MB total, recorder state: ${mediaRecorder.state}`);
+            }
+          }
+        };
+        mediaRecorder.onstatechange = () => {
+          console.log(`🎬 [Recording] State changed: ${mediaRecorder.state}`);
         };
         mediaRecorder.onerror = (event: any) => {
           console.error('❌ MediaRecorder error:', event.error);
@@ -283,7 +335,23 @@ const InterviewRecorder: React.FC<{
         mediaRecorder.start(1000);
         mediaRecorderRef.current = mediaRecorder;
         onRecordingChange(true);
-        console.log('✅ Recording started (canvas compositing mode)');
+        console.log(`✅ Recording started! State: ${mediaRecorder.state}, MIME: ${mimeType}, video tracks: ${combinedStream.getVideoTracks().length}, audio tracks: ${combinedStream.getAudioTracks().length}`);
+
+        // Audio level monitor — logs every 2 seconds to verify mic is capturing
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        localSource.connect(analyser);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const audioMonitor = setInterval(() => {
+          if (audioCtx.state === 'closed') { clearInterval(audioMonitor); return; }
+          analyser.getByteFrequencyData(dataArray);
+          const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+          if (avg > 1) {
+            console.log(`🎤 Audio Level: ${avg.toFixed(1)} — Voice detected ✅`);
+          } else {
+            console.warn(`🔇 Audio Level: ${avg.toFixed(1)} — No voice detected ❌ (mic mute hai ya kaam nahi kar raha)`);
+          }
+        }, 2000);
       } catch (err) {
         console.error('❌ Failed to start recording:', err);
         startedRef.current = false;
@@ -293,9 +361,14 @@ const InterviewRecorder: React.FC<{
     return () => clearTimeout(timer);
   }, [shouldRecord, micMediaTrack]);
 
-  // Dynamically connect AI agent audio when it joins AFTER recording starts
+  // Dynamically connect remote participant audio when they join AFTER recording starts
   useEffect(() => {
-    if (!audioCtxRef.current || !destinationRef.current || !mediaRecorderRef.current) return;
+    if (!audioCtxRef.current || !destinationRef.current || !mediaRecorderRef.current) {
+      if (remoteParticipants.length > 0) {
+        console.warn(`⚠️ [Late Join] ${remoteParticipants.length} remote participant(s) detected but recorder not ready yet — audioCtx=${!!audioCtxRef.current}, destination=${!!destinationRef.current}, recorder=${!!mediaRecorderRef.current}`);
+      }
+      return;
+    }
     const audioCtx = audioCtxRef.current;
     const destination = destinationRef.current;
 
@@ -304,15 +377,36 @@ const InterviewRecorder: React.FC<{
 
       const remoteMicPub = remote.getTrackPublication(Track.Source.Microphone);
       const remoteTrack = remoteMicPub?.track?.mediaStreamTrack;
+      console.log(`🔍 [Late Join] Checking remote "${remote.identity}": micPub=${!!remoteMicPub}, track=${!!remoteMicPub?.track}, mediaStreamTrack=${!!remoteTrack}, trackEnabled=${remoteTrack?.enabled}, trackMuted=${remoteTrack?.muted}`);
       if (remoteTrack) {
         try {
-          const src = audioCtx.createMediaStreamSource(new MediaStream([remoteTrack]));
+          // Clone track so RoomAudioRenderer (playback) and our recorder don't fight over the same track
+          const clonedTrack = remoteTrack.clone();
+          const src = audioCtx.createMediaStreamSource(new MediaStream([clonedTrack]));
           src.connect(destination);
           connectedRemotesRef.current.add(remote.identity);
-          console.log(`🎙️ Remote participant audio connected (late join): ${remote.identity}`);
+          console.log(`✅ [Late Join] Remote "${remote.identity}" audio connected to mixer! Total connected: ${connectedRemotesRef.current.size}`);
+
+          // Monitor this remote's audio level
+          const lateAnalyser = audioCtx.createAnalyser();
+          lateAnalyser.fftSize = 256;
+          src.connect(lateAnalyser);
+          const lateData = new Uint8Array(lateAnalyser.frequencyBinCount);
+          const lateMonitor = setInterval(() => {
+            if (audioCtx.state === 'closed') { clearInterval(lateMonitor); return; }
+            lateAnalyser.getByteFrequencyData(lateData);
+            const avg = lateData.reduce((sum, v) => sum + v, 0) / lateData.length;
+            if (avg > 1) {
+              console.log(`🎙️ [Late Join] Remote Audio [${remote.identity}]: ${avg.toFixed(1)} — Voice detected ✅`);
+            } else {
+              console.warn(`🔇 [Late Join] Remote Audio [${remote.identity}]: ${avg.toFixed(1)} — Silent ❌`);
+            }
+          }, 3000);
         } catch (err) {
-          console.error('Failed to connect remote audio:', err);
+          console.error(`❌ [Late Join] Failed to connect remote "${remote.identity}" audio:`, err);
         }
+      } else {
+        console.warn(`⚠️ [Late Join] Remote "${remote.identity}" has NO mic track — mic off or not published yet`);
       }
     }
   }, [remoteParticipants]);
@@ -548,6 +642,14 @@ const VideoInterviewRoom: React.FC = () => {
 
   const joinAsInterviewer = async () => {
     try {
+      // IMPORTANT: Resume AudioContext on user click (Chrome autoplay policy)
+      try {
+        const tempCtx = new AudioContext();
+        if (tempCtx.state === 'suspended') await tempCtx.resume();
+        tempCtx.close();
+        console.log('🔊 AudioContext unlocked by recruiter click (Chrome autoplay fix)');
+      } catch (e) { /* ignore */ }
+
       // Recruiter joins as interviewer with full audio/video
       setIsActive(true);
       toast.success('Joining interview...');
@@ -559,6 +661,19 @@ const VideoInterviewRoom: React.FC = () => {
 
   const handleConsentAccept = async () => {
     setShowConsentDialog(false);
+
+    // IMPORTANT: Resume/create AudioContext immediately on user click (Chrome autoplay policy)
+    // Chrome blocks AudioContext and audio playback unless triggered by a user gesture.
+    // This must happen synchronously in the click handler, NOT after async calls.
+    try {
+      const tempCtx = new AudioContext();
+      if (tempCtx.state === 'suspended') await tempCtx.resume();
+      tempCtx.close(); // Close temp context — LiveKit and InterviewRecorder will create their own
+      console.log('🔊 AudioContext unlocked by user gesture (Chrome autoplay fix)');
+    } catch (e) {
+      console.warn('AudioContext unlock failed:', e);
+    }
+
     try {
       // Save consent to backend
       if (isGuest) {
@@ -598,34 +713,30 @@ const VideoInterviewRoom: React.FC = () => {
 
   // Stop recorder and return blob (non-blocking — does NOT upload)
   const stopRecorderAndGetBlob = (): Promise<Blob | null> => {
+    console.log(`🛑 [StopRecorder] Called — mediaRecorder exists: ${!!mediaRecorderRef.current}, state: ${mediaRecorderRef.current?.state || 'N/A'}, chunks: ${recordedChunksRef.current.length}`);
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+      console.error('❌ [StopRecorder] NO active MediaRecorder! Recording was never started or already stopped.');
       return Promise.resolve(null);
     }
     return new Promise((resolve) => {
       const recorder = mediaRecorderRef.current!;
       recorder.onstop = () => {
         setIsRecording(false);
+        console.log(`🛑 [StopRecorder] Stopped. Total chunks: ${recordedChunksRef.current.length}`);
         if (recordedChunksRef.current.length === 0) {
+          console.error('❌ [StopRecorder] ZERO chunks! Recording captured NOTHING.');
           resolve(null);
           return;
         }
         const blob = new Blob(recordedChunksRef.current, {
           type: recordedChunksRef.current[0]?.type || 'video/webm'
         });
+        console.log(`✅ [StopRecorder] Blob created: ${(blob.size / 1024 / 1024).toFixed(2)} MB, type: ${blob.type}, chunks: ${recordedChunksRef.current.length}`);
         recordedChunksRef.current = [];
         resolve(blob);
       };
       recorder.stop();
     });
-  };
-
-  // Upload recording in background (fire-and-forget, non-blocking)
-  const uploadRecordingInBackground = (blob: Blob) => {
-    const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
-    console.log(`🎬 Background upload: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
-    upload(Number(videoId), blob)
-      .then(() => console.log('✅ Recording uploaded'))
-      .catch((err) => console.error('❌ Recording upload failed:', err));
   };
 
   const cleanupVideoCall = () => {
@@ -640,6 +751,11 @@ const VideoInterviewRoom: React.FC = () => {
     if (endingRef.current) return;
     endingRef.current = true;
 
+    console.log(`\n========== 🔴 END INTERVIEW FLOW START ==========`);
+    console.log(`📊 State: isActive=${isActive}, callJoined=${callJoined}, isRecording=${isRecording}, isGuest=${isGuest}`);
+    console.log(`📊 Recorder: exists=${!!mediaRecorderRef.current}, state=${mediaRecorderRef.current?.state || 'N/A'}, chunks=${recordedChunksRef.current.length}`);
+    console.log(`📊 Participants: maxParticipants=${maxParticipantsRef.current}`);
+
     // 1) INSTANT UI update — user sees "completed" immediately
     setIsActive(false);
     setCallJoined(false);
@@ -650,17 +766,30 @@ const VideoInterviewRoom: React.FC = () => {
     let recordingBlob: Blob | null = null;
     try {
       recordingBlob = await stopRecorderAndGetBlob();
-    } catch {}
+    } catch (err) {
+      console.error('❌ [handleEnd] stopRecorderAndGetBlob threw:', err);
+    }
+
+    console.log(`📦 [handleEnd] Recording blob: ${recordingBlob ? `${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB` : 'NULL — no recording!'}`);
 
     // 3) Clean up video call
     cleanupVideoCall();
 
-    // 4) Upload recording in BACKGROUND (non-blocking)
+    // 4) Upload recording BEFORE calling /end (so backend has recording for transcription)
     if (recordingBlob) {
-      uploadRecordingInBackground(recordingBlob);
+      try {
+        const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
+        console.log(`🎬 [handleEnd] Uploading recording: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB...`);
+        const uploadResult = await upload(Number(videoId), recordingBlob);
+        console.log('✅ [handleEnd] Recording uploaded:', uploadResult);
+      } catch (err) {
+        console.error('❌ [handleEnd] Recording upload failed:', err);
+      }
+    } else {
+      console.error('❌ [handleEnd] NO recording blob to upload! Possible causes: recording never started, mic not available, or MediaRecorder failed.');
     }
 
-    // 5) Tell backend — in background (don't block UI)
+    // 5) Tell backend — after upload completes
     try {
       let result;
       if (isGuest) {
@@ -1059,9 +1188,15 @@ const VideoInterviewRoom: React.FC = () => {
                                 console.error('Recording upload failed:', err);
                               }
 
-                              // End interview after upload
+                              // End interview after upload (use correct endpoint based on auth)
                               try {
-                                await videoInterviewService.guestEndInterview(Number(videoId));
+                                if (isGuest) {
+                                  await videoInterviewService.guestEndInterview(Number(videoId));
+                                } else {
+                                  await videoInterviewService.endInterview(Number(videoId), {
+                                    max_participants: maxParticipantsRef.current
+                                  });
+                                }
                               } catch {}
 
                               // Refresh interview data
@@ -1097,15 +1232,16 @@ const VideoInterviewRoom: React.FC = () => {
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >
                         <InterviewRecorder
-                          shouldRecord={isUserCandidate && callJoined}
+                          shouldRecord={callJoined}
                           mediaRecorderRef={mediaRecorderRef}
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
                         />
+                        {/* Only recruiter side sends transcription to avoid duplicate entries */}
                         <TranscriptionCapture
                           interviewId={videoId || ''}
                           userRole={isUserCandidate ? 'candidate' : 'recruiter'}
-                          enabled={callJoined}
+                          enabled={callJoined && !isUserCandidate}
                           onTranscriptUpdate={setTranscriptEntries}
                           onConnectionChange={setTranscriptConnected}
                         />

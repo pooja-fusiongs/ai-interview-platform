@@ -1,6 +1,28 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Holistic, Results } from '@mediapipe/holistic';
-import { FaceDetection, Results as FaceDetectionResults } from '@mediapipe/face_detection';
+
+// MediaPipe loaded dynamically from CDN (npm imports break in production build)
+type Results = any;
+type FaceDetectionResults = any;
+
+/** Load a script from CDN and return the global object */
+function loadScript(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded
+    if (document.querySelector(`script[src="${url}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = url;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load: ${url}`));
+    document.head.appendChild(script);
+  });
+}
+
+const HOLISTIC_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js';
+const FACE_DETECTION_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/face_detection.js';
 
 // --- Types ---
 export interface MovementFlags {
@@ -148,8 +170,8 @@ export function useDetection({
   });
 
   // Trackers
-  const holisticRef = useRef<Holistic | null>(null);
-  const faceDetectorRef = useRef<FaceDetection | null>(null);
+  const holisticRef = useRef<any>(null);
+  const faceDetectorRef = useRef<any>(null);
   const multiFaceCountRef = useRef(0); // Updated by FaceDetection (supports multiple faces)
   const internalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
@@ -476,39 +498,37 @@ export function useDetection({
     const init = async () => {
       setStatus('loading');
 
-      // Try multiple CDN sources in case one is down
-      const cdnSources = [
-        (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${file}`,
-        (file: string) => `https://unpkg.com/@mediapipe/holistic@0.5.1675471629/${file}`,
-      ];
+      let holistic: any = null;
 
-      let holistic: Holistic | null = null;
-
-      for (const locateFile of cdnSources) {
+      try {
         if (cancelled) return;
-        try {
-          const h = new Holistic({ locateFile });
-          h.setOptions({
-            modelComplexity: 1,
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-            refineFaceLandmarks: true,
-          });
-          h.onResults(onResults);
 
-          await h.initialize();
-          holistic = h;
-          console.log('[useDetection] Holistic initialized successfully');
-          break;
-        } catch (e) {
-          console.warn(`[useDetection] CDN failed, trying next:`, e);
-        }
+        // Load Holistic from CDN (bypasses Vite bundler)
+        await loadScript(HOLISTIC_CDN);
+        const HolisticCtor = (window as any).Holistic;
+        if (!HolisticCtor) throw new Error('Holistic not found on window after CDN load');
+
+        const locateFile = (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${file}`;
+        const h = new HolisticCtor({ locateFile });
+        h.setOptions({
+          modelComplexity: 1,
+          smoothLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+          refineFaceLandmarks: true,
+        });
+        h.onResults(onResults);
+
+        await h.initialize();
+        holistic = h;
+        console.log('[useDetection] Holistic initialized successfully');
+      } catch (e) {
+        console.warn('[useDetection] Holistic CDN load failed:', e);
       }
 
       if (!holistic || cancelled) {
         if (!cancelled) {
-          console.warn("[useDetection] All CDN sources failed. Retrying in 10s...");
+          console.warn("[useDetection] Holistic init failed. Retrying in 10s...");
           setStatus('error');
           setTimeout(() => { if (!cancelled) init(); }, 10000);
         }
@@ -517,10 +537,14 @@ export function useDetection({
 
       holisticRef.current = holistic;
 
-      // Initialize FaceDetection for multi-face counting (runs separately from Holistic)
+      // Initialize FaceDetection for multi-face counting
       try {
-        const fd = new FaceDetection({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/${file}`,
+        await loadScript(FACE_DETECTION_CDN);
+        const FDCtor = (window as any).FaceDetection;
+        if (!FDCtor) throw new Error('FaceDetection not found on window');
+
+        const fd = new FDCtor({
+          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/${file}`,
         });
         fd.setOptions({
           model: 'short',

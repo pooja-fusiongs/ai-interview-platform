@@ -986,43 +986,47 @@ async def guest_end_interview(
         vi.status = VideoInterviewStatus.COMPLETED.value
         vi.ended_at = datetime.now(timezone.utc)
 
-    # Create InterviewSession immediately (fast)
-    try:
-        application = None
-        if vi.candidate:
-            application = db.query(JobApplication).filter(
-                JobApplication.job_id == vi.job_id,
-                JobApplication.applicant_email == vi.candidate.email
-            ).first()
-            if application:
-                application.status = "Interview Completed"
+    # Create InterviewSession only if one doesn't already exist (avoid duplicates when both sides call /end)
+    if not vi.session_id:
+        try:
+            application = None
+            if vi.candidate:
+                application = db.query(JobApplication).filter(
+                    JobApplication.job_id == vi.job_id,
+                    JobApplication.applicant_email == vi.candidate.email
+                ).first()
+                if application:
+                    application.status = "Interview Completed"
 
-        session = InterviewSession(
-            job_id=vi.job_id,
-            candidate_id=vi.candidate_id,
-            application_id=application.id if application else None,
-            status=InterviewSessionStatus.IN_PROGRESS,
-            interview_mode="video_interview",
-            started_at=vi.started_at or vi.scheduled_at,
-        )
-        db.add(session)
-        db.flush()
-        vi.session_id = session.id
-        print(f"[guest_end] Created InterviewSession id={session.id}")
-    except Exception as e:
-        print(f"[guest_end] Failed to create InterviewSession: {e}")
+            session = InterviewSession(
+                job_id=vi.job_id,
+                candidate_id=vi.candidate_id,
+                application_id=application.id if application else None,
+                status=InterviewSessionStatus.IN_PROGRESS,
+                interview_mode="video_interview",
+                started_at=vi.started_at or vi.scheduled_at,
+            )
+            db.add(session)
+            db.flush()
+            vi.session_id = session.id
+            print(f"[guest_end] Created InterviewSession id={session.id}")
+        except Exception as e:
+            print(f"[guest_end] Failed to create InterviewSession: {e}")
+    else:
+        print(f"[guest_end] InterviewSession already exists (id={vi.session_id}), skipping creation")
 
     db.commit()
     db.refresh(vi)
 
-    # Always start background thread (don't gate on recording_url — it might arrive late)
-    _start_background_transcription_task(
-        vi_id=video_id,
-        job_id=vi.job_id,
-        started_at=vi.started_at or vi.scheduled_at,
-        recording_url_hint=vi.recording_url,
-        session_id=vi.session_id
-    )
+    # Start background transcription only if not already completed (avoid duplicate processing)
+    if not vi.transcript:
+        _start_background_transcription_task(
+            vi_id=video_id,
+            job_id=vi.job_id,
+            started_at=vi.started_at or vi.scheduled_at,
+            recording_url_hint=vi.recording_url,
+            session_id=vi.session_id
+        )
 
     return {"message": "Interview ended", "status": vi.status}
 
@@ -1080,6 +1084,11 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
         if not actual_recording_url:
             bg_vi.transcript_source = "failed"
             bg_vi.transcript_error = "No recording file available"
+            # Mark fraud analysis as completed even without recording (so dashboard doesn't show "pending")
+            fa = bg_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
+            if fa and fa.analysis_status == "pending":
+                fa.analysis_status = "completed"
+                fa.analyzed_at = datetime.now(timezone.utc)
             bg_db.commit()
             return
 
@@ -1236,6 +1245,15 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                         existing_fa.lip_sync_details = results["lip_sync_details"]
                         existing_fa.body_movement_score = results["body_movement_score"]
                         existing_fa.body_movement_details = results["body_movement_details"]
+                        # Update face_detection_score from recording if no real-time data
+                        try:
+                            import json as _json
+                            body_det = _json.loads(results["body_movement_details"]) if results["body_movement_details"] else {}
+                            rec_face = body_det.get("eye_contact_pct")
+                            if rec_face is not None and (existing_fa.face_detection_score is None or existing_fa.face_detection_score == 0):
+                                existing_fa.face_detection_score = round(rec_face, 3)
+                        except Exception:
+                            pass
                         existing_fa.overall_trust_score = results["overall_trust_score"]
                         existing_fa.flags = results["flags"]
                         existing_fa.flag_count = results["flag_count"]
@@ -1263,6 +1281,17 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                     fraud_db.close()
             except Exception as fraud_err:
                 print(f"[BG Fraud] Failed for vi_id={vi_id}: {fraud_err}")
+                # Even if analysis fails, mark as completed so dashboard doesn't show "pending" forever
+                try:
+                    err_db = get_safe_db()
+                    fa = err_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
+                    if fa and fa.analysis_status == "pending":
+                        fa.analysis_status = "completed"
+                        fa.analyzed_at = datetime.now(timezone.utc)
+                        err_db.commit()
+                    err_db.close()
+                except Exception:
+                    pass
 
     except Exception as e:
         print(f"[BG Transcription] Fatal error: {e}")
@@ -1283,6 +1312,11 @@ async def guest_upload_recording(
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # First upload wins — skip if recording already exists (both sides record, avoid overwrite)
+    if vi.recording_url:
+        print(f"🎥 Guest recording already exists for vi={video_id}, skipping duplicate upload")
+        return {"message": "Recording already uploaded", "recording_url": vi.recording_url}
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"interview_{video_id}_{timestamp}.webm"
@@ -1361,52 +1395,62 @@ def end_video_interview(
 
     # Refresh to get latest recording_url (uploaded in separate request)
     db.refresh(vi)
+
+    # If already completed (other side called /end first), just return
+    if vi.status == VideoInterviewStatus.COMPLETED.value:
+        print(f"[end_interview] Already COMPLETED, skipping duplicate end")
+        return _build_response(vi, db)
+
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
 
     print(f"[end_interview] recording_url={vi.recording_url}")
 
-    # Create InterviewSession immediately (fast)
-    try:
-        application = None
-        if vi.candidate:
-            application = db.query(JobApplication).filter(
-                JobApplication.job_id == vi.job_id,
-                JobApplication.applicant_email == vi.candidate.email
-            ).first()
-            if application:
-                application.status = "Interview Completed"
+    # Create InterviewSession only if one doesn't already exist (avoid duplicates when both sides call /end)
+    if not vi.session_id:
+        try:
+            application = None
+            if vi.candidate:
+                application = db.query(JobApplication).filter(
+                    JobApplication.job_id == vi.job_id,
+                    JobApplication.applicant_email == vi.candidate.email
+                ).first()
+                if application:
+                    application.status = "Interview Completed"
 
-        session = InterviewSession(
-            job_id=vi.job_id,
-            candidate_id=vi.candidate_id,
-            application_id=application.id if application else None,
-            status=InterviewSessionStatus.IN_PROGRESS,
-            interview_mode="video_interview",
-            started_at=vi.started_at or vi.scheduled_at,
-        )
-        db.add(session)
-        db.flush()
-        vi.session_id = session.id
-        print(f"[end_interview] Created InterviewSession id={session.id} for video interview {video_id}")
-    except Exception as e:
-        print(f"[end_interview] Failed to create InterviewSession: {e}")
-        import traceback
-        traceback.print_exc()
+            session = InterviewSession(
+                job_id=vi.job_id,
+                candidate_id=vi.candidate_id,
+                application_id=application.id if application else None,
+                status=InterviewSessionStatus.IN_PROGRESS,
+                interview_mode="video_interview",
+                started_at=vi.started_at or vi.scheduled_at,
+            )
+            db.add(session)
+            db.flush()
+            vi.session_id = session.id
+            print(f"[end_interview] Created InterviewSession id={session.id} for video interview {video_id}")
+        except Exception as e:
+            print(f"[end_interview] Failed to create InterviewSession: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"[end_interview] InterviewSession already exists (id={vi.session_id}), skipping creation")
 
     db.commit()
     db.refresh(vi)
 
-    # --- Generate transcript in BACKGROUND THREAD (heavy operation) ---
-    _start_background_transcription_task(
-        vi_id=vi.id,
-        job_id=vi.job_id,
-        candidate_id=vi.candidate_id,
-        candidate_email=vi.candidate.email if vi.candidate else None,
-        started_at=vi.started_at or vi.scheduled_at,
-        recording_url_hint=vi.recording_url,
-        session_id=vi.session_id
-    )
+    # --- Generate transcript in BACKGROUND THREAD (only if not already done) ---
+    if not vi.transcript:
+        _start_background_transcription_task(
+            vi_id=vi.id,
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            candidate_email=vi.candidate.email if vi.candidate else None,
+            started_at=vi.started_at or vi.scheduled_at,
+            recording_url_hint=vi.recording_url,
+            session_id=vi.session_id
+        )
 
     return _build_response(vi, db)
 
@@ -2525,6 +2569,11 @@ async def upload_recording(
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # First upload wins — skip if recording already exists (both sides record, avoid overwrite)
+    if vi.recording_url:
+        print(f"🎥 Recording already exists for vi={video_id}, skipping duplicate upload")
+        return {"message": "Recording already uploaded", "recording_url": vi.recording_url}
 
     # Save file to uploads/recordings/
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

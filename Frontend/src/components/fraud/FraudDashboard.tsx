@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -19,6 +19,12 @@ import {
   IconButton,
   Fade,
   Grow,
+  TextField,
+  InputAdornment,
+  Pagination,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import {
   Security,
@@ -30,6 +36,9 @@ import {
   Refresh,
   VerifiedUser,
   Warning,
+  Search,
+  Clear,
+  FilterList,
 } from '@mui/icons-material';
 import Navigation from '../layout/Sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
@@ -234,6 +243,10 @@ const FraudDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const fetchData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -255,6 +268,44 @@ const FraudDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const filteredFlagged = useMemo(() => {
+    let result = flagged;
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter((row) => {
+        const candidateName = (row.candidate_name || '').toLowerCase();
+        const jobTitle = (row.job_title || '').toLowerCase();
+        const interviewId = String(row.fraud_analysis_id || '');
+        return candidateName.includes(query) || jobTitle.includes(query) || interviewId.includes(query);
+      });
+    }
+
+    // Severity filter
+    if (severityFilter !== 'all') {
+      result = result.filter((row) => {
+        const trustPct = Math.round((row.overall_trust_score || 0) * 100);
+        if (severityFilter === 'critical') return trustPct < 40;
+        if (severityFilter === 'low') return trustPct >= 40 && trustPct < 60;
+        if (severityFilter === 'medium') return trustPct >= 60 && trustPct < 80;
+        if (severityFilter === 'high') return trustPct >= 80;
+        return true;
+      });
+    }
+
+    return result;
+  }, [flagged, searchQuery, severityFilter]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [searchQuery, severityFilter]);
+
+  const totalPages = Math.ceil(filteredFlagged.length / ITEMS_PER_PAGE);
+  const paginatedFlagged = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return filteredFlagged.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredFlagged, page]);
 
   const statCards = stats
     ? [
@@ -585,27 +636,89 @@ const FraudDashboard: React.FC = () => {
                   </Box>
                 </Box>
                 {flagged.length > 0 && (
-                  <Chip
-                    icon={<Flag sx={{ fontSize: '14px !important' }} />}
-                    label={`${flagged.length} Flagged`}
-                    size="small"
-                    sx={{
-                      backgroundColor: '#fef2f2',
-                      color: '#ef4444',
-                      fontWeight: 600,
-                      fontSize: '12px',
-                      animation: 'pulse 2s ease-in-out infinite',
-                      '@keyframes pulse': {
-                        '0%, 100%': { opacity: 1 },
-                        '50%': { opacity: 0.7 },
-                      },
-                    }}
-                  />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <TextField
+                      size="small"
+                      placeholder="Search by candidate, job title, or ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      sx={{
+                        width: { xs: '100%', sm: 240, md: 280 },
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '10px',
+                          backgroundColor: '#fff',
+                          fontSize: '13px',
+                          '& fieldset': { borderColor: '#e5e7eb' },
+                          '&:hover fieldset': { borderColor: '#d1d5db' },
+                          '&.Mui-focused fieldset': { borderColor: '#3b82f6', borderWidth: '1.5px' },
+                        },
+                      }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Search sx={{ fontSize: '18px', color: '#94a3b8' }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: searchQuery ? (
+                          <InputAdornment position="end">
+                            <IconButton size="small" onClick={() => setSearchQuery('')} sx={{ padding: '2px' }}>
+                              <Clear sx={{ fontSize: '16px', color: '#94a3b8' }} />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : null,
+                      }}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 130 }}>
+                      <Select
+                        value={severityFilter}
+                        onChange={(e) => setSeverityFilter(e.target.value)}
+                        displayEmpty
+                        startAdornment={<FilterList sx={{ fontSize: '16px', color: '#94a3b8', mr: 0.5 }} />}
+                        sx={{
+                          borderRadius: '10px',
+                          backgroundColor: '#fff',
+                          fontSize: '13px',
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e5e7eb' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
+                        }}
+                      >
+                        <MenuItem value="all">All Scores</MenuItem>
+                        <MenuItem value="critical">Critical (&lt;40%)</MenuItem>
+                        <MenuItem value="low">Low (40-60%)</MenuItem>
+                        <MenuItem value="medium">Medium (60-80%)</MenuItem>
+                        <MenuItem value="high">High (80%+)</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Chip
+                      icon={<Flag sx={{ fontSize: '14px !important' }} />}
+                      label={`${filteredFlagged.length} Flagged`}
+                      size="small"
+                      sx={{
+                        backgroundColor: '#fef2f2',
+                        color: '#ef4444',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                      }}
+                    />
+                  </Box>
                 )}
               </Box>
 
               {flagged.length === 0 ? (
                 <EmptyState />
+              ) : filteredFlagged.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 6, px: 4 }}>
+                  <Search sx={{ fontSize: 48, color: '#cbd5e1', mb: 2 }} />
+                  <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#64748b', mb: 1 }}>
+                    No results found
+                  </Typography>
+                  <Typography sx={{ fontSize: '13px', color: '#94a3b8', mb: 2 }}>
+                    No flagged interviews match "{searchQuery}"
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setSearchQuery('')} sx={{ borderRadius: '8px', textTransform: 'none' }}>
+                    Clear search
+                  </Button>
+                </Box>
               ) : (
                 <TableContainer sx={{ overflowX: 'auto' }}>
                   <Table>
@@ -640,7 +753,7 @@ const FraudDashboard: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {flagged.map((row, index) => {
+                      {paginatedFlagged.map((row, index) => {
                         const trustPct = Math.round((row.overall_trust_score || 0) * 100);
                         const trustColor = getTrustScoreColor(trustPct);
                         const flagSeverity = getFlagSeverity(row.flag_count || 0);
@@ -791,6 +904,23 @@ const FraudDashboard: React.FC = () => {
                     </TableBody>
                   </Table>
                 </TableContainer>
+              )}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, borderTop: '1px solid #e5e7eb' }}>
+                  <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                    Showing {((page - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(page * ITEMS_PER_PAGE, filteredFlagged.length)} of {filteredFlagged.length}
+                  </Typography>
+                  <Pagination
+                    count={totalPages}
+                    page={page}
+                    onChange={(_, v) => setPage(v)}
+                    color="primary"
+                    shape="rounded"
+                    sx={{ '& .MuiPaginationItem-root': { fontWeight: 600, fontSize: '13px' } }}
+                  />
+                </Box>
               )}
             </Card>
           </>

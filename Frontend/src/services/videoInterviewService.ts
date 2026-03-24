@@ -2,11 +2,12 @@ import apiClient from './api';
 import axios from 'axios';
 
 // Guest axios instance — no auth token needed
+// NOTE: Do NOT set default Content-Type here — it breaks FormData uploads (file upload sends as JSON instead of multipart)
+// Axios auto-sets Content-Type: application/json for objects and multipart/form-data for FormData
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
 const guestClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
-  headers: { 'Content-Type': 'application/json' },
 });
 
 export const videoInterviewService = {
@@ -95,10 +96,13 @@ export const videoInterviewService = {
     return response.data;
   },
   uploadRecording: async (id: number, blob: Blob) => {
+    if (!blob || blob.size < 1000) {
+      console.warn(`⚠️ Recording blob too small (${blob?.size || 0} bytes), skipping upload`);
+      return { message: 'Recording too small, skipped' };
+    }
     const formData = new FormData();
     formData.append('file', blob, `interview_${id}.webm`);
     const response = await apiClient.post(`/api/video/interviews/${id}/upload-recording`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000, // 5 min timeout for large uploads
     });
     return response.data;
@@ -139,11 +143,14 @@ export const videoInterviewService = {
     return response.data;
   },
   guestUploadRecording: async (id: number, blob: Blob) => {
+    if (!blob || blob.size < 1000) {
+      console.warn(`⚠️ Guest recording blob too small (${blob?.size || 0} bytes), skipping upload`);
+      return { message: 'Recording too small, skipped' };
+    }
     const formData = new FormData();
     formData.append('file', blob, `interview_${id}.webm`);
     const response = await guestClient.post(`/api/video/guest/${id}/upload-recording`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
+      timeout: 300000, // 5 min timeout for large uploads
     });
     return response.data;
   },

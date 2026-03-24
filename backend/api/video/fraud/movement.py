@@ -66,24 +66,28 @@ def submit_movement_detection(
         db.flush()
         
     # 3) Update overarching FraudAnalysis using the unified payload
-    # Calculate face score — frame-by-frame tracking with continuous percentage
+    # Calculate face score — single_face_ratio IS the score (no face = 0, all face = 1)
     total_face = payload.single_face_count + payload.no_face_count + payload.multiple_face_count
     if total_face > 0:
         sr = payload.single_face_count / total_face      # valid frames ratio
         nr = payload.no_face_count / total_face           # no face ratio
         mr = payload.multiple_face_count / total_face     # multiple faces ratio
-        # Penalties: no-face = -0.5 per ratio, multiple-face = -1.0 per ratio
-        face_score = max(0.0, min(1.0, sr - (nr * 0.5) - (mr * 1.0)))
 
-        # Extra penalty for sustained no-face (>3 seconds in this window)
-        if payload.no_face_seconds > 3:
-            face_score = max(0.0, face_score - 0.15)
+        # Face score = single face ratio, penalized heavily for no-face and multi-face
+        face_score = max(0.0, sr)
+        # Heavy penalty: multiple faces is worse than no face
+        if mr > 0:
+            face_score = max(0.0, face_score - (mr * 0.8))
+        # Extra penalty for sustained no-face (>2 seconds in this 5-sec window)
+        if payload.no_face_seconds > 2:
+            face_score = max(0.0, face_score - 0.3)
         # Extra penalty for any multiple faces
         if payload.multiple_face_count > 0:
             face_score = max(0.0, face_score - 0.2)
+
         if existing.face_detection_score is not None:
-            # 0.7/0.3 smoothing — new data gets 30% weight (responsive but stable)
-            existing.face_detection_score = round((existing.face_detection_score * 0.7) + (face_score * 0.3), 3)
+            # 0.5/0.5 smoothing — new data gets 50% weight (more responsive to face disappearing)
+            existing.face_detection_score = round((existing.face_detection_score * 0.5) + (face_score * 0.5), 3)
         else:
             existing.face_detection_score = round(face_score, 3)
         

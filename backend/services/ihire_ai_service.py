@@ -59,8 +59,8 @@ def score_transcript(
     for i, qa in enumerate(questions_and_answers, 1):
         questions_context += f"\nQ{i}: {qa.get('question', '')}\nExpected: {qa.get('suggested_answer', '')}\n"
 
-    prompt = f"""You are a senior hiring manager evaluating an interview transcript.
-Score the candidate out of 10 based on the actual quality of their responses.
+    prompt = f"""You are a STRICT senior hiring manager evaluating an interview transcript.
+Score the candidate out of 10 by comparing their ACTUAL answers against the EXPECTED answers below.
 
 Position: {job_title}
 Candidate: {candidate_name}
@@ -74,23 +74,32 @@ Interview Questions & Expected Answers:
 Actual Interview Transcript:
 {transcript[:8000]}
 
-EVALUATION CRITERIA:
-1) Technical Competence (30%)
-2) Problem-Solving Ability (25%)
-3) Communication Skills (15%)
-4) Experience Relevance (15%)
-5) Cultural Fit & Enthusiasm (15%)
+STRICT EVALUATION RULES:
+1) Compare EACH candidate answer against its expected answer. If the candidate's answer is factually wrong, off-topic, or contradicts the expected answer — penalize heavily.
+2) A confident but WRONG answer should score LOWER than a hesitant but correct answer.
+3) If the candidate gives vague/generic answers without specific technical details, score below 5.
+4) If the candidate's answers don't match the expected answers for 50%+ of questions, score must be below 4.
+5) Only give 7+ if the candidate demonstrates ACTUAL knowledge that aligns with expected answers.
+
+EVALUATION CRITERIA (weighted):
+1) Answer Correctness vs Expected (35%) — Do answers match expected answers?
+2) Technical Depth (25%) — Specific concepts, not just buzzwords
+3) Problem-Solving Ability (15%) — Structured thinking, real examples
+4) Communication Clarity (15%) — Clear, organized responses
+5) Experience Relevance (10%) — Real experience, not memorized theory
 
 SCORING GUIDELINES:
-- 9-10: Exceptional — deep expertise, specific examples, strong reasoning
-- 7-8: Strong — solid answers with good examples but minor gaps
-- 5-6: Average — surface-level answers, missing depth or specifics
-- 3-4: Below average — vague, unclear, or incorrect in key areas
-- 1-2: Poor — unable to answer most questions meaningfully
+- 9-10: Exceptional — answers closely match expected, with additional depth and real examples
+- 7-8: Strong — most answers align with expected, good technical depth, minor gaps
+- 5-6: Average — some answers match, surface-level understanding, lacks specifics
+- 3-4: Below average — most answers don't match expected, vague or incorrect
+- 1-2: Poor — answers are wrong, off-topic, or candidate couldn't answer
+
+IMPORTANT: Be strict. Most candidates should score 4-6. Only truly exceptional candidates score 8+. Wrong answers = low score, regardless of confidence.
 
 Return strict JSON object with:
 - score: number (1-10, decimals allowed)
-- feedback: string (4-6 sentences citing specific moments from the transcript)
+- feedback: string (4-6 sentences — mention which questions were answered well and which were wrong/weak, citing specific expected vs actual differences)
 """
 
     try:
