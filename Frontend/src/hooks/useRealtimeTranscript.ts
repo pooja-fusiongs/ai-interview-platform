@@ -1,6 +1,7 @@
 /**
  * useRealtimeTranscript - Silent background hook for real-time transcription.
- * Uses LiveKit tracks only (no extra getUserMedia calls).
+ * Each participant sends ONLY their own local mic audio (high quality, no WebRTC loss).
+ * Both recruiter and candidate should enable this — each sends their own voice.
  * All errors are caught silently — never interferes with recording or video.
  */
 
@@ -28,10 +29,13 @@ export function useRealtimeTranscript({
 }: UseRealtimeTranscriptProps) {
   const wsRef = useRef<WebSocket | null>(null);
   const localRecorderRef = useRef<MediaRecorder | null>(null);
-  const remoteRecorderRef = useRef<MediaRecorder | null>(null);
   const entriesRef = useRef<TranscriptEntry[]>([]);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   const allTracks = useTracks(
     [{ source: Track.Source.Microphone, withPlaceholder: false }],
@@ -41,77 +45,85 @@ export function useRealtimeTranscript({
   const localMicTrack = allTracks.find(
     (t) => t.participant.isLocal && t.source === Track.Source.Microphone && t.publication?.track
   );
-  const remoteMicTrack = allTracks.find(
-    (t) => !t.participant.isLocal && t.source === Track.Source.Microphone && t.publication?.track
-  );
 
   const localMicMediaTrack = localMicTrack?.publication?.track?.mediaStreamTrack;
-  const remoteMicMediaTrack = remoteMicTrack?.publication?.track?.mediaStreamTrack;
 
-  // Connect WebSocket — all errors silent
-  useEffect(() => {
-    if (!enabled || !interviewId) return;
+  const handleMessage = useCallback((event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'ready') {
+        setIsConnected(true);
+        reconnectAttemptsRef.current = 0;
+      } else if (data.type === 'transcript') {
+        const entry: TranscriptEntry = {
+          speaker: data.speaker,
+          text: data.text,
+          isFinal: data.is_final,
+          timestamp: data.timestamp_start || Date.now() / 1000,
+        };
+        if (data.is_final) {
+          entriesRef.current = [
+            ...entriesRef.current.filter((e) => !(e.speaker === data.speaker && !e.isFinal)),
+            entry,
+          ];
+        } else {
+          const withoutInterim = entriesRef.current.filter(
+            (e) => !(e.speaker === data.speaker && !e.isFinal)
+          );
+          entriesRef.current = [...withoutInterim, entry];
+        }
+        setEntries([...entriesRef.current]);
+      }
+    } catch {}
+  }, []);
 
+  // Connect WebSocket with auto-reconnect
+  const connectWs = useCallback(() => {
+    if (!enabledRef.current || !interviewId) return;
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const wsUrl = apiBase.replace(/^http/, 'ws') + `/ws/transcription/${interviewId}`;
-
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         try { ws.send(JSON.stringify({ type: 'config', role: userRole })); } catch {}
       };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'ready') {
-            setIsConnected(true);
-          } else if (data.type === 'transcript') {
-            const entry: TranscriptEntry = {
-              speaker: data.speaker,
-              text: data.text,
-              isFinal: data.is_final,
-              timestamp: data.timestamp_start || Date.now() / 1000,
-            };
-            if (data.is_final) {
-              entriesRef.current = [
-                ...entriesRef.current.filter((e) => !(e.speaker === data.speaker && !e.isFinal)),
-                entry,
-              ];
-            } else {
-              const withoutInterim = entriesRef.current.filter(
-                (e) => !(e.speaker === data.speaker && !e.isFinal)
-              );
-              entriesRef.current = [...withoutInterim, entry];
-            }
-            setEntries([...entriesRef.current]);
-          }
-        } catch {}
-      };
-
-      ws.onclose = () => setIsConnected(false);
-      ws.onerror = () => {}; // Silent
-
-      return () => {
-        try {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'stop' }));
-            ws.close();
-          }
-        } catch {}
-        wsRef.current = null;
+      ws.onmessage = handleMessage;
+      ws.onclose = () => {
         setIsConnected(false);
+        // Auto-reconnect if still enabled (max 5 attempts)
+        if (enabledRef.current && reconnectAttemptsRef.current < 5) {
+          reconnectAttemptsRef.current += 1;
+          const delay = Math.min(1000 * reconnectAttemptsRef.current, 5000);
+          console.log(`[transcript] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/5)...`);
+          reconnectTimerRef.current = setTimeout(connectWs, delay);
+        }
       };
-    } catch {
-      return;
-    }
-  }, [enabled, interviewId, userRole]);
+      ws.onerror = () => {};
+    } catch {}
+  }, [interviewId, userRole, handleMessage]);
+
+  useEffect(() => {
+    if (!enabled || !interviewId) return;
+    connectWs();
+    return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      try {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'stop' }));
+          wsRef.current.close();
+        }
+      } catch {}
+      wsRef.current = null;
+      reconnectAttemptsRef.current = 0;
+      setIsConnected(false);
+    };
+  }, [enabled, interviewId, connectWs]);
 
   // Helper: create audio-only MediaRecorder — silent on failure
   const createAudioRecorder = useCallback(
-    (track: MediaStreamTrack, speakerId: number): MediaRecorder | null => {
+    (track: MediaStreamTrack): MediaRecorder | null => {
       try {
         const stream = new MediaStream([track]);
         let mimeType = 'audio/webm;codecs=opus';
@@ -120,20 +132,20 @@ export function useRealtimeTranscript({
           if (!MediaRecorder.isTypeSupported(mimeType)) return null;
         }
 
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const recorder = new MediaRecorder(stream, {
+          mimeType,
+          audioBitsPerSecond: 256000,
+        });
         recorder.ondataavailable = async (event) => {
           try {
             if (event.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
               const buffer = await event.data.arrayBuffer();
-              const prefixed = new Uint8Array(1 + buffer.byteLength);
-              prefixed[0] = speakerId;
-              prefixed.set(new Uint8Array(buffer), 1);
-              wsRef.current.send(prefixed.buffer);
+              wsRef.current.send(buffer);
             }
           } catch {}
         };
         recorder.onerror = () => {}; // Silent
-        recorder.start(250);
+        recorder.start(200);
         return recorder;
       } catch {
         return null;
@@ -142,11 +154,12 @@ export function useRealtimeTranscript({
     []
   );
 
-  // Capture local mic (from LiveKit track only — no extra getUserMedia)
+  // Capture local mic only (from LiveKit track — no extra getUserMedia)
+  // Each participant sends their own high-quality local audio directly
   useEffect(() => {
     if (!isConnected || !localMicMediaTrack) return;
     try {
-      const recorder = createAudioRecorder(localMicMediaTrack, 1);
+      const recorder = createAudioRecorder(localMicMediaTrack);
       localRecorderRef.current = recorder;
       return () => {
         try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch {}
@@ -156,21 +169,6 @@ export function useRealtimeTranscript({
       return;
     }
   }, [isConnected, localMicMediaTrack, createAudioRecorder]);
-
-  // Capture remote mic (from LiveKit track)
-  useEffect(() => {
-    if (!isConnected || !remoteMicMediaTrack) return;
-    try {
-      const recorder = createAudioRecorder(remoteMicMediaTrack, 2);
-      remoteRecorderRef.current = recorder;
-      return () => {
-        try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch {}
-        remoteRecorderRef.current = null;
-      };
-    } catch {
-      return;
-    }
-  }, [isConnected, remoteMicMediaTrack, createAudioRecorder]);
 
   return { entries, isConnected };
 }

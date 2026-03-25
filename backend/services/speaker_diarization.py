@@ -101,18 +101,31 @@ def _run_pyannote(wav_path: str) -> List[Dict]:
 def assign_speaker_roles(segments: List[Dict]) -> Dict[str, str]:
     """
     Map SPEAKER_00/SPEAKER_01 to Recruiter/Candidate.
-    Heuristic: first speaker = Recruiter (they open the interview).
+    Heuristic: the speaker who talks MORE is the Recruiter (they ask questions + guide the interview).
+    Tiebreaker: first speaker = Recruiter.
     """
     if not segments:
         return {}
 
-    first_speaker = segments[0]["speaker"]
     speakers = sorted(set(s["speaker"] for s in segments))
+    if len(speakers) == 1:
+        return {speakers[0]: "Recruiter"}
+
+    # Calculate total talk time per speaker
+    talk_time: Dict[str, float] = {}
+    for s in segments:
+        dur = s.get("end", 0) - s.get("start", 0)
+        talk_time[s["speaker"]] = talk_time.get(s["speaker"], 0) + dur
+
+    # Speaker with more talk time = Recruiter (they explain, ask questions, guide)
+    sorted_speakers = sorted(speakers, key=lambda spk: talk_time.get(spk, 0), reverse=True)
+    recruiter_speaker = sorted_speakers[0]
 
     role_map = {}
     for spk in speakers:
-        role_map[spk] = "Recruiter" if spk == first_speaker else "Candidate"
+        role_map[spk] = "Recruiter" if spk == recruiter_speaker else "Candidate"
 
+    print(f"[speaker_diarization] Role assignment: {role_map} (talk_time: {talk_time})")
     return role_map
 
 

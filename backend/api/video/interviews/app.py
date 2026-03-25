@@ -1066,9 +1066,14 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
             print(f"[BG Transcription] VideoInterview {vi_id} not found")
             return
 
-        # Already has transcript (another thread may have finished)
-        if bg_vi.transcript:
-            print(f"[BG Transcription] Transcript already exists for vi_id={vi_id}, skipping")
+        # Save any existing real-time transcript for later comparison
+        realtime_transcript = bg_vi.transcript if bg_vi.transcript_source == "realtime" else None
+        if realtime_transcript:
+            print(f"[BG Transcription] Real-time transcript exists ({len(realtime_transcript)} chars), will compare with recording transcript")
+
+        # Skip only if recording-based transcript already exists (not real-time)
+        if bg_vi.transcript and bg_vi.transcript_source == "recording":
+            print(f"[BG Transcription] Recording transcript already exists for vi_id={vi_id}, skipping")
             return
 
         # Re-read recording_url from DB
@@ -1201,8 +1206,44 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                 transcript_text = transcript_data["transcript_text"]
                 print(f"[BG Transcription] Fallback success ({len(transcript_text)} chars)")
 
-            bg_vi.transcript = transcript_text
-            bg_vi.transcript_source = "recording"
+            # Compare real-time vs recording transcript — use the better one
+            final_transcript = transcript_text
+            chosen_source = "recording"
+
+            if realtime_transcript and transcript_text:
+                rt_words = len(realtime_transcript.split())
+                rec_words = len(transcript_text.split())
+
+                # Check if real-time has speaker labels (Recruiter:/Candidate:)
+                rt_has_speakers = "Recruiter:" in realtime_transcript and "Candidate:" in realtime_transcript
+                rec_has_speakers = "Recruiter:" in transcript_text or "Candidate:" in transcript_text
+
+                print(f"[BG Transcription] Comparing: realtime={rt_words} words (speakers={rt_has_speakers}), recording={rec_words} words (speakers={rec_has_speakers})")
+
+                if rt_has_speakers and not rec_has_speakers and rt_words > rec_words * 0.7:
+                    # Real-time has speaker labels and is reasonably complete — keep it
+                    final_transcript = realtime_transcript
+                    chosen_source = "realtime"
+                    print(f"[BG Transcription] Keeping real-time transcript (has speaker labels, {rt_words} words)")
+                elif rec_words > rt_words * 1.3:
+                    # Recording captured significantly more content — use it
+                    final_transcript = transcript_text
+                    chosen_source = "recording"
+                    print(f"[BG Transcription] Using recording transcript (more complete: {rec_words} vs {rt_words} words)")
+                elif rt_has_speakers and rec_words > rt_words:
+                    # Recording has more words but realtime has labels
+                    # Merge: use recording text but note both sources
+                    final_transcript = transcript_text
+                    chosen_source = "recording+realtime"
+                    print(f"[BG Transcription] Using recording transcript (more words), both sources available")
+                else:
+                    # Real-time is good enough
+                    final_transcript = realtime_transcript if rt_words >= rec_words else transcript_text
+                    chosen_source = "realtime" if rt_words >= rec_words else "recording"
+                    print(f"[BG Transcription] Using {chosen_source} transcript ({max(rt_words, rec_words)} words)")
+
+            bg_vi.transcript = final_transcript
+            bg_vi.transcript_source = chosen_source
             bg_vi.transcript_generated_at = datetime.now(timezone.utc)
 
             # Update InterviewSession

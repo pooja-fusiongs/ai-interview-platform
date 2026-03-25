@@ -139,11 +139,13 @@ const RealTimeFlagMonitor: React.FC = () => {
           interviewStatus: a.interview_status || '',
         };
       });
-      // Sort: live interviews first, then by date
+      // Sort: live interviews first, then newest first by date
       mapped.sort((a, b) => {
         if (a.status === 'live' && b.status !== 'live') return -1;
         if (a.status !== 'live' && b.status === 'live') return 1;
-        return 0;
+        const dateA = a.analyzedAt ? new Date(a.analyzedAt).getTime() : 0;
+        const dateB = b.analyzedAt ? new Date(b.analyzedAt).getTime() : 0;
+        return dateB - dateA;
       });
       setSessions(mapped);
       setError('');

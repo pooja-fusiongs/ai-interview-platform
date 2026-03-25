@@ -65,7 +65,9 @@ export const fraudDetectionService = {
   },
   submitUnifiedDetection: async (data: any) => {
     // The unified payload has interview_id inside data
-    const response = await apiClient.post(`/api/movement-detection`, data);
+    // Use short timeout (10s) — this is a lightweight call that fires every 5s
+    // If it fails, the next one will succeed (data is accumulated in 5s windows)
+    const response = await apiClient.post(`/api/movement-detection`, data, { timeout: 10000 });
     return response.data;
   },
 };

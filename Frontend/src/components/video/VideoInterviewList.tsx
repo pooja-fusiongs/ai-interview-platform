@@ -103,6 +103,10 @@ const VideoInterviewList: React.FC = () => {
     const matchesStatus = statusFilter === 'all' || interview.status === statusFilter;
     const matchesJob = jobFilter === 'all' || interview.job_title === jobFilter;
     return matchesSearch && matchesStatus && matchesJob;
+  }).sort((a, b) => {
+    const dateA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
+    const dateB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
+    return dateB - dateA;
   });
 
   // Get paginated data from filtered results

@@ -245,7 +245,12 @@ const Results = () => {
         interviewService.listInterviews(),
       ])
       if (sessionResult) setSelectedSession(sessionResult)
-      setSessions(list)
+      const sorted = [...list].sort((a, b) => {
+        const dateA = a.completed_at ? new Date(a.completed_at).getTime() : 0
+        const dateB = b.completed_at ? new Date(b.completed_at).getTime() : 0
+        return dateB - dateA
+      })
+      setSessions(sorted)
       setPage(0)
     } catch (err: any) {
       console.error('Error loading results:', err)

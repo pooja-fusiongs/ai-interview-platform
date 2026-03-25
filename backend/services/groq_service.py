@@ -264,8 +264,44 @@ def score_transcript_with_groq(
     # Early detection of gibberish/nonsense transcripts
     text_clean = transcript_text.strip().lower()
     words = text_clean.split()
+
+    # Strip speaker labels to count only actual spoken words
+    import re
+    content_only = re.sub(r'(recruiter|candidate|speaker)\s*:', '', text_clean).strip()
+    content_words = [w for w in content_only.split() if len(w) > 1]  # ignore single chars
+
+    # Extract candidate-only words (everything after "Candidate:" labels)
+    candidate_parts = re.findall(r'candidate\s*:\s*(.+?)(?=recruiter\s*:|candidate\s*:|$)', text_clean, re.DOTALL)
+    candidate_text = ' '.join(candidate_parts).strip()
+    candidate_words = [w for w in candidate_text.split() if len(w) > 1]
+
+    # Detect meaningless transcripts:
+    # 1. Total content too short (< 10 real words)
+    # 2. Candidate said almost nothing (< 5 words)
+    # 3. Only greetings/filler words
+    greeting_words = {'hello', 'hi', 'hey', 'ok', 'okay', 'yes', 'no', 'yeah', 'bye',
+                      'thanks', 'thank', 'you', 'good', 'fine', 'sure', 'um', 'uh',
+                      'hmm', 'well', 'so', 'can', 'hear', 'me'}
+    candidate_meaningful = [w for w in candidate_words if w not in greeting_words]
+
+    is_nonsense = False
+    nonsense_reason = ""
+
     if len(words) < 5:
-        print(f"[WARN] [score_transcript_groq] Transcript too short ({len(words)} words), scoring as nonsense")
+        is_nonsense = True
+        nonsense_reason = f"Transcript too short ({len(words)} words)"
+    elif len(content_words) < 10:
+        is_nonsense = True
+        nonsense_reason = f"Very little spoken content ({len(content_words)} real words)"
+    elif len(candidate_words) < 5:
+        is_nonsense = True
+        nonsense_reason = f"Candidate barely spoke ({len(candidate_words)} words)"
+    elif len(candidate_meaningful) < 3:
+        is_nonsense = True
+        nonsense_reason = f"Candidate only said greetings/filler ({len(candidate_meaningful)} meaningful words)"
+
+    if is_nonsense:
+        print(f"[WARN] [score_transcript_groq] {nonsense_reason}, scoring as nonsense")
         zero_questions = []
         for qa in questions_with_answers:
             zero_questions.append({
@@ -273,14 +309,14 @@ def score_transcript_with_groq(
                 "extracted_answer": "No meaningful answer provided",
                 "score": 0, "relevance_score": 0, "completeness_score": 0,
                 "accuracy_score": 0, "clarity_score": 0,
-                "feedback": "Transcript contains no meaningful content."
+                "feedback": f"{nonsense_reason}. No substantive answer given."
             })
         return {
             "per_question": zero_questions,
             "overall_score": 0,
             "recommendation": "reject",
             "strengths": "None identified.",
-            "weaknesses": "Transcript contains no meaningful answers."
+            "weaknesses": f"{nonsense_reason}. Candidate did not provide meaningful answers."
         }
 
     try:
@@ -309,9 +345,11 @@ TRANSCRIPT:
 
 CRITICAL INSTRUCTIONS:
 1. Each question must have a DIFFERENT answer extracted from the transcript.
-2. Extract ONLY the candidate's words (no timestamps, no speaker labels).
+2. Extract ONLY the candidate's words — ignore everything said by the Recruiter/Interviewer.
+   The transcript has speaker labels (e.g., "Recruiter:" and "Candidate:"). Only score what the Candidate said.
 3. Keep extracted answers to 1-4 sentences - just the core answer.
 4. If a question was not asked in the transcript, write: "Question not asked in this interview"
+5. Do NOT attribute the recruiter's explanations or prompts as the candidate's answer.
 
 SCORING (0-100 scale):
 - relevance_score: How relevant is the answer to the question? (0-100)
@@ -393,6 +431,16 @@ Respond ONLY with valid JSON:
                 "not discussed", "not mentioned", "question was not"
             ])
 
+            # Also detect meaningless extracted answers (just greetings/filler)
+            if not not_asked:
+                extracted_words = [w for w in extracted.split() if len(w) > 1]
+                _greetings = {'hello', 'hi', 'hey', 'ok', 'okay', 'yes', 'no', 'yeah',
+                              'thanks', 'thank', 'you', 'good', 'fine', 'sure', 'um', 'uh', 'bye'}
+                meaningful_words = [w for w in extracted_words if w not in _greetings]
+                if len(meaningful_words) < 3:
+                    not_asked = True
+                    pq["feedback"] = "Candidate did not provide a substantive answer to this question."
+
             for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
                 if not_asked:
                     pq[key] = 0.0
@@ -411,20 +459,10 @@ Respond ONLY with valid JSON:
             elif not pq.get("feedback"):
                 pq["feedback"] = "Evaluation completed."
 
-        # Auto-detect if LLM returned scores on 0-10 scale (all per_question scores <= 10)
-        all_scores = []
-        for pq in result.get("per_question", []):
-            for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
-                val = pq.get(key, 0.0)
-                if val > 0:
-                    all_scores.append(val)
-        # If all non-zero scores are <= 10, likely 0-10 scale — multiply by 10
-        if all_scores and all(s <= 10.0 for s in all_scores):
-            for pq in result.get("per_question", []):
-                for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
-                    val = pq.get(key, 0.0)
-                    if val > 0:
-                        pq[key] = round(val * 10.0, 1)
+        # NOTE: Auto-scale detection REMOVED — it was causing bugs.
+        # When LLM gives legitimately low scores (e.g., 10/100 for bad answers),
+        # the old code would wrongly multiply by 10 (thinking it was 0-10 scale).
+        # The prompt explicitly asks for 0-100 scale. Trust the LLM's output.
 
         # Validate overall_score — only count questions that were actually asked
         asked_scores = [pq.get("score", 0) for pq in result.get("per_question", [])
@@ -438,9 +476,6 @@ Respond ONLY with valid JSON:
             overall = sum(asked_scores) / len(asked_scores) if asked_scores else 0.0
         else:
             overall = float(overall)
-            # If we detected 0-10 scale above, scale overall too
-            if all_scores and all(s <= 10.0 for s in all_scores) and overall <= 10.0 and overall > 0:
-                overall = overall * 10.0
         result["overall_score"] = round(max(0.0, min(100.0, overall)), 1)
 
         # Normalize recommendation using 0-100 thresholds

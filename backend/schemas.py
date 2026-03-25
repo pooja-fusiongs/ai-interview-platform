@@ -788,6 +788,10 @@ class UnifiedDetectionPayload(BaseModel):
     max_pitch_deviation: float = 0
     inconsistent_seconds: float = 0
     
+    # Gaze / Looking Away Details
+    looking_away_count: int = 0
+    looking_away_seconds: float = 0
+
     # Body Movement Details
     movement_score: str = "CALM"
     movement_intensity: float = 0.0

@@ -3,12 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, CircularProgress,
   Chip, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions, Collapse
+  DialogActions, Collapse, TextField
 } from '@mui/material';
 import {
   ArrowBack, AccessTime,
   Check, Videocam,
-  FiberManualRecord, ExpandMore, ExpandLess
+  FiberManualRecord, ExpandMore, ExpandLess,
+  VideoCall, Description
 } from '@mui/icons-material';
 import videoInterviewService from '../../services/videoInterviewService';
 import ratingService from '../../services/ratingService';
@@ -16,10 +17,11 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track, DisconnectReason } from 'livekit-client';
+import { Track, DisconnectReason, RoomOptions, VideoPresets } from 'livekit-client';
 import { VideoTilesGrid } from './VideoTilesGrid';
 import FaceDetectionOverlay from './FaceDetectionOverlay';
 import TranscriptionCapture from './TranscriptionCapture';
+import LiveTranscriptPanel from './LiveTranscriptPanel';
 import { TranscriptEntry } from '../../hooks/useRealtimeTranscript';
 import { getMediaDevices } from '../../utils/mediaDeviceUtils';
 import Navigation from '../layout/Sidebar';
@@ -148,7 +150,7 @@ const InterviewRecorder: React.FC<{
     }
   }, [remoteScreenMediaTrack]);
 
-  // Start recording when mic track becomes available
+  // Start recording when mic track becomes available (wait briefly for camera too)
   useEffect(() => {
     console.log(`🔍 [Recorder Check] shouldRecord=${shouldRecord}, started=${startedRef.current}, hasRecorder=${!!mediaRecorderRef.current}, hasMic=${!!micMediaTrack}, hasCam=${!!camMediaTrack}, remoteCount=${remoteParticipants.length}`);
     if (!shouldRecord || startedRef.current || mediaRecorderRef.current) {
@@ -161,7 +163,13 @@ const InterviewRecorder: React.FC<{
       console.warn('⏸️ [Recorder] No mic track yet — waiting for mic permission...');
       return;
     }
+    // Wait for camera track too — if not available yet, wait up to 3s then start anyway
+    if (!camMediaTrack) {
+      console.log('⏳ [Recorder] Mic ready but waiting for camera track (up to 3s)...');
+    }
 
+    // Delay recording start to give camera track time to appear
+    const delay = camMediaTrack ? 500 : 3000;
     const timer = setTimeout(async () => {
       if (startedRef.current || mediaRecorderRef.current) return;
       startedRef.current = true;
@@ -226,16 +234,31 @@ const InterviewRecorder: React.FC<{
         const ctx = canvas.getContext('2d')!;
 
         // Draw loop: composites all video tracks onto canvas
+        // Fallback: if hidden video refs aren't ready, try to find visible video elements in the DOM
         const drawFrame = () => {
           const localScreenVid = screenVideoElRef.current;
-          const localCamVid = camVideoElRef.current;
+          let localCamVid = camVideoElRef.current;
           const remoteScreenVid = remoteScreenVideoElRef.current;
-          const remoteCamVid = remoteCamVideoElRef.current;
+          let remoteCamVid = remoteCamVideoElRef.current;
 
           const hasLocalScreen = localScreenVid?.srcObject && localScreenVid.readyState >= 2;
-          const hasLocalCam = localCamVid?.srcObject && localCamVid.readyState >= 2;
+          let hasLocalCam = !!(localCamVid?.srcObject && localCamVid.readyState >= 2);
           const hasRemoteScreen = remoteScreenVid?.srcObject && remoteScreenVid.readyState >= 2;
-          const hasRemoteCam = remoteCamVid?.srcObject && remoteCamVid.readyState >= 2;
+          let hasRemoteCam = !!(remoteCamVid?.srcObject && remoteCamVid.readyState >= 2);
+
+          // Fallback: try to find video elements from the DOM if hidden refs aren't working
+          if (!hasLocalCam && !hasRemoteCam) {
+            const domVideos = document.querySelectorAll<HTMLVideoElement>('video[data-lk-local-participant="true"], video');
+            for (const v of domVideos) {
+              if (v.srcObject && v.readyState >= 2 && v.videoWidth > 0 && !v.muted) {
+                // Likely remote camera (not muted = has audio = remote)
+                if (!hasRemoteCam) { remoteCamVid = v; hasRemoteCam = true; }
+              } else if (v.srcObject && v.readyState >= 2 && v.videoWidth > 0 && v.muted) {
+                // Likely local camera (muted = local preview)
+                if (!hasLocalCam) { localCamVid = v; hasLocalCam = true; }
+              }
+            }
+          }
 
           // Dark background
           ctx.fillStyle = '#1a1a2e';
@@ -312,7 +335,7 @@ const InterviewRecorder: React.FC<{
 
         console.log(`🎬 Recording: ${combinedStream.getVideoTracks().length} video + ${combinedStream.getAudioTracks().length} audio, MIME: ${mimeType}`);
 
-        const mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+        const mediaRecorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 500000 });
         let chunkCount = 0;
         let totalBytes = 0;
         mediaRecorder.ondataavailable = (event) => {
@@ -360,7 +383,7 @@ const InterviewRecorder: React.FC<{
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [shouldRecord, micMediaTrack]);
+  }, [shouldRecord, micMediaTrack, camMediaTrack]);
 
   // Dynamically connect remote participant audio when they join AFTER recording starts
   useEffect(() => {
@@ -450,9 +473,13 @@ const VideoInterviewRoom: React.FC = () => {
   const [interviewJobId, setInterviewJobId] = useState<number | null>(null);
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [expandedAnswers, setExpandedAnswers] = useState<Record<number, boolean>>({});
+  const [interviewMode, setInterviewMode] = useState<'video' | 'classic'>('video');
+  const [classicTranscript, setClassicTranscript] = useState('');
+  const [submittingClassic, setSubmittingClassic] = useState(false);
+  const [hasExited, setHasExited] = useState(false);
   const [gracePeriodTimer, setGracePeriodTimer] = useState<number | null>(null);
-  const [, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
-  const [, setTranscriptConnected] = useState(false);
+  const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
+  const [transcriptConnected, setTranscriptConnected] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const graceCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -541,6 +568,46 @@ const VideoInterviewRoom: React.FC = () => {
       console.error('Rating error:', err);
     } finally {
       setSavingRating(null);
+    }
+  };
+
+  const handleClassicSubmit = async () => {
+    if (!interviewJobId || !applicationId) {
+      toast.error('Interview data missing');
+      return;
+    }
+    const ratedCount = Object.keys(questionRatings).length;
+    if (ratedCount === 0) {
+      toast.error('Please rate at least one question before submitting');
+      return;
+    }
+    setSubmittingClassic(true);
+    try {
+      // Upload transcript if provided
+      if (classicTranscript.trim()) {
+        const formData = new FormData();
+        formData.append('transcript_text', classicTranscript.trim());
+        await ratingService.submitTranscript(interviewJobId, applicationId, formData);
+      }
+      // Generate report from ratings
+      toast.loading('Generating report...', { id: 'classic-report' });
+      const result = await ratingService.finalizeReport(interviewJobId, applicationId);
+      if (result.status === 'success') {
+        toast.success(`Report generated! Score: ${result.recruiter_score}/10`, { id: 'classic-report', duration: 4000 });
+      } else {
+        toast.dismiss('classic-report');
+        toast.success('Ratings saved successfully');
+      }
+      // End the interview
+      try {
+        await videoInterviewService.endInterview(Number(videoId), { max_participants: 0 });
+        setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
+      } catch {}
+      setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to submit');
+    } finally {
+      setSubmittingClassic(false);
     }
   };
 
@@ -660,8 +727,13 @@ const VideoInterviewRoom: React.FC = () => {
   const handleStart = () => {
     console.log('🎬 handleStart called, user role:', user?.role);
     if (isUserCandidate) {
-      // Candidate: show consent dialog then join
-      setShowConsentDialog(true);
+      // If consent already given (rejoining after exit), skip dialog
+      if (interview?.recording_consent) {
+        setIsActive(true);
+        toast.success('Rejoining interview...');
+      } else {
+        setShowConsentDialog(true);
+      }
     } else {
       // Recruiter/Admin: join interview directly as interviewer
       console.log('🎬 Recruiter joining as interviewer');
@@ -773,6 +845,27 @@ const VideoInterviewRoom: React.FC = () => {
     if (videoContainerRef.current) {
       videoContainerRef.current.innerHTML = '';
     }
+  };
+
+  const handleExit = () => {
+    // Exit: leave the call temporarily without ending the interview
+    // Stop and discard current recording so a fresh one starts on rejoin
+    if (mediaRecorderRef.current) {
+      try {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {}
+      mediaRecorderRef.current = null;
+    }
+    recordedChunksRef.current = [];
+
+    setIsActive(false);
+    setCallJoined(false);
+    setHasExited(true);
+    setIsRecording(false);
+    cleanupVideoCall();
+    toast.success('You left the call. Click "Rejoin Interview" to rejoin.', { duration: 5000 });
   };
 
   const handleEnd = async () => {
@@ -937,8 +1030,16 @@ const VideoInterviewRoom: React.FC = () => {
             </Box>
           </Box>
 
-          {/* Timer and Status */}
+          {/* Mode Toggle + Timer */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {!isUserCandidate && !isCompleted && (
+              <Chip
+                icon={interviewMode === 'video' ? <VideoCall sx={{ fontSize: 16 }} /> : <Description sx={{ fontSize: 16 }} />}
+                label={interviewMode === 'video' ? 'Video Mode' : 'Classic Mode'}
+                size="small"
+                sx={{ fontWeight: 600, fontSize: '11px', background: interviewMode === 'video' ? '#020291' : '#7c3aed', color: '#fff' }}
+              />
+            )}
             {interview?.status === 'waiting' && gracePeriodTimer && (
               <Chip
                 icon={<AccessTime sx={{ fontSize: 14 }} />}
@@ -1003,7 +1104,7 @@ const VideoInterviewRoom: React.FC = () => {
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, flex: 1, overflow: 'hidden', minHeight: 0 }}>
           {/* LEFT SIDE - Questions Panel (recruiter only) */}
           {!isUserCandidate && <Box sx={{
-            width: { xs: '100%', md: '40%' },
+            width: { xs: '100%', md: interviewMode === 'classic' ? '100%' : '40%' },
             maxHeight: { xs: isActive ? '30vh' : '40vh', md: 'none' },
             backgroundColor: 'white',
             borderRight: { md: '1px solid #e2e8f0' },
@@ -1200,10 +1301,48 @@ const VideoInterviewRoom: React.FC = () => {
                 </Box>
               )}
             </Box>
+
+            {/* Live captions now show directly on video panel — no need for separate transcript panel here */}
+
+            {/* Classic Mode: Transcript & Submit Section */}
+            {interviewMode === 'classic' && !isUserCandidate && (
+              <Box sx={{ p: '16px 20px', borderTop: '1px solid #e2e8f0', background: '#fff' }}>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: 1 }}>
+                  Interview Transcript (Optional)
+                </Typography>
+                <Typography sx={{ fontSize: '11px', color: '#94a3b8', mb: 1.5 }}>
+                  Paste the interview transcript for AI scoring. You can also submit with just your ratings.
+                </Typography>
+                <TextField
+                  multiline rows={3} fullWidth
+                  placeholder="Paste interview transcript here..."
+                  value={classicTranscript}
+                  onChange={e => setClassicTranscript(e.target.value)}
+                  sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: '12px' } }}
+                />
+                <Button
+                  onClick={handleClassicSubmit}
+                  disabled={submittingClassic || Object.keys(questionRatings).length === 0}
+                  fullWidth
+                  sx={{
+                    background: '#020291', color: '#fff', borderRadius: '10px', textTransform: 'none',
+                    fontWeight: 600, fontSize: '13px', py: 1.2,
+                    '&:hover': { background: '#010178' },
+                    '&:disabled': { opacity: 0.5, color: '#fff', background: '#020291' }
+                  }}
+                >
+                  {submittingClassic ? (
+                    <><CircularProgress size={16} sx={{ mr: 1, color: '#fff' }} /> Generating Report...</>
+                  ) : (
+                    `Submit & Generate Report (${Object.keys(questionRatings).length}/${questions.length} rated)`
+                  )}
+                </Button>
+              </Box>
+            )}
           </Box>}
 
-          {/* RIGHT SIDE - Video Panel */}
-          <Box sx={{
+          {/* RIGHT SIDE - Video Panel (hidden in classic mode) */}
+          {interviewMode === 'video' && <Box sx={{
             width: { xs: '100%', md: '60%' },
             flex: 1,
             minHeight: 0,
@@ -1250,6 +1389,20 @@ const VideoInterviewRoom: React.FC = () => {
                         token={lkToken}
                         serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
                         connect={true}
+                        options={{
+                          adaptiveStream: true,
+                          dynacast: true,
+                          videoCaptureDefaults: {
+                            resolution: VideoPresets.h720.resolution,
+                            facingMode: 'user',
+                          },
+                          publishDefaults: {
+                            videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360],
+                            videoCodec: 'vp8',
+                            dtx: true,
+                            red: true,
+                          },
+                        } as RoomOptions}
                         onConnected={() => {
                           setCallJoined(true);
                           setParticipantCount(1);
@@ -1341,16 +1494,16 @@ const VideoInterviewRoom: React.FC = () => {
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
                         />
-                        {/* Only recruiter side sends transcription to avoid duplicate entries */}
+                        {/* Both sides send their own local mic for high-quality transcription */}
                         <TranscriptionCapture
                           interviewId={videoId || ''}
                           userRole={isUserCandidate ? 'candidate' : 'recruiter'}
-                          enabled={callJoined && !isUserCandidate}
+                          enabled={callJoined}
                           onTranscriptUpdate={setTranscriptEntries}
                           onConnectionChange={setTranscriptConnected}
                         />
                         {isUserCandidate && <FaceDetectionOverlay enabled={callJoined} videoInterviewId={videoId ? parseInt(videoId) : undefined} />}
-                        <VideoTilesGrid onEndCall={handleEnd} />
+                        <VideoTilesGrid onEndCall={handleEnd} onExitCall={handleExit} captionEntries={transcriptEntries} />
                         <RoomAudioRenderer />
                       </LiveKitRoom>
                     ) : (
@@ -1389,52 +1542,105 @@ const VideoInterviewRoom: React.FC = () => {
                   </Box>
                 ) : (
                   <Box sx={{
-                    textAlign: 'center', p: { xs: 3, sm: 5 },
+                    textAlign: 'center', p: { xs: 3, sm: 4 },
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     width: '100%', height: '100%',
                     background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 50%, #e0e7ff 100%)',
                   }}>
-                    <Box sx={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      mb: 4,
-                      boxShadow: '0 12px 32px rgba(139, 92, 246, 0.4)'
-                    }}>
-                      <Videocam sx={{ color: 'white', fontSize: 60 }} />
-                    </Box>
-                    <Typography sx={{
-                      color: '#1e293b',
-                      fontSize: { xs: '24px', sm: '32px' },
-                      fontWeight: 700,
-                      mb: 2
-                    }}>
-                      Interview Ready
-                    </Typography>
-                    <Typography sx={{
-                      color: '#64748b',
-                      fontSize: { xs: '14px', sm: '16px' },
-                      mb: 5,
-                      lineHeight: 1.7,
-                      maxWidth: '500px',
-                      mx: 'auto'
-                    }}>
-                      {isUserCandidate
-                        ? 'Your interview is ready. Click below to begin.'
-                        : 'Join the interview room to conduct the interview with the candidate.'}
-                    </Typography>
+                    {/* Mode Selection for Recruiter (before joining) */}
+                    {!isUserCandidate && !hasExited && (
+                      <>
+                        <Typography sx={{ color: '#1e293b', fontSize: '20px', fontWeight: 700, mb: 1 }}>
+                          Choose Interview Mode
+                        </Typography>
+                        <Typography sx={{ color: '#64748b', fontSize: '13px', mb: 3, maxWidth: 400 }}>
+                          Select how you want to conduct this interview
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 2, mb: 4, width: '100%', maxWidth: 420, px: 2 }}>
+                          {/* Video Mode Card */}
+                          <Box
+                            onClick={() => setInterviewMode('video')}
+                            sx={{
+                              flex: 1, cursor: 'pointer', borderRadius: '14px', p: 2.5, textAlign: 'center',
+                              border: interviewMode === 'video' ? '2px solid #020291' : '2px solid #e2e8f0',
+                              background: interviewMode === 'video' ? '#eef2ff' : '#fff',
+                              transition: 'all 0.2s',
+                              '&:hover': { borderColor: '#020291', background: '#f8faff' },
+                            }}
+                          >
+                            <Box sx={{
+                              width: 48, height: 48, borderRadius: '12px', margin: '0 auto 10px',
+                              background: interviewMode === 'video' ? '#020291' : '#f1f5f9',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <VideoCall sx={{ color: interviewMode === 'video' ? '#fff' : '#64748b', fontSize: 26 }} />
+                            </Box>
+                            <Typography sx={{ fontWeight: 700, fontSize: '14px', color: interviewMode === 'video' ? '#020291' : '#1e293b' }}>
+                              Video Interview
+                            </Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#94a3b8', mt: 0.5, lineHeight: 1.4 }}>
+                              Live video call with candidate + rating
+                            </Typography>
+                          </Box>
+                          {/* Classic Mode Card */}
+                          <Box
+                            onClick={() => setInterviewMode('classic')}
+                            sx={{
+                              flex: 1, cursor: 'pointer', borderRadius: '14px', p: 2.5, textAlign: 'center',
+                              border: interviewMode === 'classic' ? '2px solid #7c3aed' : '2px solid #e2e8f0',
+                              background: interviewMode === 'classic' ? '#f5f3ff' : '#fff',
+                              transition: 'all 0.2s',
+                              '&:hover': { borderColor: '#7c3aed', background: '#faf8ff' },
+                            }}
+                          >
+                            <Box sx={{
+                              width: 48, height: 48, borderRadius: '12px', margin: '0 auto 10px',
+                              background: interviewMode === 'classic' ? '#7c3aed' : '#f1f5f9',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <Description sx={{ color: interviewMode === 'classic' ? '#fff' : '#64748b', fontSize: 26 }} />
+                            </Box>
+                            <Typography sx={{ fontWeight: 700, fontSize: '14px', color: interviewMode === 'classic' ? '#7c3aed' : '#1e293b' }}>
+                              Classic Mode
+                            </Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#94a3b8', mt: 0.5, lineHeight: 1.4 }}>
+                              No video — rate questions + upload transcript
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </>
+                    )}
+
+                    {/* Rejoin / Candidate view */}
+                    {(isUserCandidate || hasExited) && (
+                      <>
+                        <Box sx={{
+                          width: 100, height: 100, borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          mb: 3, boxShadow: '0 12px 32px rgba(139, 92, 246, 0.4)'
+                        }}>
+                          <Videocam sx={{ color: 'white', fontSize: 50 }} />
+                        </Box>
+                        <Typography sx={{ color: '#1e293b', fontSize: '24px', fontWeight: 700, mb: 1 }}>
+                          {hasExited ? 'Rejoin Interview' : 'Interview Ready'}
+                        </Typography>
+                        <Typography sx={{ color: '#64748b', fontSize: '14px', mb: 4, maxWidth: 400 }}>
+                          {hasExited ? 'You left the call. Click below to rejoin.' : 'Your interview is ready. Click below to begin.'}
+                        </Typography>
+                      </>
+                    )}
+
                     <Button
                       variant="contained"
                       size="large"
-                      startIcon={<Videocam />}
-                      onClick={handleStart}
+                      startIcon={interviewMode === 'classic' && !isUserCandidate && !hasExited ? <Description /> : <Videocam />}
+                      onClick={interviewMode === 'classic' && !isUserCandidate && !hasExited ? () => { /* Classic mode: no video join needed, just scroll to questions */ toast.success('Classic mode — Rate questions on the left panel and submit when done.', { duration: 4000 }); } : handleStart}
                       sx={{
-                        background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                        padding: '16px 40px',
+                        background: interviewMode === 'classic' && !isUserCandidate && !hasExited
+                          ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
+                          : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                        padding: '14px 36px',
                         borderRadius: '12px',
                         fontWeight: 700,
                         fontSize: '16px',
@@ -1448,7 +1654,7 @@ const VideoInterviewRoom: React.FC = () => {
                         }
                       }}
                     >
-                      {isUserCandidate ? 'Start Interview' : 'Join Interview'}
+                      {hasExited ? 'Rejoin Interview' : isUserCandidate ? 'Start Interview' : interviewMode === 'classic' ? 'Start Classic Interview' : 'Join Video Interview'}
                     </Button>
                   </Box>
                 )}
@@ -1456,7 +1662,7 @@ const VideoInterviewRoom: React.FC = () => {
             </Box>
 
             {/* End Meeting button removed — already inside VideoTilesGrid control bar */}
-          </Box>
+          </Box>}
         </Box>
 
         {/* Recording upload happens in background — no blocking overlay */}

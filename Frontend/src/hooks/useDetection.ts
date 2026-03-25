@@ -59,6 +59,8 @@ export interface UnifiedDetectionPayload {
   pitch_shift_count: number;
   max_pitch_deviation: number;
   inconsistent_seconds: number;
+  looking_away_count: number;
+  looking_away_seconds: number;
   movement_score: 'CALM' | 'MODERATE' | 'HIGH';
   movement_intensity: number;
   flags: MovementFlags;
@@ -158,6 +160,8 @@ export function useDetection({
     pitch_shift_count: 0,
     max_pitch_deviation: 0,
     inconsistent_seconds: 0,
+    looking_away_count: 0,
+    looking_away_seconds: 0,
     movement_score: 'CALM',
     movement_intensity: 0,
   });
@@ -383,6 +387,19 @@ export function useDetection({
         // 2+ faces detected
         w.multiple_face_count += 1;
         w.multiple_face_seconds += intervalSeconds;
+      }
+
+      // --- GAZE / LOOKING AWAY DETECTION ---
+      // Use nose tip landmark (index 1) to detect if person is looking away from screen
+      // Nose centered (0.3-0.7 in x, 0.2-0.7 in y) = looking at screen
+      // Outside this range = looking away (at phone, second monitor, etc.)
+      if (hasFace && results.faceLandmarks && results.faceLandmarks.length > 1) {
+        const nose = results.faceLandmarks[1]; // nose tip
+        const isLookingAway = nose.x < 0.25 || nose.x > 0.75 || nose.y < 0.15 || nose.y > 0.75;
+        if (isLookingAway) {
+          w.looking_away_count += 1;
+          w.looking_away_seconds += intervalSeconds;
+        }
       }
       if (faceCountCurrent > w.max_faces_detected) w.max_faces_detected = faceCountCurrent;
 

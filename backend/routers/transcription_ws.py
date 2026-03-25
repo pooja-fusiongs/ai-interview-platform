@@ -1,6 +1,8 @@
 """
 Real-time transcription WebSocket endpoint.
-Frontend streams audio via WebSocket -> backend routes to Deepgram -> returns transcript.
+Each participant (recruiter + candidate) connects separately and sends their own
+local mic audio. This ensures high-quality audio without WebRTC degradation.
+Backend creates one Deepgram streamer per connection and labels chunks by role.
 """
 
 import asyncio
@@ -23,24 +25,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Real-Time Transcription"])
 
+# Room-based connections: broadcast transcripts to all participants in the same interview
+_interview_connections: dict[int, list[WebSocket]] = {}
+
 
 @router.websocket("/ws/transcription/{interview_id}")
 async def transcription_websocket(websocket: WebSocket, interview_id: int):
     """
     WebSocket endpoint for real-time transcription.
+    Both recruiter and candidate connect separately, each sending their own mic.
 
     Protocol:
     1. Client connects
     2. Client sends JSON config: {"type": "config", "role": "recruiter"|"candidate"}
     3. Server sends: {"type": "ready"} when Deepgram is connected
-    4. Client sends binary audio: [0x01=local | 0x02=remote][audio_bytes]
+    4. Client sends binary audio (raw WebM/Opus chunks — no prefix byte needed)
     5. Server sends JSON: {"type": "transcript", "speaker": "...", "text": "...", "is_final": bool}
     6. Client sends JSON: {"type": "stop"} to end, or simply disconnects
     """
     await websocket.accept()
+    print(f"[transcription_ws] WebSocket accepted for interview {interview_id}")
 
     deepgram_key = os.getenv("DEEPGRAM_API_KEY", "")
     if not deepgram_key:
+        print(f"[transcription_ws] ERROR: DEEPGRAM_API_KEY not found in env!")
         await websocket.send_json({
             "type": "error",
             "message": "Deepgram API key not configured. Set DEEPGRAM_API_KEY in backend/.env"
@@ -52,16 +60,18 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
     try:
         config_msg = await asyncio.wait_for(websocket.receive_json(), timeout=10)
     except asyncio.TimeoutError:
+        print(f"[transcription_ws] Config message timeout for interview {interview_id}")
         await websocket.send_json({"type": "error", "message": "Config message timeout"})
         await websocket.close(code=4001)
         return
-    except Exception:
+    except Exception as e:
+        print(f"[transcription_ws] Config receive error: {type(e).__name__}: {e}")
         await websocket.close(code=4001)
         return
 
     role = config_msg.get("role", "recruiter")
-    local_speaker = role
-    remote_speaker = "candidate" if role == "recruiter" else "recruiter"
+    speaker_label = role  # "recruiter" or "candidate"
+    print(f"[transcription_ws] Config received: role={role}, interview={interview_id}")
 
     db = get_safe_db()
     chunk_counter = [0]
@@ -73,6 +83,23 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
         await websocket.close(code=4004)
         db.close()
         return
+
+    # Get current max sequence number to avoid conflicts with other connections
+    try:
+        max_seq = (
+            db.query(TranscriptChunk.sequence_number)
+            .filter(TranscriptChunk.video_interview_id == interview_id)
+            .order_by(TranscriptChunk.sequence_number.desc())
+            .first()
+        )
+        chunk_counter[0] = (max_seq[0] + 1) if max_seq else 0
+    except Exception:
+        chunk_counter[0] = 0
+
+    # Register this connection in the room
+    if interview_id not in _interview_connections:
+        _interview_connections[interview_id] = []
+    _interview_connections[interview_id].append(websocket)
 
     # Callback: when Deepgram returns a transcript result
     async def on_transcript(speaker: str, text: str, is_final: bool,
@@ -96,30 +123,33 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
                 logger.error(f"DB save error: {e}")
                 db.rollback()
 
-        # Send to frontend
-        try:
-            await websocket.send_json({
-                "type": "transcript",
-                "speaker": speaker,
-                "text": text,
-                "is_final": is_final,
-                "timestamp_start": timestamp_start,
-                "timestamp_end": timestamp_end,
-                "sequence": chunk_counter[0],
-            })
-        except Exception:
-            pass  # Client may have disconnected
+        # Broadcast to ALL participants in this interview room
+        msg = {
+            "type": "transcript",
+            "speaker": speaker,
+            "text": text,
+            "is_final": is_final,
+            "timestamp_start": timestamp_start,
+            "timestamp_end": timestamp_end,
+            "sequence": chunk_counter[0],
+        }
+        for ws in _interview_connections.get(interview_id, []):
+            try:
+                await ws.send_json(msg)
+            except Exception:
+                pass  # Client may have disconnected
 
-    local_streamer = DeepgramStreamer(deepgram_key, local_speaker, on_transcript)
-    remote_streamer = DeepgramStreamer(deepgram_key, remote_speaker, on_transcript)
+    # Single Deepgram streamer for this participant's local mic
+    streamer = DeepgramStreamer(deepgram_key, speaker_label, on_transcript)
+    audio_bytes_received = [0]
+    audio_chunks_received = [0]
 
     try:
-        # Connect to Deepgram
-        await local_streamer.connect()
-        await remote_streamer.connect()
-
+        print(f"[transcription_ws] Connecting to Deepgram for {role}...")
+        await streamer.connect()
+        print(f"[transcription_ws] ✅ Deepgram connected for {role}!")
         await websocket.send_json({"type": "ready"})
-        logger.info(f"Real-time transcription started for interview {interview_id}")
+        print(f"[transcription_ws] ✅ Real-time transcription started for interview {interview_id}, role={role}")
 
         # Main loop: receive audio from frontend
         while True:
@@ -131,14 +161,21 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
 
                 if "bytes" in msg:
                     raw = msg["bytes"]
-                    if len(raw) < 2:
+                    if len(raw) < 1:
                         continue
-                    speaker_id = raw[0]
-                    audio = raw[1:]
-                    if speaker_id == 1:
-                        await local_streamer.send_audio(audio)
-                    elif speaker_id == 2:
-                        await remote_streamer.send_audio(audio)
+                    # Accept raw audio bytes (no speaker prefix needed anymore)
+                    # For backward compat: if first byte is 0x01 or 0x02 and
+                    # rest looks like audio, strip prefix; otherwise send as-is
+                    if len(raw) > 2 and raw[0] in (1, 2):
+                        # Legacy prefix format — strip the prefix byte
+                        audio = raw[1:]
+                    else:
+                        audio = raw
+                    audio_bytes_received[0] += len(audio)
+                    audio_chunks_received[0] += 1
+                    if audio_chunks_received[0] % 20 == 0:
+                        print(f"[transcription_ws] 📊 {role}: {audio_chunks_received[0]} chunks, {audio_bytes_received[0] / 1024:.1f} KB total")
+                    await streamer.send_audio(audio)
 
                 elif "text" in msg:
                     try:
@@ -155,6 +192,7 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
                 break
 
     except Exception as e:
+        print(f"[transcription_ws] ❌ Error for {role}: {type(e).__name__}: {e}")
         logger.error(f"Transcription WebSocket error: {e}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
@@ -162,11 +200,19 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
             pass
 
     finally:
-        # Close Deepgram connections
-        await local_streamer.close()
-        await remote_streamer.close()
+        # Remove from room connections
+        if interview_id in _interview_connections:
+            _interview_connections[interview_id] = [ws for ws in _interview_connections[interview_id] if ws != websocket]
+            if not _interview_connections[interview_id]:
+                del _interview_connections[interview_id]
+
+        # Close Deepgram connection
+        print(f"[transcription_ws] 🔚 {role} closing: {audio_chunks_received[0]} chunks, {audio_bytes_received[0] / 1024:.1f} KB received")
+        await streamer.close()
 
         # Compile all final chunks into VideoInterview.transcript
+        # Use timestamp_start ordering for natural chronological order
+        # (handles chunks from both recruiter and candidate connections)
         try:
             chunks = (
                 db.query(TranscriptChunk)
@@ -174,14 +220,34 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
                     TranscriptChunk.video_interview_id == interview_id,
                     TranscriptChunk.is_final == True,
                 )
-                .order_by(TranscriptChunk.sequence_number)
+                .order_by(TranscriptChunk.timestamp_start, TranscriptChunk.sequence_number)
                 .all()
             )
 
             if chunks:
-                full_transcript = "\n".join(
-                    f"{c.speaker.capitalize()}: {c.text}" for c in chunks
-                )
+                # Merge consecutive same-speaker chunks for cleaner transcript
+                merged_lines = []
+                prev_speaker = None
+                current_text = []
+
+                for c in chunks:
+                    if c.speaker == prev_speaker:
+                        current_text.append(c.text)
+                    else:
+                        if prev_speaker and current_text:
+                            merged_lines.append(
+                                f"{prev_speaker.capitalize()}: {' '.join(current_text)}"
+                            )
+                        prev_speaker = c.speaker
+                        current_text = [c.text]
+
+                if prev_speaker and current_text:
+                    merged_lines.append(
+                        f"{prev_speaker.capitalize()}: {' '.join(current_text)}"
+                    )
+
+                full_transcript = "\n".join(merged_lines)
+
                 interview_obj = db.query(VideoInterview).filter(
                     VideoInterview.id == interview_id
                 ).first()
@@ -192,7 +258,7 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
                     db.commit()
                     logger.info(
                         f"Compiled real-time transcript for interview {interview_id} "
-                        f"({len(chunks)} chunks)"
+                        f"({len(chunks)} chunks, {len(merged_lines)} speaker turns)"
                     )
         except Exception as e:
             logger.error(f"Error compiling transcript: {e}")
@@ -200,7 +266,7 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
         finally:
             db.close()
 
-        logger.info(f"Real-time transcription ended for interview {interview_id}")
+        logger.info(f"Real-time transcription ended for interview {interview_id}, role={role}")
 
 
 @router.get("/api/video/interviews/{interview_id}/transcript-chunks")
@@ -214,7 +280,7 @@ async def get_transcript_chunks(interview_id: int):
                 TranscriptChunk.video_interview_id == interview_id,
                 TranscriptChunk.is_final == True,
             )
-            .order_by(TranscriptChunk.sequence_number)
+            .order_by(TranscriptChunk.timestamp_start, TranscriptChunk.sequence_number)
             .all()
         )
         return [

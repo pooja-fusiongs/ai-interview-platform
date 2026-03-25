@@ -32,8 +32,15 @@ from schemas import (
     VideoInterviewListResponse,
 )
 from api.auth.jwt_handler import get_current_active_user, require_any_role
-from services.biometric_analyzer import run_real_analysis
-from services.fraud_simulator import run_full_simulated_analysis
+# Lazy imports — these load heavy ML packages (opencv, mediapipe, transformers)
+# Importing at module level causes 60+ second cold start on Cloud Run
+def _get_run_real_analysis():
+    from services.biometric_analyzer import run_real_analysis
+    return run_real_analysis
+
+def _get_run_simulated_analysis():
+    from services.fraud_simulator import run_full_simulated_analysis
+    return run_full_simulated_analysis
 
 router = APIRouter(tags=["Fraud Detection"])
 
@@ -524,7 +531,7 @@ def trigger_fraud_analysis(
         base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
         recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
         recording_path = os.path.normpath(recording_path)
-    results = run_real_analysis(video_interview_id, recording_path)
+    results = _get_run_real_analysis()(video_interview_id, recording_path)
 
     # Upsert: check for existing record
     existing = (
@@ -688,7 +695,7 @@ def fraud_dashboard(
             base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
             recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
             recording_path = os.path.normpath(recording_path)
-            results = run_real_analysis(vi.id, recording_path)
+            results = _get_run_real_analysis()(vi.id, recording_path)
             fraud = FraudAnalysis(
                 video_interview_id=vi.id,
                 voice_consistency_score=results["voice_consistency_score"],
@@ -716,7 +723,7 @@ def fraud_dashboard(
             base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
             recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
             recording_path = os.path.normpath(recording_path)
-            results = run_real_analysis(vi.id, recording_path)
+            results = _get_run_real_analysis()(vi.id, recording_path)
             fa.voice_consistency_score = results["voice_consistency_score"]
             fa.voice_consistency_details = results["voice_consistency_details"]
             fa.lip_sync_score = results["lip_sync_score"]
@@ -803,7 +810,7 @@ def list_flagged_interviews(
     flagged = (
         db.query(FraudAnalysis)
         .filter(FraudAnalysis.flag_count > 0)
-        .order_by(FraudAnalysis.overall_trust_score.asc())
+        .order_by(FraudAnalysis.analyzed_at.desc().nullslast())
         .all()
     )
 

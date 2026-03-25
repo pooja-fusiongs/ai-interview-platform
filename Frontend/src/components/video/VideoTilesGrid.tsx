@@ -13,6 +13,7 @@ import {
   Mic,
   MicOff,
   CallEnd,
+  ExitToApp,
   Person,
   ScreenShare,
   StopScreenShare,
@@ -59,7 +60,17 @@ const getAvatarColor = (name: string): string => {
 /**
  * Google Meet-style AI Interview UI
  */
-export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall }) => {
+interface CaptionEntry {
+  speaker: string;
+  text: string;
+  is_final?: boolean;
+}
+
+export const VideoTilesGrid: React.FC<{
+  onEndCall?: () => void;
+  onExitCall?: () => void;
+  captionEntries?: CaptionEntry[];
+}> = ({ onEndCall, onExitCall, captionEntries = [] }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   const tracks = useTracks(
@@ -613,6 +624,52 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
         </Box>
       )}
 
+      {/* ===== LIVE CAPTIONS OVERLAY ===== */}
+      {captionEntries.length > 0 && (
+        <Box sx={{
+          position: 'absolute',
+          bottom: { xs: '68px', md: '80px' },
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          pointerEvents: 'none',
+          px: 2,
+        }}>
+          {captionEntries.slice(-3).map((entry, i) => (
+            <Box key={`${entry.speaker}-${i}`} sx={{
+              background: 'rgba(0,0,0,0.8)',
+              borderRadius: '6px',
+              px: 1.5, py: 0.6,
+              mb: 0.4,
+              maxWidth: '85%',
+              textAlign: 'center',
+            }}>
+              <Typography component="span" sx={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: entry.speaker === 'recruiter' ? '#60a5fa' : '#c084fc',
+                textTransform: 'capitalize',
+                mr: 0.8,
+              }}>
+                {entry.speaker}:
+              </Typography>
+              <Typography component="span" sx={{
+                fontSize: '13px',
+                color: '#fff',
+                fontWeight: (entry as any).isFinal !== false ? 400 : 300,
+                opacity: (entry as any).isFinal !== false ? 1 : 0.7,
+                fontStyle: (entry as any).isFinal !== false ? 'normal' : 'italic',
+              }}>
+                {entry.text}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+
       {/* ===== BOTTOM CONTROL BAR ===== */}
       <Box sx={{
         height: { xs: '60px', md: '72px' }, background: '#202124',
@@ -660,7 +717,17 @@ export const VideoTilesGrid: React.FC<{ onEndCall?: () => void }> = ({ onEndCall
           {/* Separator */}
           <Box sx={{ width: 1, height: 28, bgcolor: '#5f6368', mx: { xs: 0, md: 0.5 } }} />
 
-          <Tooltip title="Leave call" arrow>
+          <Tooltip title="Exit — Leave call temporarily (can rejoin)" arrow>
+            <IconButton onClick={onExitCall} sx={{
+              ...ctrlBtn(false, false),
+              borderRadius: '24px', width: { xs: 48, md: 56 }, height: { xs: 40, md: 48 }, px: { xs: 1.5, md: 2 },
+              bgcolor: '#f59e0b', '&:hover': { bgcolor: '#d97706', transform: 'scale(1.05)' },
+            }}>
+              <ExitToApp sx={{ fontSize: { xs: 20, md: 24 } }} />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="End Interview — Permanently end and generate report" arrow>
             <IconButton onClick={onEndCall} sx={{
               ...ctrlBtn(false, true),
               borderRadius: '24px', width: { xs: 48, md: 56 }, height: { xs: 40, md: 48 }, px: { xs: 1.5, md: 2 },

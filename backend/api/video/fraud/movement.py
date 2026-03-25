@@ -66,27 +66,43 @@ def submit_movement_detection(
         db.flush()
         
     # 3) Update overarching FraudAnalysis using the unified payload
-    # Calculate face score — single_face_ratio IS the score (no face = 0, all face = 1)
+    # Face detection score: measures how well the candidate stays on screen
+    # - Single face = good (1.0)
+    # - No face = bad (person left)
+    # - Multiple faces = fraud (someone helping)
+    # - Looking away = suspicious (reading from another screen)
     total_face = payload.single_face_count + payload.no_face_count + payload.multiple_face_count
+    looking_away_count = getattr(payload, 'looking_away_count', 0)
+    looking_away_seconds = getattr(payload, 'looking_away_seconds', 0)
+
     if total_face > 0:
         sr = payload.single_face_count / total_face      # valid frames ratio
         nr = payload.no_face_count / total_face           # no face ratio
         mr = payload.multiple_face_count / total_face     # multiple faces ratio
 
-        # Face score = single face ratio, penalized heavily for no-face and multi-face
-        face_score = max(0.0, sr)
-        # Heavy penalty: multiple faces is worse than no face
+        # Start from 1.0 (perfect), subtract penalties for violations
+        face_score = 1.0
+
+        # Penalty: no face detected (person left the frame)
+        if nr > 0:
+            face_score -= nr * 0.5  # proportional penalty
+
+        # Penalty: multiple faces (fraud - someone else in frame)
         if mr > 0:
-            face_score = max(0.0, face_score - (mr * 0.8))
-        # Extra penalty for sustained no-face (>2 seconds in this 5-sec window)
+            face_score -= mr * 0.7  # heavy penalty for cheating
+
+        # Penalty: sustained no-face (>2 seconds in 5-sec window = mostly gone)
         if payload.no_face_seconds > 2:
-            face_score = max(0.0, face_score - 0.3)
-        # Extra penalty for any multiple faces
-        if payload.multiple_face_count > 0:
-            face_score = max(0.0, face_score - 0.2)
+            face_score -= 0.15
+
+        # Penalty: looking away from screen (gaze detection)
+        if looking_away_count > 0 and total_face > 0:
+            looking_away_ratio = looking_away_count / total_face
+            face_score -= looking_away_ratio * 0.3  # moderate penalty
+
+        face_score = max(0.0, min(1.0, face_score))
 
         if existing.face_detection_score is not None:
-            # 0.5/0.5 smoothing — new data gets 50% weight (more responsive to face disappearing)
             existing.face_detection_score = round((existing.face_detection_score * 0.5) + (face_score * 0.5), 3)
         else:
             existing.face_detection_score = round(face_score, 3)

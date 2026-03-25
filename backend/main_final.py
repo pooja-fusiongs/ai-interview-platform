@@ -529,8 +529,8 @@ def read_jobs(
         if experience_level:
             query = query.filter(Job.experience_level == experience_level)
         
-        # Apply pagination
-        jobs = query.offset(skip).limit(limit).all()
+        # Sort newest first, then apply pagination
+        jobs = query.order_by(Job.created_at.desc()).offset(skip).limit(limit).all()
         
         print(f"📊 Found {len(jobs)} jobs in YOUR database")
         if len(jobs) == 0:
@@ -1232,10 +1232,10 @@ def get_candidate_interviews(
             JobApplication.applicant_email == candidate.email
         ).all()
         
-        # Sessions
+        # Sessions — newest first
         sessions = db.query(InterviewSession).filter(
             InterviewSession.candidate_id == candidate_id
-        ).all()
+        ).order_by(InterviewSession.created_at.desc()).all()
         
         result = []
         for app in applications:

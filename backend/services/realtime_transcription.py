@@ -31,16 +31,24 @@ class DeepgramStreamer:
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._keepalive_task: Optional[asyncio.Task] = None
+        self._reconnecting = False
+        self._reconnect_attempts = 0
 
     async def connect(self):
         """Open a WebSocket connection to Deepgram and start receiving."""
         params = "&".join([
             "model=nova-2",
+            "language=en",
             "smart_format=true",
+            "punctuate=true",
             "interim_results=true",
             "endpointing=300",
-            "utterance_end_ms=1000",
+            "utterance_end_ms=1500",
             "vad_events=true",
+            "filler_words=true",
+            "no_delay=true",
+            "multichannel=false",
+            "diarize=false",
         ])
         url = f"{DEEPGRAM_WS_URL}?{params}"
         headers = {"Authorization": f"Token {self.api_key}"}
@@ -52,15 +60,50 @@ class DeepgramStreamer:
         logger.info(f"Deepgram connected for speaker: {self.speaker}")
 
     async def send_audio(self, audio_data: bytes):
-        """Forward audio bytes to Deepgram."""
+        """Forward audio bytes to Deepgram. Auto-reconnects on connection drop."""
+        if not self._running and not self._reconnecting:
+            # Try to reconnect
+            await self._try_reconnect()
+
         if self.ws and self._running:
             try:
                 await self.ws.send(audio_data)
             except websockets.exceptions.ConnectionClosed:
-                logger.warning(f"Deepgram connection closed for {self.speaker}, cannot send")
+                logger.warning(f"Deepgram connection closed for {self.speaker}, will reconnect")
                 self._running = False
+                await self._try_reconnect()
             except Exception as e:
                 logger.error(f"Error sending audio to Deepgram ({self.speaker}): {e}")
+
+    async def _try_reconnect(self):
+        """Attempt to reconnect to Deepgram (max 3 attempts)."""
+        if self._reconnecting or self._reconnect_attempts >= 3:
+            return
+        self._reconnecting = True
+        self._reconnect_attempts += 1
+        try:
+            logger.info(f"Reconnecting to Deepgram for {self.speaker} (attempt {self._reconnect_attempts}/3)...")
+            # Close old connection
+            if self.ws:
+                try:
+                    await self.ws.close()
+                except Exception:
+                    pass
+            # Cancel old tasks
+            for task in [self._task, self._keepalive_task]:
+                if task and not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+            # Reconnect
+            await self.connect()
+            logger.info(f"Deepgram reconnected for {self.speaker}")
+        except Exception as e:
+            logger.error(f"Deepgram reconnect failed for {self.speaker}: {e}")
+        finally:
+            self._reconnecting = False
 
     async def _keepalive_loop(self):
         """Send KeepAlive messages to prevent Deepgram from closing idle connections."""

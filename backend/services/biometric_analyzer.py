@@ -466,6 +466,81 @@ def _generate_flags(voice_score: float, lip_score: float, body_score: float):
 
 
 # =====================================================================
+#  Candidate Audio Extraction (for voice-only scoring)
+# =====================================================================
+
+def _extract_candidate_audio(wav_path: str, full_audio) -> Optional[str]:
+    """
+    Extract only the candidate's audio segments using speaker diarization.
+    Returns path to candidate-only WAV file, or None if diarization unavailable.
+
+    Voice evaluation should only analyze the candidate's voice, not the recruiter's.
+    This prevents the recruiter's voice from affecting fraud detection scores
+    (e.g., two different voices would falsely trigger voice_inconsistency flags).
+    """
+    try:
+        from services.speaker_diarization import diarize_audio, assign_speaker_roles
+        import numpy as np
+        from pydub import AudioSegment
+
+        # Run diarization to identify speaker segments
+        segments = diarize_audio(wav_path)
+        if not segments:
+            return None
+
+        role_map = assign_speaker_roles(segments)
+
+        # Find candidate speaker ID
+        candidate_id = None
+        for spk_id, role in role_map.items():
+            if role == "Candidate":
+                candidate_id = spk_id
+                break
+
+        if not candidate_id:
+            print("[biometric] Could not identify candidate speaker, using full audio")
+            return None
+
+        # Extract candidate segments from full audio
+        candidate_segments = [s for s in segments if s["speaker"] == candidate_id]
+        if not candidate_segments:
+            return None
+
+        # Concatenate candidate audio segments
+        candidate_audio = AudioSegment.empty()
+        for seg in candidate_segments:
+            start_ms = int(seg["start"] * 1000)
+            end_ms = int(seg["end"] * 1000)
+            # Clamp to audio bounds
+            start_ms = max(0, start_ms)
+            end_ms = min(len(full_audio), end_ms)
+            if end_ms > start_ms:
+                candidate_audio += full_audio[start_ms:end_ms]
+
+        if len(candidate_audio) < 2000:  # Less than 2 seconds
+            print("[biometric] Candidate audio too short after extraction, using full audio")
+            return None
+
+        # Export to temp file
+        tmp = tempfile.NamedTemporaryFile(suffix="_candidate.wav", delete=False)
+        tmp.close()
+        candidate_audio.export(tmp.name, format="wav")
+
+        total_dur = len(full_audio) / 1000
+        cand_dur = len(candidate_audio) / 1000
+        print(f"[biometric] Extracted candidate audio: {cand_dur:.1f}s out of {total_dur:.1f}s total")
+
+        return tmp.name
+
+    except ImportError:
+        print("[biometric] Speaker diarization not available, using full audio for voice analysis")
+        return None
+    except Exception as e:
+        print(f"[biometric] Candidate audio extraction failed: {e}, using full audio")
+        return None
+
+
+# =====================================================================
 #  Main Entry Point
 # =====================================================================
 
@@ -501,11 +576,18 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
         audio = load_audio_from_file(recording_path)
         audio.export(tmp_audio.name, format="wav")
 
-        print(f"[biometric] Analyzing voice for interview {video_interview_id}...")
-        voice = analyze_voice(tmp_audio.name)
+        # Try to extract candidate-only audio using speaker diarization
+        # Voice evaluation should only score the candidate, not the recruiter
+        candidate_audio_path = _extract_candidate_audio(tmp_audio.name, audio)
+        voice_audio = candidate_audio_path if candidate_audio_path else tmp_audio.name
 
-        print(f"[biometric] Analyzing lip-sync for interview {video_interview_id}...")
-        lip = analyze_lip_sync(recording_path, tmp_audio.name)
+        print(f"[biometric] Analyzing voice for interview {video_interview_id} "
+              f"(candidate-only={candidate_audio_path is not None})...")
+        voice = analyze_voice(voice_audio)
+
+        print(f"[biometric] Analyzing lip-sync for interview {video_interview_id} "
+              f"(candidate-only={candidate_audio_path is not None})...")
+        lip = analyze_lip_sync(recording_path, voice_audio)
 
         print(f"[biometric] Analyzing body movement for interview {video_interview_id}...")
         body = analyze_body_movement(recording_path)
@@ -514,11 +596,16 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
         # Default to 0.5 (not 0.8) — don't inflate score when data is missing
         face_score = body["details"].get("eye_contact_pct", 0.5)
 
-        # Cleanup temp file
+        # Cleanup temp files
         try:
             os.unlink(tmp_audio.name)
         except OSError:
             pass
+        if candidate_audio_path:
+            try:
+                os.unlink(candidate_audio_path)
+            except OSError:
+                pass
 
         flags = _generate_flags(voice["score"], lip["score"], body["score"])
         overall_trust = round(
