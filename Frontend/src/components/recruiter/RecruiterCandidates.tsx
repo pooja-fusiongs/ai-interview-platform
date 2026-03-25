@@ -30,14 +30,17 @@ const RecruiterCandidates = () => {
   const [selectedCandidate, setSelectedCandidate] = useState<RecruiterCandidate | null>(null)
   const [transcriptText, setTranscriptText] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [generatingFor, setGeneratingFor] = useState<number | null>(null)
+  const [generatingFor, ] = useState<number | null>(null)
   const [scoringFor, setScoringFor] = useState<number | null>(null)
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  const [schedulingCandidate, setSchedulingCandidate] = useState<RecruiterCandidate | null>(null)
+  const [scheduleForm, setScheduleForm] = useState({ date: '', time: '', duration_minutes: '30' })
+  const [scheduling, setScheduling] = useState(false)
 
   // Add candidate form
   const [addForm, setAddForm] = useState({
     name: '', email: '', phone: '', location: '', linkedin: '',
     notice_period: '', current_ctc: '', expected_ctc: '',
-    interview_datetime: '', duration_minutes: '30',
     resume: null as File | null
   })
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({})
@@ -194,8 +197,6 @@ const RecruiterCandidates = () => {
       fd.append('notice_period', addForm.notice_period)
       fd.append('current_ctc', addForm.current_ctc)
       fd.append('expected_ctc', addForm.expected_ctc)
-      fd.append('interview_datetime', addForm.interview_datetime)
-      fd.append('duration_minutes', addForm.duration_minutes || '30')
       fd.append('experience_years', '0')
       fd.append('current_position', '')
       if (addForm.resume) fd.append('resume', addForm.resume)
@@ -206,7 +207,7 @@ const RecruiterCandidates = () => {
       setAddForm({
         name: '', email: '', phone: '', location: '', linkedin: '',
         notice_period: '', current_ctc: '', expected_ctc: '',
-        interview_datetime: '', duration_minutes: '30', resume: null
+        resume: null
       })
       setAddFormErrors({})
       setAddFormTouched({})
@@ -218,16 +219,27 @@ const RecruiterCandidates = () => {
     }
   }
 
-  const handleGenerateQuestions = async (candidate: RecruiterCandidate) => {
-    setGeneratingFor(candidate.id)
+
+
+  const handleScheduleInterview = async () => {
+    if (!schedulingCandidate) return
+    if (!scheduleForm.date || !scheduleForm.time) {
+      toast.error('Please select date and time')
+      return
+    }
+    setScheduling(true)
     try {
-      await recruiterService.generateQuestions(jobId, candidate.id)
-      toast.success(`Questions generated! Click "Review Questions" to approve.`, { duration: 4000 })
-      await fetchCandidates() // Refresh the list
+      const scheduledAt = `${scheduleForm.date}T${scheduleForm.time}:00`
+      await recruiterService.scheduleInterview(jobId, schedulingCandidate.id, scheduledAt, parseInt(scheduleForm.duration_minutes))
+      toast.success('Interview scheduled! Questions generated and email sent to candidate.', { duration: 4000 })
+      setScheduleDialogOpen(false)
+      setSchedulingCandidate(null)
+      setScheduleForm({ date: '', time: '', duration_minutes: '30' })
+      await fetchCandidates()
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to generate questions')
+      toast.error(err.response?.data?.detail || 'Failed to schedule interview')
     } finally {
-      setGeneratingFor(null)
+      setScheduling(false)
     }
   }
 
@@ -529,25 +541,20 @@ const RecruiterCandidates = () => {
 
               {/* Actions */}
               <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
-                {/* Generate Questions */}
+                {/* Schedule Interview */}
                 {candidate.has_resume && !candidate.has_questions && (
                   <Button
                     size="small"
-                    disabled={generatingFor === candidate.id}
-                    onClick={() => handleGenerateQuestions(candidate)}
+                    onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }}
                     sx={{
-                      minWidth: { xs: 'auto', sm: '140px' },
+                      minWidth: { xs: 'auto', sm: '160px' },
                       height: '36px',
-                      background: 'rgba(2, 2, 145, 0.1)', color: '#020291', border: '1px solid primary.light80',
+                      background: 'rgba(2, 2, 145, 0.1)', color: '#020291', border: '1px solid #02029140',
                       borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '12px',
                       '&:hover': { background: 'rgba(2, 2, 145, 0.2)' }
                     }}
                   >
-                    {generatingFor === candidate.id ? (
-                      <><CircularProgress size={14} sx={{ mr: 0.5, color: '#020291' }} /> Generating...</>
-                    ) : (
-                      <><i className="fas fa-robot" style={{ marginRight: 6 }} /> Generate Questions</>
-                    )}
+                    <i className="fas fa-calendar-plus" style={{ marginRight: 6 }} /> Schedule Interview
                   </Button>
                 )}
 
@@ -910,27 +917,7 @@ const RecruiterCandidates = () => {
                 </Box>
               </Box>
 
-              {/* Interview Date & Duration row */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                <Box>
-                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Interview Date & Time</Typography>
-                  <TextField fullWidth type="datetime-local" value={addForm.interview_datetime}
-                    onChange={e => handleAddFieldChange('interview_datetime', e.target.value)}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Duration</Typography>
-                  <TextField fullWidth select value={addForm.duration_minutes}
-                    onChange={e => handleAddFieldChange('duration_minutes', e.target.value)}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }}>
-                    <MenuItem value="15">15 minutes (5 questions)</MenuItem>
-                    <MenuItem value="30">30 minutes (10 questions)</MenuItem>
-                    <MenuItem value="45">45 minutes (15 questions)</MenuItem>
-                    <MenuItem value="60">60 minutes (20 questions)</MenuItem>
-                  </TextField>
-                </Box>
-              </Box>
+
 
             </Box>
           </DialogContent>
@@ -998,6 +985,75 @@ const RecruiterCandidates = () => {
                 <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Scoring with AI...</>
               ) : (
                 <><i className="fas fa-magic" style={{ marginRight: 8 }} /> Submit & Score</>
+              )}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* ─── Schedule Interview Dialog ─── */}
+        <Dialog open={scheduleDialogOpen} onClose={() => { setScheduleDialogOpen(false); setSchedulingCandidate(null); setScheduleForm({ date: '', time: '', duration_minutes: '30' }) }}
+          maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+          <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{
+                width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'linear-gradient(135deg, #020291, #020291)', color: 'white'
+              }}>
+                <i className="fas fa-calendar-plus" />
+              </Box>
+              Schedule Interview
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ pt: 3 }}>
+            {schedulingCandidate && (
+              <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 2.5 }}>
+                Scheduling interview for <strong>{schedulingCandidate.applicant_name}</strong>. Questions will be auto-generated and an email will be sent to the candidate.
+              </Typography>
+            )}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Date *</Typography>
+                <TextField fullWidth type="date" value={scheduleForm.date}
+                  onChange={e => setScheduleForm(prev => ({ ...prev, date: e.target.value }))}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Time *</Typography>
+                <TextField fullWidth type="time" value={scheduleForm.time}
+                  onChange={e => setScheduleForm(prev => ({ ...prev, time: e.target.value }))}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Duration</Typography>
+                <TextField fullWidth select value={scheduleForm.duration_minutes}
+                  onChange={e => setScheduleForm(prev => ({ ...prev, duration_minutes: e.target.value }))}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }}>
+                  <MenuItem value="15">15 minutes</MenuItem>
+                  <MenuItem value="30">30 minutes</MenuItem>
+                  <MenuItem value="45">45 minutes</MenuItem>
+                  <MenuItem value="60">60 minutes</MenuItem>
+                </TextField>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+            <Button onClick={() => { setScheduleDialogOpen(false); setSchedulingCandidate(null); setScheduleForm({ date: '', time: '', duration_minutes: '30' }) }}
+              sx={{ color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px' }}>Cancel</Button>
+            <Button
+              onClick={handleScheduleInterview}
+              disabled={scheduling || !scheduleForm.date || !scheduleForm.time}
+              sx={{
+                background: 'linear-gradient(135deg, #020291, #020291)', color: 'white',
+                borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px',
+                '&:hover': { background: 'linear-gradient(135deg, #010178, #010178)' },
+                '&:disabled': { opacity: 0.6, color: 'white' }
+              }}>
+              {scheduling ? (
+                <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Scheduling...</>
+              ) : (
+                <><i className="fas fa-calendar-check" style={{ marginRight: 8 }} /> Schedule Interview</>
               )}
             </Button>
           </DialogActions>

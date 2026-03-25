@@ -260,7 +260,29 @@ def score_transcript_with_groq(
     print(f"[AI] [score_transcript_groq] Starting transcript scoring...")
     print(f"   - Questions to score: {len(questions_with_answers)}")
     print(f"   - Transcript length: {len(transcript_text)} chars")
-    
+
+    # Early detection of gibberish/nonsense transcripts
+    text_clean = transcript_text.strip().lower()
+    words = text_clean.split()
+    if len(words) < 5:
+        print(f"[WARN] [score_transcript_groq] Transcript too short ({len(words)} words), scoring as nonsense")
+        zero_questions = []
+        for qa in questions_with_answers:
+            zero_questions.append({
+                "question_id": qa["question_id"],
+                "extracted_answer": "No meaningful answer provided",
+                "score": 0, "relevance_score": 0, "completeness_score": 0,
+                "accuracy_score": 0, "clarity_score": 0,
+                "feedback": "Transcript contains no meaningful content."
+            })
+        return {
+            "per_question": zero_questions,
+            "overall_score": 0,
+            "recommendation": "reject",
+            "strengths": "None identified.",
+            "weaknesses": "Transcript contains no meaningful answers."
+        }
+
     try:
         from groq import Groq
         if not config.GROQ_API_KEY:
@@ -300,11 +322,18 @@ SCORING (0-100 scale):
 - feedback: Brief specific feedback for this answer
 
 SCORING GUIDELINES:
-- 80-100: Excellent, comprehensive answer
-- 60-80: Good answer with minor gaps
-- 40-60: Adequate but missing key points
-- 20-40: Poor answer with significant gaps
-- 0: Question was NOT asked in the interview or candidate did NOT answer at all. Use exactly 0 for ALL scores if the question was not asked.
+- 80-100: Excellent, comprehensive answer that closely matches expected answer
+- 60-80: Good answer with minor gaps but demonstrates real knowledge
+- 40-60: Adequate but missing key points from expected answer
+- 20-40: Poor answer with significant gaps or only surface-level knowledge
+- 1-20: Very poor — answer is vague, off-topic, or barely related to the question
+- 0: Question was NOT asked, candidate did NOT answer, or answer is nonsense/gibberish
+
+STRICT RULES:
+- If the transcript contains gibberish, random text, or fake answers (e.g. "xyz", "asdf", "test test"), give 0 for ALL scores.
+- If the candidate's answer does not demonstrate actual knowledge of the topic, score below 30.
+- Do NOT give high scores just because words exist — compare against the EXPECTED answer.
+- Most average candidates should score 30-60, not 60-80. Only genuinely strong answers deserve 60+.
 
 Respond ONLY with valid JSON:
 {{

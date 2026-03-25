@@ -14,6 +14,53 @@ import config
 from services.llm_utils import extract_json as _extract_json
 
 
+# ─── Nonsense / Gibberish Detection ─────────────────────────────────────────
+
+def _is_nonsense_answer(answer_text: str, sample_answer: str = "") -> bool:
+    """Detect gibberish, random characters, or clearly fake answers."""
+    text = answer_text.strip().lower()
+    words = text.split()
+
+    # Too short to be a real answer (less than 3 words)
+    if len(words) < 3:
+        return True
+
+    # Check if mostly non-alphabetic or random characters
+    alpha_chars = sum(1 for c in text if c.isalpha())
+    if len(text) > 0 and alpha_chars / len(text) < 0.5:
+        return True
+
+    # Check for repeated single words/characters (e.g., "xyz xyz xyz", "test test test")
+    unique_words = set(words)
+    if len(words) >= 3 and len(unique_words) <= 2:
+        return True
+
+    # Check if answer has no real English words (at least some common words)
+    common_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+                    'should', 'may', 'might', 'can', 'shall', 'to', 'of', 'in', 'for',
+                    'on', 'with', 'at', 'by', 'from', 'it', 'this', 'that', 'and', 'or',
+                    'but', 'not', 'so', 'if', 'as', 'i', 'we', 'they', 'you', 'my', 'your',
+                    'use', 'used', 'using', 'work', 'like', 'also', 'which', 'when', 'how',
+                    'what', 'where', 'why', 'about', 'than', 'then', 'very', 'just', 'more'}
+    word_set = set(words)
+    real_words = word_set & common_words
+    # If answer is short and has no common English words, likely gibberish
+    if len(words) <= 10 and len(real_words) == 0:
+        return True
+
+    # Check for keyword overlap with expected answer — if zero overlap on a long enough answer
+    if sample_answer and len(words) >= 3:
+        sample_tokens = set(_tokenize(sample_answer.lower()))
+        answer_tokens = set(_tokenize(text))
+        overlap = len(sample_tokens & answer_tokens)
+        # If absolutely zero overlap with expected answer and answer is short, suspicious
+        if overlap == 0 and len(words) < 15:
+            return True
+
+    return False
+
+
 # ─── Groq AI Scoring ─────────────────────────────────────────────────────────
 
 def score_answer_with_ai(
@@ -33,6 +80,17 @@ def score_answer_with_ai(
             "accuracy_score": 0.0,
             "clarity_score": 0.0,
             "feedback": "No answer provided.",
+        }
+
+    # Detect gibberish/nonsense answers early
+    if _is_nonsense_answer(answer_text, sample_answer):
+        return {
+            "score": 0.0,
+            "relevance_score": 0.0,
+            "completeness_score": 0.0,
+            "accuracy_score": 0.0,
+            "clarity_score": 0.0,
+            "feedback": "The answer appears to be nonsense, gibberish, or completely unrelated to the question. No meaningful content was provided.",
         }
 
     try:
@@ -65,10 +123,13 @@ SCORING INSTRUCTIONS:
 - feedback: Write 2-3 sentences of specific, actionable feedback. Mention what the candidate did well and what they missed. Be constructive, not generic.
 
 IMPORTANT RULES:
-- Be fair but critical. A vague or off-topic answer should score low.
-- If the answer is completely unrelated to the question, relevance should be below 30.
+- Be fair but STRICT. A vague or off-topic answer should score low.
+- If the answer is completely unrelated to the question, ALL scores should be below 10.
+- If the answer is nonsense, gibberish, random characters, or clearly fake (e.g. "xyz", "asdf", "test test"), give 0 for ALL scores.
 - If the answer is brief but correct, give decent accuracy but lower completeness.
-- Do NOT give high scores just because the answer exists - evaluate the actual content.
+- Do NOT give high scores just because the answer exists - evaluate the actual CONTENT against the expected answer.
+- If the answer does not demonstrate knowledge of the topic in the question, score below 20.
+- Most mediocre answers should score 30-50, not 60-80. Only genuinely good answers deserve 60+.
 
 Respond ONLY with valid JSON:
 {{
@@ -399,6 +460,17 @@ def score_answer(
             "accuracy_score": 0.0,
             "clarity_score": 0.0,
             "feedback": "No answer provided.",
+        }
+
+    # Detect nonsense/gibberish answers
+    if _is_nonsense_answer(answer_text, sample_answer):
+        return {
+            "score": 0.0,
+            "relevance_score": 0.0,
+            "completeness_score": 0.0,
+            "accuracy_score": 0.0,
+            "clarity_score": 0.0,
+            "feedback": "The answer appears to be nonsense, gibberish, or completely unrelated to the question. No meaningful content was provided.",
         }
 
     if question_tokens:

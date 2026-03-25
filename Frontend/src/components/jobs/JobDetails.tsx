@@ -113,12 +113,15 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   const itemsPerPage = 5
 
   // Question generation & transcript state per candidate
-  const [generatingQuestions, setGeneratingQuestions] = useState<Record<number, boolean>>({})
   const [candidateQuestionSets, setCandidateQuestionSets] = useState<Record<number, string>>({})
   const [candidateVideoIds, setCandidateVideoIds] = useState<Record<number, number>>({})
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false)
   const [transcriptCandidate, setTranscriptCandidate] = useState<any>(null)
   const [transcriptText, setTranscriptText] = useState('')
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  const [schedulingCandidate, setSchedulingCandidate] = useState<any>(null)
+  const [scheduleForm, setScheduleForm] = useState({ date: '', time: '', duration_minutes: '30' })
+  const [scheduling, setScheduling] = useState(false)
   const [uploadingTranscript, setUploadingTranscript] = useState(false)
 
   // Add candidate dialog
@@ -132,7 +135,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
     name: '', email: '', phone: '', location: '', linkedin: '',
     notice_period: '', current_ctc: '', expected_ctc: '',
     experience_years: '',
-    interview_datetime: '', duration_minutes: '30',
     resume: null as File | null
   })
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({})
@@ -197,12 +199,23 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   }, [selectedJob?.id, candidates.length])
 
   // Generate questions for a candidate
-  const handleGenerateQuestions = async (candidateId: number) => {
-    setGeneratingQuestions(prev => ({ ...prev, [candidateId]: true }))
+
+
+  const handleScheduleInterview = async () => {
+    if (!schedulingCandidate || !selectedJob) return
+    if (!scheduleForm.date || !scheduleForm.time) {
+      hotToast.error('Please select date and time')
+      return
+    }
+    setScheduling(true)
     try {
-      hotToast('Generating questions... This may take a minute', { icon: '⏳', duration: 5000 })
-      const genResult = await recruiterService.generateQuestions(selectedJob.id, candidateId)
-      hotToast.success('Questions generated & interview scheduled!')
+      const scheduledAt = `${scheduleForm.date}T${scheduleForm.time}:00`
+      const result = await recruiterService.scheduleInterview(selectedJob.id, schedulingCandidate.id, scheduledAt, parseInt(scheduleForm.duration_minutes))
+      hotToast.success('Interview scheduled! Questions generated and email sent to candidate.', { duration: 4000 })
+      setScheduleDialogOpen(false)
+      setSchedulingCandidate(null)
+      setScheduleForm({ date: '', time: '', duration_minutes: '30' })
+      // Refresh question sets and video IDs
       const response = await apiClient.get('/api/interview/question-sets')
       const sets = response.data || []
       const mapping: Record<number, string> = { ...candidateQuestionSets }
@@ -212,11 +225,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         }
       }
       setCandidateQuestionSets(mapping)
-      // Always refetch video interviews to get the latest mapping
       try {
         const viRes = await apiClient.get('/api/video/interviews')
         const interviews = viRes.data || []
-        // IMPORTANT: Merge with existing mapping — don't replace (prevents button disappearing)
         const vMapping: Record<number, number> = { ...candidateVideoIds }
         for (const vi of interviews) {
           if (vi.job_id === selectedJob.id) {
@@ -226,17 +237,14 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             if (matched) vMapping[matched.id] = vi.id
           }
         }
-        // Also use direct result if available (most reliable)
-        if (genResult.video_interview_id) {
-          vMapping[candidateId] = genResult.video_interview_id
-        }
+        if (result.id) vMapping[schedulingCandidate.id] = result.id
         setCandidateVideoIds(vMapping)
       } catch (e) { console.error('Failed to refetch video interviews:', e) }
-      setCandidates((prev: any[]) => prev.map(c => c.id === candidateId ? { ...c, status: 'Questions Generated' } : c))
+      setCandidates((prev: any[]) => prev.map(c => c.id === schedulingCandidate.id ? { ...c, status: 'Interview Scheduled' } : c))
     } catch (err: any) {
-      hotToast.error(err.response?.data?.detail || 'Failed to generate questions')
+      hotToast.error(err.response?.data?.detail || 'Failed to schedule interview')
     } finally {
-      setGeneratingQuestions(prev => ({ ...prev, [candidateId]: false }))
+      setScheduling(false)
     }
   }
 
@@ -420,8 +428,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       fd.append('notice_period', addForm.notice_period)
       fd.append('current_ctc', addForm.current_ctc)
       fd.append('expected_ctc', addForm.expected_ctc)
-      fd.append('interview_datetime', addForm.interview_datetime)
-      fd.append('duration_minutes', addForm.duration_minutes || '30')
       fd.append('experience_years', addForm.experience_years || '0')
       fd.append('current_position', '')
       if (addForm.resume) fd.append('resume', addForm.resume)
@@ -433,7 +439,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         name: '', email: '', phone: '', location: '', linkedin: '',
         notice_period: '', current_ctc: '', expected_ctc: '',
         experience_years: '',
-        interview_datetime: '', duration_minutes: '30', resume: null
+        resume: null
       })
       setAddFormErrors({})
       setAddFormTouched({})
@@ -905,7 +911,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                     {paginatedCandidates.map((candidate: any) => {
                       const hasQuestions = !!candidateQuestionSets[candidate.id]
                       const questionSetId = candidateQuestionSets[candidate.id]
-                      const isGenerating = generatingQuestions[candidate.id]
                       return (
                         <tr
                           key={candidate.id}
@@ -997,6 +1002,13 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 if (st === 'Interview Completed') {
                                   return (
                                     <>
+                                      <Button className="job-action-btn" onClick={() => {
+                                        const sessionId = candidateQuestionSets[candidate.id]
+                                        if (sessionId) navigate(`/results?session=${sessionId}`)
+                                        else hotToast.error('No results found for this candidate')
+                                      }} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                        <i className="fas fa-download" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Report</span>
+                                      </Button>
                                       <Button className="job-action-btn" onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                         <i className="fas fa-paper-plane" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Offer</span>
                                       </Button>
@@ -1025,16 +1037,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 return (
                                   <Button
                                     className="job-action-btn"
-                                    onClick={() => handleGenerateQuestions(candidate.id)}
-                                    disabled={isGenerating}
+                                    onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }}
                                     size="small" variant="outlined"
-                                    sx={{ ...btnSx('#020291', '#020291', '#020291'), '&:disabled': { opacity: 0.5 } }}
+                                    sx={btnSx('#020291', '#020291', '#020291')}
                                   >
-                                    {isGenerating ? (
-                                      <CircularProgress size={12} sx={{ color: '#020291' }} />
-                                    ) : (
-                                      <><i className="fas fa-magic" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Generate</span></>
-                                    )}
+                                    <i className="fas fa-calendar-plus" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Schedule</span>
                                   </Button>
                                 )
                               })()}
@@ -1053,7 +1060,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               {paginatedCandidates.map((candidate: any) => {
                 const hasQuestions = !!candidateQuestionSets[candidate.id]
                 const questionSetId = candidateQuestionSets[candidate.id]
-                const isGenerating = generatingQuestions[candidate.id]
                 const st = candidate.status || 'Applied'
                 const btnSx = (borderColor: string, color: string, hoverBg: string) => ({
                   textTransform: 'none' as const, fontSize: '11px', fontWeight: 600,
@@ -1132,6 +1138,13 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                         if (st === 'Interview Completed') {
                           return (
                             <>
+                              <Button onClick={() => {
+                                const sessionId = candidateQuestionSets[candidate.id]
+                                if (sessionId) navigate(`/results?session=${sessionId}`)
+                                else hotToast.error('No results found')
+                              }} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                <i className="fas fa-download" style={{ marginRight: 4, fontSize: 10 }}></i>Report
+                              </Button>
                               <Button onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                 <i className="fas fa-paper-plane" style={{ marginRight: 4, fontSize: 10 }}></i>Offer
                               </Button>
@@ -1157,16 +1170,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                         }
                         return (
                           <Button
-                            onClick={() => handleGenerateQuestions(candidate.id)}
-                            disabled={isGenerating}
+                            onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }}
                             size="small" variant="outlined"
-                            sx={{ ...btnSx('#020291', '#020291', '#020291'), '&:disabled': { opacity: 0.5 } }}
+                            sx={btnSx('#020291', '#020291', '#020291')}
                           >
-                            {isGenerating ? (
-                              <CircularProgress size={12} sx={{ color: '#020291' }} />
-                            ) : (
-                              <><i className="fas fa-magic" style={{ marginRight: 4, fontSize: 10 }}></i>Generate</>
-                            )}
+                            <i className="fas fa-calendar-plus" style={{ marginRight: 4, fontSize: 10 }}></i>Schedule
                           </Button>
                         )
                       })()}
@@ -1643,27 +1651,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               </Box>
             </Box>
 
-            {/* Interview Date & Duration */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <Box>
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Interview Date & Time</Typography>
-                <TextField fullWidth type="datetime-local" value={addForm.interview_datetime}
-                  onChange={e => handleAddFieldChange('interview_datetime', e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
-              </Box>
-              <Box>
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Duration</Typography>
-                <TextField fullWidth select value={addForm.duration_minutes}
-                  onChange={e => handleAddFieldChange('duration_minutes', e.target.value)}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }}>
-                  <MenuItem value="15">15 minutes (5 questions)</MenuItem>
-                  <MenuItem value="30">30 minutes (10 questions)</MenuItem>
-                  <MenuItem value="45">45 minutes (15 questions)</MenuItem>
-                  <MenuItem value="60">60 minutes (20 questions)</MenuItem>
-                </TextField>
-              </Box>
-            </Box>
+            
           </Box>
           )}
         </DialogContent>
@@ -1752,6 +1740,75 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Scoring...</>
             ) : (
               <><i className="fas fa-upload" style={{ marginRight: 8, fontSize: 12 }} /> Upload & Score</>
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ─── Schedule Interview Dialog ─── */}
+      <Dialog open={scheduleDialogOpen} onClose={() => { setScheduleDialogOpen(false); setSchedulingCandidate(null); setScheduleForm({ date: '', time: '', duration_minutes: '30' }) }}
+        maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{
+              width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'linear-gradient(135deg, #020291, #020291)', color: 'white'
+            }}>
+              <i className="fas fa-calendar-plus" />
+            </Box>
+            Schedule Interview
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          {schedulingCandidate && (
+            <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 2.5 }}>
+              Scheduling interview for <strong>{schedulingCandidate.applicant_name}</strong>. Questions will be auto-generated and an email will be sent to the candidate.
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box>
+              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Date *</Typography>
+              <TextField fullWidth type="date" value={scheduleForm.date}
+                onChange={e => setScheduleForm(prev => ({ ...prev, date: e.target.value }))}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Time *</Typography>
+              <TextField fullWidth type="time" value={scheduleForm.time}
+                onChange={e => setScheduleForm(prev => ({ ...prev, time: e.target.value }))}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Duration</Typography>
+              <TextField fullWidth select value={scheduleForm.duration_minutes}
+                onChange={e => setScheduleForm(prev => ({ ...prev, duration_minutes: e.target.value }))}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }}>
+                <MenuItem value="15">15 minutes</MenuItem>
+                <MenuItem value="30">30 minutes</MenuItem>
+                <MenuItem value="45">45 minutes</MenuItem>
+                <MenuItem value="60">60 minutes</MenuItem>
+              </TextField>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+          <Button onClick={() => { setScheduleDialogOpen(false); setSchedulingCandidate(null); setScheduleForm({ date: '', time: '', duration_minutes: '30' }) }}
+            sx={{ color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px' }}>Cancel</Button>
+          <Button
+            onClick={handleScheduleInterview}
+            disabled={scheduling || !scheduleForm.date || !scheduleForm.time}
+            sx={{
+              background: 'linear-gradient(135deg, #020291, #020291)', color: 'white',
+              borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px',
+              '&:hover': { background: 'linear-gradient(135deg, #010178, #010178)' },
+              '&:disabled': { opacity: 0.6, color: 'white' }
+            }}>
+            {scheduling ? (
+              <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Scheduling...</>
+            ) : (
+              <><i className="fas fa-calendar-check" style={{ marginRight: 8 }} /> Schedule Interview</>
             )}
           </Button>
         </DialogActions>

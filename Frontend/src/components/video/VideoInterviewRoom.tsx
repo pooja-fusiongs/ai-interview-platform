@@ -3,14 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, CircularProgress,
   Chip, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions
+  DialogActions, Collapse
 } from '@mui/material';
 import {
   ArrowBack, AccessTime,
   Check, Videocam,
-  FiberManualRecord
+  FiberManualRecord, ExpandMore, ExpandLess
 } from '@mui/icons-material';
 import videoInterviewService from '../../services/videoInterviewService';
+import ratingService from '../../services/ratingService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks } from '@livekit/components-react';
@@ -444,6 +445,11 @@ const VideoInterviewRoom: React.FC = () => {
   const [lkToken, setLkToken] = useState<string | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [questionRatings, setQuestionRatings] = useState<Record<number, number>>({});
+  const [savingRating, setSavingRating] = useState<number | null>(null);
+  const [interviewJobId, setInterviewJobId] = useState<number | null>(null);
+  const [applicationId, setApplicationId] = useState<number | null>(null);
+  const [expandedAnswers, setExpandedAnswers] = useState<Record<number, boolean>>({});
   const [gracePeriodTimer, setGracePeriodTimer] = useState<number | null>(null);
   const [, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [, setTranscriptConnected] = useState(false);
@@ -507,11 +513,34 @@ const VideoInterviewRoom: React.FC = () => {
       setLoadingQuestions(true);
       const response = await videoInterviewService.getAIInterviewQuestions(Number(videoId));
       setQuestions(response.questions || []);
+      if (response.job_id) setInterviewJobId(response.job_id);
+      if (response.application_id) setApplicationId(response.application_id);
     } catch (err: any) {
       console.warn('Failed to fetch questions:', err);
-      // Don't show error toast, questions might not be generated yet
     } finally {
       setLoadingQuestions(false);
+    }
+  };
+
+  const handleRateQuestion = async (questionId: number, rating: number) => {
+    if (!interviewJobId || !applicationId) {
+      toast.error('Unable to save rating — interview data missing');
+      return;
+    }
+    setSavingRating(questionId);
+    try {
+      const existingRating = questionRatings[questionId];
+      if (existingRating) {
+        await ratingService.updateRating(interviewJobId, applicationId, questionId, { rating });
+      } else {
+        await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+      }
+      setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
+    } catch (err: any) {
+      toast.error('Failed to save rating');
+      console.error('Rating error:', err);
+    } finally {
+      setSavingRating(null);
     }
   };
 
@@ -807,14 +836,29 @@ const VideoInterviewRoom: React.FC = () => {
         toast.success('Interview completed!');
       }
     } catch (err: any) {
-      // Still mark as completed locally even if backend call fails
       setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
       toast.error(err.response?.data?.detail || 'Failed to end interview');
     }
 
-    // 6) Navigate (recruiter only)
+    // 6) Auto-generate report from recruiter ratings (recruiter only)
+    if (!isGuest && interviewJobId && applicationId && Object.keys(questionRatings).length > 0) {
+      try {
+        toast.loading('Generating report card...', { id: 'report-gen' });
+        const reportResult = await ratingService.finalizeReport(interviewJobId, applicationId);
+        if (reportResult.status === 'success') {
+          toast.success(`Report generated! Recruiter Score: ${reportResult.recruiter_score}/10`, { id: 'report-gen', duration: 4000 });
+        } else {
+          toast.dismiss('report-gen');
+        }
+      } catch (err) {
+        toast.dismiss('report-gen');
+        console.error('Report generation failed:', err);
+      }
+    }
+
+    // 7) Navigate (recruiter only)
     if (!isGuest) {
-      setTimeout(() => navigate(`/video-detail/${videoId}`), 1500);
+      setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
     }
   };
 
@@ -969,6 +1013,29 @@ const VideoInterviewRoom: React.FC = () => {
             overflow: 'hidden'
           }}>
 
+            {/* Rating Progress Header */}
+            {questions.length > 0 && (
+              <Box sx={{
+                px: '20px', py: '12px',
+                background: 'white',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+                  Rated: {Object.keys(questionRatings).length} / {questions.length} questions
+                </Typography>
+                {Object.keys(questionRatings).length > 0 && (
+                  <Chip
+                    label={`Avg: ${(Object.values(questionRatings).reduce((a, b) => a + b, 0) / Object.values(questionRatings).length).toFixed(1)}/10`}
+                    size="small"
+                    sx={{ fontSize: '11px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed' }}
+                  />
+                )}
+              </Box>
+            )}
+
             {/* Scrollable Questions List */}
             <Box sx={{
               flex: 1,
@@ -997,98 +1064,133 @@ const VideoInterviewRoom: React.FC = () => {
                   </Typography>
                 </Box>
               ) : questions.length > 0 ? (
-                questions.map((q: any, idx: number) => (
+                questions.map((q: any, idx: number) => {
+                  const rating = questionRatings[q.id] || 0;
+                  const isExpanded = expandedAnswers[q.id] || false;
+                  return (
                   <Box
                     key={q.id || idx}
                     sx={{
                       background: 'white',
-                      borderRadius: '12px',
-                      padding: '20px',
-                      border: '1px solid #e2e8f0',
-                      marginBottom: '16px',
-                      transition: 'all 0.2s',
-                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-                      '&:hover': {
-                        borderColor: '#8b5cf6',
-                        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.1)',
-                        transform: 'translateY(-2px)'
-                      }
+                      borderRadius: '10px',
+                      border: rating ? '1px solid #c4b5fd' : '1px solid #e2e8f0',
+                      marginBottom: '12px',
+                      overflow: 'hidden',
+                      transition: 'border-color 0.2s',
                     }}
                   >
-                    {/* Question Number & Difficulty Badge */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                      <Box sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background: '#ede9fe',
-                        color: '#7c3aed',
-                        fontWeight: 700,
-                        fontSize: '14px',
-                        border: '2px solid #ddd6fe'
-                      }}>
-                        {idx + 1}
+                    {/* Question Header */}
+                    <Box sx={{ p: '14px 16px', pb: '10px' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                        <Box sx={{
+                          width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                          background: rating ? '#7c3aed' : '#ede9fe',
+                          color: rating ? 'white' : '#7c3aed',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontWeight: 700, fontSize: '13px', mt: '2px'
+                        }}>
+                          {rating ? '✓' : idx + 1}
+                        </Box>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography sx={{ color: '#1e293b', fontSize: '14px', lineHeight: 1.5, fontWeight: 500 }}>
+                            {q.question_text}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                            {q.difficulty && (
+                              <Chip label={q.difficulty.toUpperCase()} size="small" sx={{
+                                fontSize: '10px', fontWeight: 700, height: '20px', borderRadius: '4px',
+                                ...(q.difficulty.toLowerCase() === 'easy' || q.difficulty.toLowerCase() === 'basic' ? {
+                                  background: '#dcfce7', color: '#166534'
+                                } : q.difficulty.toLowerCase() === 'medium' || q.difficulty.toLowerCase() === 'intermediate' ? {
+                                  background: '#fef3c7', color: '#92400e'
+                                } : { background: '#fee2e2', color: '#991b1b' })
+                              }} />
+                            )}
+                            {q.skill_focus && (
+                              <Chip label={q.skill_focus} size="small" sx={{
+                                fontSize: '10px', fontWeight: 600, height: '20px', borderRadius: '4px',
+                                background: '#f3e8ff', color: '#7c3aed'
+                              }} />
+                            )}
+                          </Box>
+                        </Box>
                       </Box>
-                      {q.difficulty && (
-                        <Chip
-                          label={q.difficulty.toUpperCase()}
-                          size="small"
+                    </Box>
+
+                    {/* Rating Row */}
+                    <Box sx={{
+                      px: '16px', py: '10px',
+                      background: '#f8fafc',
+                      borderTop: '1px solid #f1f5f9',
+                      display: 'flex', alignItems: 'center', gap: 0.5
+                    }}>
+                      <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b', mr: 0.5 }}>
+                        Score:
+                      </Typography>
+                      {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                        <Box
+                          key={n}
+                          onClick={() => { if (savingRating !== q.id) handleRateQuestion(q.id, n); }}
                           sx={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            height: '24px',
-                            borderRadius: '6px',
-                            ...(q.difficulty.toLowerCase() === 'easy' ? {
-                              background: '#dcfce7',
-                              color: '#166534',
-                              border: '1px solid #bbf7d0'
-                            } : q.difficulty.toLowerCase() === 'medium' || q.difficulty.toLowerCase() === 'intermediate' ? {
-                              background: '#fef3c7',
-                              color: '#92400e',
-                              border: '1px solid #fde68a'
+                            width: '26px', height: '26px', borderRadius: '6px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            ...(rating === n ? {
+                              background: n >= 7 ? '#16a34a' : n >= 4 ? '#d97706' : '#dc2626',
+                              color: 'white',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                            } : rating && n <= rating ? {
+                              background: n >= 7 ? '#dcfce7' : n >= 4 ? '#fef3c7' : '#fee2e2',
+                              color: n >= 7 ? '#166534' : n >= 4 ? '#92400e' : '#991b1b',
                             } : {
-                              background: '#fee2e2',
-                              color: '#991b1b',
-                              border: '1px solid #fecaca'
+                              background: 'white',
+                              color: '#94a3b8',
+                              border: '1px solid #e2e8f0',
+                              '&:hover': { borderColor: '#7c3aed', color: '#7c3aed', background: '#faf5ff' }
                             })
                           }}
-                        />
-                      )}
+                        >
+                          {n}
+                        </Box>
+                      ))}
+                      {savingRating === q.id && <CircularProgress size={14} sx={{ ml: 0.5, color: '#7c3aed' }} />}
                     </Box>
-                    {/* Question Text */}
-                    <Typography sx={{
-                      color: '#1e293b',
-                      fontSize: '15px',
-                      lineHeight: 1.6,
-                      mb: q.skill_focus ? 1.5 : 0,
-                      fontWeight: 500
-                    }}>
-                      {q.question_text}
-                    </Typography>
-                    {q.skill_focus && (
-                      <Box sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        background: '#f3e8ff',
-                        border: '1px solid #e9d5ff',
-                        borderRadius: '6px',
-                        padding: '4px 10px'
-                      }}>
-                        <Typography sx={{
-                          color: '#7c3aed',
-                          fontSize: '12px',
-                          fontWeight: 600
-                        }}>
-                          Focus: {q.skill_focus}
-                        </Typography>
-                      </Box>
+
+                    {/* Show Answer Toggle */}
+                    {(q.suggested_answer || q.sample_answer) && (
+                      <>
+                        <Box
+                          onClick={() => setExpandedAnswers(prev => ({ ...prev, [q.id]: !prev[q.id] }))}
+                          sx={{
+                            px: '16px', py: '8px',
+                            borderTop: '1px solid #f1f5f9',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            cursor: 'pointer',
+                            '&:hover': { background: '#f8fafc' }
+                          }}
+                        >
+                          <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#7c3aed' }}>
+                            {isExpanded ? 'Hide Expected Answer' : 'Show Expected Answer'}
+                          </Typography>
+                          {isExpanded ? <ExpandLess sx={{ fontSize: 18, color: '#7c3aed' }} /> : <ExpandMore sx={{ fontSize: 18, color: '#7c3aed' }} />}
+                        </Box>
+                        <Collapse in={isExpanded}>
+                          <Box sx={{
+                            px: '16px', py: '12px',
+                            background: '#fefce8',
+                            borderTop: '1px solid #fef08a',
+                          }}>
+                            <Typography sx={{ fontSize: '13px', color: '#713f12', lineHeight: 1.6 }}>
+                              {q.suggested_answer || q.sample_answer}
+                            </Typography>
+                          </Box>
+                        </Collapse>
+                      </>
                     )}
                   </Box>
-                ))
+                  );
+                })
               ) : (
                 <Box sx={{ textAlign: 'center', py: 6 }}>
                   <Videocam sx={{ fontSize: 48, color: '#cbd5e1', mb: 2 }} />
@@ -1109,7 +1211,8 @@ const VideoInterviewRoom: React.FC = () => {
             background: 'white',
             position: 'relative',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            p: { xs: 0, md: 1.5 },
           }}>
             {/* Video Container */}
             <Box sx={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
@@ -1120,12 +1223,13 @@ const VideoInterviewRoom: React.FC = () => {
                 right: 0,
                 bottom: 0,
                 background: '#f8fafc',
-                borderRadius: 0,
+                borderRadius: { xs: 0, md: '12px' },
                 overflow: 'hidden',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: 'none'
+                boxShadow: 'none',
+                border: { xs: 'none', md: '1px solid #e2e8f0' }
               }}>
                 {isActive ? (
                   // LiveKit Video Call with Tiles

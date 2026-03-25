@@ -109,6 +109,19 @@ export const ratingService = {
     return response.data;
   },
 
+  /** Finalize report card from recruiter ratings after interview ends */
+  finalizeReport: async (
+    jobId: number,
+    candidateId: number
+  ): Promise<any> => {
+    const response = await apiClient.post(
+      `/api/jobs/${jobId}/candidates/${candidateId}/finalize-report`,
+      {},
+      { timeout: 30000 }
+    );
+    return response.data;
+  },
+
   /** Submit transcript for AI scoring */
   submitTranscript: async (
     jobId: number,

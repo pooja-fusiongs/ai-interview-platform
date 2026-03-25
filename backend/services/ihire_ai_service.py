@@ -94,8 +94,11 @@ SCORING GUIDELINES:
 - 5-6: Average — some answers match, surface-level understanding, lacks specifics
 - 3-4: Below average — most answers don't match expected, vague or incorrect
 - 1-2: Poor — answers are wrong, off-topic, or candidate couldn't answer
+- 0: Nonsense, gibberish, or no real answers provided at all
 
 IMPORTANT: Be strict. Most candidates should score 4-6. Only truly exceptional candidates score 8+. Wrong answers = low score, regardless of confidence.
+If the transcript contains gibberish, nonsense, random text (e.g. "xyz", "asdf", "hello testing", "something something"), or clearly fake answers that show zero knowledge, score 0.
+If answers are completely unrelated to the questions asked, score 0.
 
 Return strict JSON object with:
 - score: number (1-10, decimals allowed)
@@ -118,8 +121,8 @@ Return strict JSON object with:
         content = response.choices[0].message.content or ""
         result = _safe_parse_json(content)
 
-        score = float(result.get("score", 5))
-        score = max(1.0, min(10.0, score))
+        score = float(result.get("score", 0))
+        score = max(0.0, min(10.0, score))
         return {
             "score": round(score, 1),
             "feedback": result.get("feedback", "Unable to generate detailed feedback."),
@@ -127,8 +130,8 @@ Return strict JSON object with:
     except Exception as e:
         logger.error(f"Transcript scoring error: {e}")
         return {
-            "score": 5.0,
-            "feedback": f"Scoring encountered an error: {str(e)}. Default score of 5 assigned.",
+            "score": 0.0,
+            "feedback": f"Scoring encountered an error: {str(e)}. Default score of 0 assigned.",
         }
 
 

@@ -400,3 +400,68 @@ def _update_overall_score(candidate: JobApplication, db: Session):
         candidate.final_score = float(candidate.overall_score)
     else:
         candidate.final_score = None
+
+
+@router.post("/finalize-report")
+async def finalize_interview_report(
+    job_id: int,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Auto-generate report card from recruiter ratings after interview ends."""
+    job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
+
+    # Recalculate overall score from all ratings
+    _update_overall_score(candidate, db)
+    db.commit()
+    db.refresh(candidate)
+
+    if candidate.overall_score is None:
+        return {
+            "status": "no_ratings",
+            "message": "No ratings found. Rate questions before generating report.",
+            "recruiter_score": None,
+            "final_score": None,
+            "report_card": None,
+        }
+
+    # Get questions with ratings for report card
+    questions = (
+        db.query(InterviewQuestion)
+        .filter(InterviewQuestion.candidate_id == candidate.id)
+        .order_by(InterviewQuestion.order_number)
+        .all()
+    )
+    all_ratings = (
+        db.query(InterviewRating)
+        .join(InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id)
+        .filter(InterviewQuestion.candidate_id == candidate.id)
+        .all()
+    )
+    rating_map = {r.question_id: r for r in all_ratings}
+
+    questions_data = []
+    for q in questions:
+        rating = rating_map.get(q.id)
+        questions_data.append({
+            "question_text": q.question_text,
+            "category": q.category or q.skill_focus or "General",
+            "difficulty": str(q.difficulty.value) if q.difficulty else None,
+            "rating": rating.rating if rating else None,
+            "notes": rating.notes if rating else None,
+        })
+
+    # Build and save report card
+    report_card = _build_report_card(
+        job, candidate, questions_data, "", ""
+    )
+    candidate.report_card_json = json.dumps(report_card)
+    db.commit()
+
+    return {
+        "status": "success",
+        "recruiter_score": candidate.overall_score,
+        "final_score": candidate.final_score,
+        "report_card": report_card,
+    }

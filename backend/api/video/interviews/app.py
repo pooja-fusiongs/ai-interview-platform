@@ -1758,6 +1758,8 @@ def get_ai_interview_questions(
 
     return {
         "video_interview_id": vi.id,
+        "job_id": vi.job_id,
+        "application_id": application.id if application else None,
         "job_title": vi.job.title if vi.job else None,
         "candidate_name": vi.candidate.full_name or vi.candidate.username if vi.candidate else None,
         "questions": [
@@ -1766,7 +1768,9 @@ def get_ai_interview_questions(
                 "question_text": q.question_text,
                 "question_type": q.question_type or "technical",
                 "difficulty": q.difficulty or "intermediate",
-                "skill_focus": q.skill_focus
+                "skill_focus": q.skill_focus,
+                "suggested_answer": q.suggested_answer or q.sample_answer or None,
+                "sample_answer": q.sample_answer or None
             }
             for q in questions
         ]

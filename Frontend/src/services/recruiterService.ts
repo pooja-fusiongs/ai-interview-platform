@@ -80,6 +80,17 @@ export const recruiterService = {
     return response.data;
   },
 
+  /** Schedule interview: generates questions, creates video interview, sends email */
+  scheduleInterview: async (jobId: number, candidateId: number, scheduledAt: string, durationMinutes: number): Promise<any> => {
+    const response = await apiClient.post('/api/video/interviews', {
+      job_id: jobId,
+      candidate_id: candidateId,
+      scheduled_at: scheduledAt,
+      duration_minutes: durationMinutes,
+    }, { timeout: 180000 });
+    return response.data;
+  },
+
   /** Submit interview transcript and trigger LLM scoring */
   submitTranscript: async (jobId: number, applicationId: number, transcriptText: string): Promise<TranscriptResult> => {
     const response = await apiClient.post(

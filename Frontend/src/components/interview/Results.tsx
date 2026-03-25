@@ -29,6 +29,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import Navigation from '../layout/Sidebar'
 import { interviewService, InterviewSession, InterviewListItem } from '../../services/interviewService'
+import html2pdf from 'html2pdf.js'
+import { toast } from 'react-hot-toast'
 
 const Results = () => {
   const [searchParams] = useSearchParams()
@@ -41,6 +43,7 @@ const Results = () => {
   const [error, setError] = useState('')
   const [hiringStatus, setHiringStatus] = useState<string | null>(null)
   const [hiringLoading, setHiringLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   // Search and Filter state
   const [searchTerm, setSearchTerm] = useState('')
@@ -74,6 +77,112 @@ const Results = () => {
       else next.add(id)
       return next
     })
+  }
+
+  const buildReportHtml = (s: InterviewSession) => {
+    const name = s.candidate_name || 'Candidate'
+    const job = s.job_title || 'Position'
+    const scoreVal = s.overall_score != null ? s.overall_score / 10 : 0
+    const scoreStr = s.overall_score != null ? (s.overall_score / 10).toFixed(1) : 'N/A'
+    const date = s.completed_at ? new Date(s.completed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    const recMap: Record<string, string> = { select: 'Recommended', next_round: 'Next Round', reject: 'Not Recommended' }
+    const rec = recMap[s.recommendation || ''] || 'Pending'
+    const isGood = s.recommendation === 'select'
+    const vBg = isGood ? '#EEFBF4' : '#FFF0F0'; const vC = isGood ? '#1B7D48' : '#C42B2B'; const vBorder = isGood ? '#B6EDD2' : '#FFCFCF'
+    const answered = (s.answers || []).filter(a => a.score != null).length
+    const total = (s.answers || []).length
+    const gaugeC = scoreVal >= 7 ? '#1B7D48' : scoreVal >= 5 ? '#D96B28' : '#C42B2B'
+    const pct = Math.min(scoreVal / 10, 1)
+    const circ = 2 * Math.PI * 42
+    const dashOff = Math.round(circ * (1 - pct))
+    const dims = { rel: 0, comp: 0, acc: 0, clar: 0, n: 0 }
+    ;(s.answers || []).forEach(a => { if (a.score != null) { dims.rel += (a.relevance_score || 0); dims.comp += (a.completeness_score || 0); dims.acc += (a.accuracy_score || 0); dims.clar += (a.clarity_score || 0); dims.n++ } })
+    const dp = (v: number) => dims.n > 0 ? Math.round(v / dims.n) : 0
+    const relP = dp(dims.rel); const compP = dp(dims.comp); const accP = dp(dims.acc); const clarP = dp(dims.clar)
+    const statColor = (v: number) => v >= 70 ? '#1B7D48' : v >= 50 ? '#5B6AD4' : v >= 35 ? '#D96B28' : '#C42B2B'
+
+    const qItems = (s.answers || []).map((a, i) => {
+      const qs = a.score != null ? (a.score / 10).toFixed(1) : '—'
+      const chipBg = a.score != null ? (a.score >= 70 ? '#EEFBF4' : a.score >= 40 ? '#FFF8E8' : '#FFF0F0') : '#F0F2FF'
+      const chipC = a.score != null ? (a.score >= 70 ? '#1B7D48' : a.score >= 40 ? '#9B6700' : '#C42B2B') : '#7880C8'
+      return `<tr style="border-bottom:1px solid #F3F4FA;">
+        <td style="padding:6px 10px;vertical-align:top;width:30px;">
+          <div style="width:22px;height:22px;border-radius:6px;background:#F0F2FF;text-align:center;line-height:22px;font-size:9px;font-weight:600;color:#6C74C4;font-family:monospace;">${String(i + 1).padStart(2, '0')}</div>
+        </td>
+        <td style="padding:6px 4px;vertical-align:top;">
+          <div style="font-size:9px;font-weight:500;line-height:1.45;color:#1C1F3A;margin-bottom:${a.feedback ? '2px' : '0'};">${a.question_text || ''}</div>
+          ${a.feedback ? `<div style="font-size:8px;color:#9699B8;line-height:1.4;font-style:italic;border-left:2px solid #E4E7F8;padding-left:6px;">${a.feedback}</div>` : ''}
+        </td>
+        <td style="padding:6px 10px;vertical-align:top;text-align:center;width:40px;">
+          <div style="width:34px;height:20px;border-radius:6px;background:${chipBg};text-align:center;line-height:20px;font-size:9px;font-weight:600;color:${chipC};font-family:monospace;">${qs}</div>
+        </td>
+      </tr>`
+    }).join('')
+
+    const statBox = (label: string, val: number, color: string) => `<td style="width:25%;padding:0 3px;">
+      <div style="background:#fff;border-radius:8px;border:1px solid #E8EAF5;padding:8px 6px;text-align:center;">
+        <div style="font-size:14px;font-weight:700;color:${color};font-family:monospace;">${val}%</div>
+        <div style="font-size:7px;color:#9699B8;text-transform:uppercase;letter-spacing:1px;">${label}</div>
+        <div style="height:2px;background:#EEF0FA;border-radius:1px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:${val}%;background:${color};border-radius:1px;"></div></div>
+      </div>
+    </td>`
+
+    return `<div style="padding:10px 10px 6px;width:460px;font-family:Segoe UI,Arial,sans-serif;color:#181A2E;background:#F4F5FA;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0E1544;border-radius:10px;overflow:hidden;margin-bottom:8px;"><tr>
+<td style="padding:14px 16px;"><div style="font-size:16px;font-weight:700;color:#fff;">i<span style="color:#6C8EFF;">Hire</span></div><div style="font-size:7px;letter-spacing:2px;color:rgba(255,255,255,.4);margin-top:2px;text-transform:uppercase;">Interview Assessment Report</div></td>
+<td style="background:#0A1035;padding:14px 16px;text-align:right;"><div style="font-size:9px;color:rgba(255,255,255,.5);">${date}</div><div style="font-size:8px;color:#6C8EFF;font-family:monospace;margin-top:2px;"># ${String(s.id).padStart(5, '0')}</div></td>
+</tr></table>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;border:1px solid #E8EAF5;overflow:hidden;margin-bottom:8px;"><tr>
+<td style="padding:14px 16px;vertical-align:top;"><div style="font-size:7px;letter-spacing:2px;text-transform:uppercase;color:#9699B8;margin-bottom:4px;">Candidate</div><div style="font-size:18px;font-weight:700;color:#0E1544;line-height:1;">${name}</div><div style="font-size:9px;color:#9699B8;margin:4px 0 8px;">Position — <strong style="color:#4B5298;">${job}</strong></div><span style="display:inline-block;background:${vBg};color:${vC};border:1px solid ${vBorder};padding:3px 10px;border-radius:12px;font-size:8px;font-weight:600;">${rec}</span></td>
+<td style="background:#F7F8FE;border-left:1px solid #E8EAF5;padding:14px 18px;text-align:center;vertical-align:middle;width:130px;">
+<div style="position:relative;width:70px;height:70px;margin:0 auto;"><svg width="70" height="70" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="42" fill="none" stroke="#EEF0FA" stroke-width="8"/><circle cx="50" cy="50" r="42" fill="none" stroke="${gaugeC}" stroke-width="8" stroke-dasharray="${Math.round(circ)}" stroke-dashoffset="${dashOff}" stroke-linecap="round" transform="rotate(-90 50 50)"/></svg><div style="position:absolute;top:0;left:0;right:0;bottom:0;display:table;width:100%;height:100%;"><div style="display:table-cell;vertical-align:middle;text-align:center;font-size:20px;font-weight:700;color:${gaugeC};font-family:monospace;">${scoreStr}</div></div></div>
+<div style="font-size:7px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#9699B8;margin-top:4px;">Overall Score</div><div style="font-size:7px;color:#B8BAD4;">${answered} of ${total} scored</div>
+</td></tr></table>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;"><tr>${statBox('Relevance', relP, statColor(relP))}${statBox('Completeness', compP, statColor(compP))}${statBox('Accuracy', accP, statColor(accP))}${statBox('Clarity', clarP, statColor(clarP))}</tr></table>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;"><tr>
+<td style="width:50%;vertical-align:top;padding-right:4px;"><div style="background:#EEFBF4;border:1px solid #B6EDD2;border-radius:8px;padding:8px 10px;"><table cellpadding="0" cellspacing="0"><tr><td style="vertical-align:middle;padding-right:5px;"><div style="width:14px;height:14px;border-radius:50%;background:#1B7D48;color:#fff;text-align:center;line-height:14px;font-size:7px;font-weight:700;">&#10003;</div></td><td><div style="font-size:9px;font-weight:600;color:#1B7D48;">Strengths</div></td></tr></table><div style="font-size:8px;line-height:1.5;color:#555870;margin-top:4px;">${s.strengths || 'No specific strengths identified.'}</div></div></td>
+<td style="width:50%;vertical-align:top;padding-left:4px;"><div style="background:#FFFAEC;border:1px solid #F5E0A0;border-radius:8px;padding:8px 10px;"><table cellpadding="0" cellspacing="0"><tr><td style="vertical-align:middle;padding-right:5px;"><div style="width:14px;height:14px;border-radius:50%;background:#C98A00;color:#fff;text-align:center;line-height:14px;font-size:7px;font-weight:700;">!</div></td><td><div style="font-size:9px;font-weight:600;color:#9B6700;">Areas for Improvement</div></td></tr></table><div style="font-size:8px;line-height:1.5;color:#555870;margin-top:4px;">${s.weaknesses || 'No specific weaknesses identified.'}</div></div></td>
+</tr></table>
+<div style="font-size:7px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#9699B8;margin:2px 0 6px;">Question-wise Assessment</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;border:1px solid #E8EAF5;border-collapse:separate;">
+<thead><tr style="background:#F7F8FE;"><th style="padding:6px 10px;font-size:7px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#B0B3CC;text-align:left;width:30px;border-bottom:1px solid #EEF0FA;">#</th><th style="padding:6px 4px;font-size:7px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#B0B3CC;text-align:left;border-bottom:1px solid #EEF0FA;">Question &amp; Feedback</th><th style="padding:6px 10px;font-size:7px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#B0B3CC;text-align:center;width:40px;border-bottom:1px solid #EEF0FA;">Score</th></tr></thead>
+<tbody>${qItems}</tbody>
+<tfoot><tr><td colspan="3" style="padding:6px 10px;border-top:1px solid #EEF0FA;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:7px;color:#B0B3CC;">iHire AI Interview Platform</td><td style="text-align:center;font-size:7px;color:#C8CADD;letter-spacing:1px;text-transform:uppercase;">Confidential</td><td style="text-align:right;font-size:7px;color:#B0B3CC;">Auto-generated</td></tr></table></td></tr></tfoot>
+</table></div>`
+  }
+
+  const handleDownloadReport = async () => {
+    if (!selectedSession) return
+    setDownloading(true)
+    try {
+      const s = selectedSession
+      const name = s.candidate_name || 'Candidate'
+      const job = s.job_title || 'Position'
+      const html = buildReportHtml(s)
+
+      const container = document.createElement('div')
+      container.style.position = 'fixed'
+      container.style.left = '-9999px'
+      container.style.top = '0'
+      container.innerHTML = html
+      document.body.appendChild(container)
+
+      await (html2pdf() as any).set({
+        margin: [5, 5, 5, 5],
+        filename: `${name.replace(/\s+/g, '_')}_${job.replace(/\s+/g, '_')}_Report.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#F4F5FA', width: 460 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css'] }
+      }).from(container.firstElementChild!).save()
+
+      document.body.removeChild(container)
+      toast.success('Report downloaded successfully')
+    } catch (err) {
+      toast.error('Failed to download report')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const handleHiringDecision = async (decision: 'hire' | 'reject') => {
@@ -402,6 +511,25 @@ const Results = () => {
                 }}
               />
             )}
+            <Button
+              onClick={handleDownloadReport}
+              disabled={downloading}
+              size="small"
+              variant="outlined"
+              sx={{
+                textTransform: 'none', fontWeight: 600, fontSize: '12px',
+                borderRadius: '8px', borderColor: '#020291', color: '#020291',
+                height: '30px', px: 2,
+                '&:hover': { background: '#020291', color: '#fff', borderColor: '#020291' },
+                '&:disabled': { opacity: 0.6 }
+              }}
+            >
+              {downloading ? (
+                <><i className="fas fa-spinner fa-spin" style={{ marginRight: 6, fontSize: 11 }}></i>Downloading...</>
+              ) : (
+                <><i className="fas fa-download" style={{ marginRight: 6, fontSize: 11 }}></i>Download Report</>
+              )}
+            </Button>
           </Box>
 
           <CardContent sx={{ padding: { xs: '16px', md: '24px' } }}>
