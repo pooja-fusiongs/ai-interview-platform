@@ -39,7 +39,7 @@ if DATABASE_URL:
             connect_args={
                 "sslmode": "require",
                 "connect_timeout": 10,
-                "options": "-c statement_timeout=60000"
+                "options": "-c statement_timeout=60000 -c plan_cache_mode=force_custom_plan",
             },
             poolclass=NullPool,           # Let Supabase pgbouncer handle pooling
             use_native_hstore=False,      # Prevent hstore OID query that breaks pgbouncer SSL
@@ -52,10 +52,11 @@ if DATABASE_URL:
             SQLALCHEMY_DATABASE_URL,
             connect_args={
                 "sslmode": "require",
-                "connect_timeout": 10,
-                "options": "-c statement_timeout=60000"
+                "connect_timeout": 30,
+                "options": "-c statement_timeout=60000 -c tcp_keepalives_idle=60"
             },
             poolclass=NullPool,
+            pool_pre_ping=True,  
         )
         print("PostgreSQL connected (NullPool — no connection hoarding)")
     else:

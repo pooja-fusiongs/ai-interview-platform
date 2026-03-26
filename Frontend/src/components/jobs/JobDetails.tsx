@@ -16,7 +16,8 @@ import {
   DialogActions,
   MenuItem,
   CircularProgress,
-  Tooltip
+  Tooltip,
+  Skeleton
 } from '@mui/material'
 import { apiClient } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -143,15 +144,42 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  // Fetch candidates for this job
+  // Fetch candidates + question sets + video interviews all at once
   const fetchCandidates = async () => {
     if (!selectedJob?.id) return
     try {
       setCandidatesLoading(true)
-      const response = await apiClient.get(`/api/job/${selectedJob.id}/applications`)
-      if (response.status === 200) {
-        setCandidates(response.data.applications || [])
+      const [candidateRes, qsRes, viRes] = await Promise.all([
+        apiClient.get(`/api/job/${selectedJob.id}/applications`),
+        apiClient.get('/api/interview/question-sets'),
+        apiClient.get('/api/video/interviews')
+      ])
+
+      const fetchedCandidates = candidateRes.data?.applications || []
+      setCandidates(fetchedCandidates)
+
+      // Map question sets
+      const sets = qsRes.data || []
+      const qMapping: Record<number, string> = {}
+      for (const qs of sets) {
+        if (qs.job_id === selectedJob.id && qs.application_id) {
+          qMapping[qs.application_id] = qs.id
+        }
       }
+      setCandidateQuestionSets(qMapping)
+
+      // Map video interviews
+      const interviews = viRes.data || []
+      const vMapping: Record<number, number> = {}
+      for (const vi of interviews) {
+        if (vi.job_id === selectedJob.id) {
+          const matched = vi.candidate_email ? fetchedCandidates.find((c: any) =>
+            c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
+          ) : null
+          if (matched) vMapping[matched.id] = vi.id
+        }
+      }
+      setCandidateVideoIds(vMapping)
     } catch (error) {
       console.error('Error fetching candidates:', error)
     } finally {
@@ -162,41 +190,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   useEffect(() => {
     fetchCandidates()
   }, [selectedJob?.id])
-
-  // Fetch existing question sets & video interviews
-  useEffect(() => {
-    const fetchQuestionSetsAndVideos = async () => {
-      try {
-        const [qsRes, viRes] = await Promise.all([
-          apiClient.get('/api/interview/question-sets'),
-          apiClient.get('/api/video/interviews')
-        ])
-        const sets = qsRes.data || []
-        const qMapping: Record<number, string> = {}
-        for (const qs of sets) {
-          if (qs.job_id === selectedJob.id && qs.application_id) {
-            qMapping[qs.application_id] = qs.id
-          }
-        }
-        setCandidateQuestionSets(qMapping)
-
-        const interviews = viRes.data || []
-        const vMapping: Record<number, number> = {}
-        for (const vi of interviews) {
-          if (vi.job_id === selectedJob.id) {
-            const matched = vi.candidate_email ? candidates.find((c: any) =>
-              c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
-            ) : null
-            if (matched) vMapping[matched.id] = vi.id
-          }
-        }
-        setCandidateVideoIds(vMapping)
-      } catch (error) {
-        console.error('Error fetching question sets:', error)
-      }
-    }
-    if (selectedJob?.id && candidates.length > 0) fetchQuestionSetsAndVideos()
-  }, [selectedJob?.id, candidates.length])
 
   // Generate questions for a candidate
 
@@ -869,7 +862,21 @@ const JobDetails: React.FC<JobDetailsProps> = ({
 
       {/* Candidate List */}
       {candidatesLoading ? (
-        <Box sx={{ textAlign: 'center', py: 4, color: '#64748b' }}>Loading candidates...</Box>
+        <Box sx={{ p: 2 }}>
+          {[1, 2, 3].map(i => (
+            <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: '1px solid #f1f5f9' }}>
+              <Skeleton variant="circular" width={36} height={36} />
+              <Box sx={{ flex: 1 }}>
+                <Skeleton variant="text" width="40%" height={20} />
+                <Skeleton variant="text" width="25%" height={16} />
+              </Box>
+              <Skeleton variant="text" width="10%" height={16} />
+              <Skeleton variant="rounded" width={90} height={28} sx={{ borderRadius: '6px' }} />
+              <Skeleton variant="text" width="15%" height={16} />
+              <Skeleton variant="rounded" width={80} height={30} sx={{ borderRadius: '8px' }} />
+            </Box>
+          ))}
+        </Box>
       ) : candidates.length === 0 ? (
         <Box sx={{
           textAlign: 'center', py: 6, borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff'

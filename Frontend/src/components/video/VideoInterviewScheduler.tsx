@@ -246,6 +246,11 @@ const VideoInterviewScheduler: React.FC = () => {
     e.preventDefault();
     if (!isFormValid) {
       setTouched({ job: true, candidate: true, scheduledAt: true });
+      const errors: string[] = [];
+      if (!validation.job) errors.push('Job Position');
+      if (!validation.candidate) errors.push('Candidate');
+      if (!validation.scheduledAt) errors.push('Date & Time (must be in the future)');
+      setError(`Please fill required fields: ${errors.join(', ')}`);
       return;
     }
 
@@ -613,6 +618,7 @@ const VideoInterviewScheduler: React.FC = () => {
                           size: 'medium',
                           placeholder: 'Select date',
                           error: touched.scheduledAt && !selectedDate,
+                          helperText: touched.scheduledAt && !selectedDate ? 'Date is required' : '',
                           sx: { ...inputStyles, width: '100%' },
                           InputProps: {
                             startAdornment: (
@@ -654,6 +660,7 @@ const VideoInterviewScheduler: React.FC = () => {
                           size: 'medium',
                           placeholder: 'Select time',
                           error: touched.scheduledAt && !selectedTime,
+                          helperText: touched.scheduledAt && !selectedTime ? 'Time is required' : '',
                           sx: { ...inputStyles, width: '100%' },
                           InputProps: {
                             startAdornment: (

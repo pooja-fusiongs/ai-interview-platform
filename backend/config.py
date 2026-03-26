@@ -57,8 +57,15 @@ ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET", "")
 ZOOM_SDK_KEY = os.getenv("ZOOM_SDK_KEY", "")
 ZOOM_SDK_SECRET = os.getenv("ZOOM_SDK_SECRET", "")
 
+# Cloudinary (Video recording storage)
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+
 # CORS
-CORS_ORIGINS = os.getenv(
+_cors_raw = os.getenv(
     "CORS_ORIGINS",
     "http://localhost:3000,http://localhost:3001,http://localhost:5173"
-).split(",")
+)
+# Support both comma and semicolon as separator (semicolon needed for gcloud CLI)
+CORS_ORIGINS = [o.strip() for o in _cors_raw.replace(";", ",").split(",") if o.strip()]

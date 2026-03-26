@@ -193,9 +193,11 @@ const Candidates = () => {
     }
   }, [candidates, searchParams])
 
-  // Set up real-time status updates (every 60 seconds)
+  // Set up real-time status updates (every 120 seconds, only when tab visible)
   useEffect(() => {
-    const interval = setInterval(updateOnlineStatus, 60000)
+    const interval = setInterval(() => {
+      if (!document.hidden) updateOnlineStatus()
+    }, 120000)
     return () => clearInterval(interval)
   }, [])
 

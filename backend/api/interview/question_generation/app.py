@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
+import hashlib
 
 import sys
 import os
@@ -28,6 +29,13 @@ from api.auth.role_manager import RoleManager
 from services.ai_question_generator import get_question_generator
 
 router = APIRouter(prefix="/api/interview", tags=["Question Generation"])
+
+
+def _generate_candidate_token(interview_id: int, candidate_id: int) -> str:
+    """Generate a secure token for candidate interview links."""
+    secret = os.getenv("SECRET_KEY", "fallback-secret")
+    raw = f"{interview_id}-{candidate_id}-{secret}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def _save_question_version(db: Session, question, change_type: str, changed_by: int, change_summary: str = None):
@@ -174,7 +182,7 @@ def generate_questions(
                     job_title=job.title,
                     interview_date=scheduled_time.strftime("%B %d, %Y"),
                     interview_time=scheduled_time.strftime("%I:%M %p UTC"),
-                    meeting_url=f"{frontend_url}/video-room/{video_interview_id}"
+                    meeting_url=f"{frontend_url}/video-room/{video_interview_id}?token={_generate_candidate_token(video_interview_id, candidate_user.id)}"
                 )
             except Exception as email_err:
                 print(f"⚠️ Email notification failed: {email_err}")

@@ -702,6 +702,9 @@ class VideoInterviewResponse(BaseModel):
 
 class VideoInterviewEndRequest(BaseModel):
     max_participants: Optional[int] = None
+    force_complete: Optional[bool] = False
+    overall_score: Optional[float] = None
+    recommendation: Optional[str] = None
 
 class VideoInterviewUpdate(BaseModel):
     status: Optional[str] = None

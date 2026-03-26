@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, CircularProgress,
   Chip, IconButton, Dialog, DialogTitle, DialogContent,
@@ -21,7 +21,6 @@ import { Track, DisconnectReason, RoomOptions, VideoPresets } from 'livekit-clie
 import { VideoTilesGrid } from './VideoTilesGrid';
 import FaceDetectionOverlay from './FaceDetectionOverlay';
 import TranscriptionCapture from './TranscriptionCapture';
-import LiveTranscriptPanel from './LiveTranscriptPanel';
 import { TranscriptEntry } from '../../hooks/useRealtimeTranscript';
 import { getMediaDevices } from '../../utils/mediaDeviceUtils';
 import Navigation from '../layout/Sidebar';
@@ -169,7 +168,6 @@ const InterviewRecorder: React.FC<{
     }
 
     // Delay recording start to give camera track time to appear
-    const delay = camMediaTrack ? 500 : 3000;
     const timer = setTimeout(async () => {
       if (startedRef.current || mediaRecorderRef.current) return;
       startedRef.current = true;
@@ -228,8 +226,8 @@ const InterviewRecorder: React.FC<{
 
         // --- Canvas compositing setup ---
         const canvas = document.createElement('canvas');
-        canvas.width = 1280;
-        canvas.height = 720;
+        canvas.width = 640;
+        canvas.height = 360;
         canvasRef.current = canvas;
         const ctx = canvas.getContext('2d')!;
 
@@ -318,7 +316,7 @@ const InterviewRecorder: React.FC<{
         drawFrame();
 
         // --- MediaRecorder setup ---
-        const canvasStream = canvas.captureStream(30); // 30fps
+        const canvasStream = canvas.captureStream(15); // 15fps — smoother on slow connections
         const combinedStream = new MediaStream();
         canvasStream.getVideoTracks().forEach(t => combinedStream.addTrack(t));
         const audioTracks = destination.stream.getAudioTracks();
@@ -335,7 +333,7 @@ const InterviewRecorder: React.FC<{
 
         console.log(`🎬 Recording: ${combinedStream.getVideoTracks().length} video + ${combinedStream.getAudioTracks().length} audio, MIME: ${mimeType}`);
 
-        const mediaRecorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 500000 });
+        const mediaRecorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 500000, audioBitsPerSecond: 128000 });
         let chunkCount = 0;
         let totalBytes = 0;
         mediaRecorder.ondataavailable = (event) => {
@@ -349,9 +347,12 @@ const InterviewRecorder: React.FC<{
             }
           }
         };
-        mediaRecorder.onstatechange = () => {
+        mediaRecorder.addEventListener('pause', () => {
           console.log(`🎬 [Recording] State changed: ${mediaRecorder.state}`);
-        };
+        });
+        mediaRecorder.addEventListener('resume', () => {
+          console.log(`🎬 [Recording] State changed: ${mediaRecorder.state}`);
+        });
         mediaRecorder.onerror = (event: any) => {
           console.error('❌ MediaRecorder error:', event.error);
         };
@@ -450,8 +451,29 @@ const InterviewRecorder: React.FC<{
 
 const VideoInterviewRoom: React.FC = () => {
   const { videoId } = useParams<{ videoId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Candidate joins via email link with ?token=xxx
+  // Save token to sessionStorage and remove from URL so candidate can't see/remove it
+  const [isCandidateLink] = useState(() => {
+    const tokenFromUrl = searchParams.get('token');
+    if (tokenFromUrl) {
+      sessionStorage.setItem(`interview_token_${videoId}`, tokenFromUrl);
+      return true;
+    }
+    return !!sessionStorage.getItem(`interview_token_${videoId}`);
+  });
+
+  // Remove token from URL on first render (clean URL)
+  useEffect(() => {
+    if (searchParams.get('token')) {
+      searchParams.delete('token');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
+
   // Guest mode: no logged-in user — candidate joining from email link
   const isGuest = !user;
   const [interview, setInterview] = useState<any>(null);
@@ -470,16 +492,19 @@ const VideoInterviewRoom: React.FC = () => {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionRatings, setQuestionRatings] = useState<Record<number, number>>({});
   const [savingRating, setSavingRating] = useState<number | null>(null);
+  const ratingQueueRef = useRef<Array<{ questionId: number; rating: number }>>([]);
+  const isProcessingRatingRef = useRef(false);
   const [interviewJobId, setInterviewJobId] = useState<number | null>(null);
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [expandedAnswers, setExpandedAnswers] = useState<Record<number, boolean>>({});
   const [interviewMode, setInterviewMode] = useState<'video' | 'classic'>('video');
   const [classicTranscript, setClassicTranscript] = useState('');
+  const [showTranscriptInput, setShowTranscriptInput] = useState(false);
   const [submittingClassic, setSubmittingClassic] = useState(false);
   const [hasExited, setHasExited] = useState(false);
   const [gracePeriodTimer, setGracePeriodTimer] = useState<number | null>(null);
   const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
-  const [transcriptConnected, setTranscriptConnected] = useState(false);
+  const [, setTranscriptConnected] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const graceCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -500,8 +525,10 @@ const VideoInterviewRoom: React.FC = () => {
           : await videoInterviewService.getInterview(Number(videoId));
         setInterview(data);
 
-        // Fetch questions for this interview
-        fetchQuestions();
+        // Fetch questions only for recruiter/interviewer (not for candidates)
+        if (!isGuest && !isCandidateLink && user?.role !== 'candidate') {
+          fetchQuestions();
+        }
         if (data.status === 'in_progress') {
           setIsActive(true);
           if (data.started_at) {
@@ -549,26 +576,43 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
-  const handleRateQuestion = async (questionId: number, rating: number) => {
+  // Process rating queue one at a time to prevent DB race conditions
+  const processRatingQueue = async () => {
+    if (isProcessingRatingRef.current || !interviewJobId || !applicationId) return;
+    isProcessingRatingRef.current = true;
+
+    while (ratingQueueRef.current.length > 0) {
+      const { questionId, rating } = ratingQueueRef.current.shift()!;
+      setSavingRating(questionId);
+      try {
+        const existingRating = questionRatings[questionId];
+        if (existingRating) {
+          await ratingService.updateRating(interviewJobId, applicationId, questionId, { rating });
+        } else {
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+        }
+        setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
+      } catch (err: any) {
+        toast.error('Failed to save rating');
+        console.error('Rating error:', err);
+      }
+    }
+
+    setSavingRating(null);
+    isProcessingRatingRef.current = false;
+  };
+
+  const handleRateQuestion = (questionId: number, rating: number) => {
     if (!interviewJobId || !applicationId) {
       toast.error('Unable to save rating — interview data missing');
       return;
     }
-    setSavingRating(questionId);
-    try {
-      const existingRating = questionRatings[questionId];
-      if (existingRating) {
-        await ratingService.updateRating(interviewJobId, applicationId, questionId, { rating });
-      } else {
-        await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
-      }
-      setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
-    } catch (err: any) {
-      toast.error('Failed to save rating');
-      console.error('Rating error:', err);
-    } finally {
-      setSavingRating(null);
-    }
+    // Update UI immediately for fast feedback
+    setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
+    // Replace any pending rating for same question in queue
+    ratingQueueRef.current = ratingQueueRef.current.filter(r => r.questionId !== questionId);
+    ratingQueueRef.current.push({ questionId, rating });
+    processRatingQueue();
   };
 
   const handleClassicSubmit = async () => {
@@ -598,9 +642,14 @@ const VideoInterviewRoom: React.FC = () => {
         toast.dismiss('classic-report');
         toast.success('Ratings saved successfully');
       }
-      // End the interview
+      // End the interview - classic mode: force completed with score
       try {
-        await videoInterviewService.endInterview(Number(videoId), { max_participants: 0 });
+        await videoInterviewService.endInterview(Number(videoId), {
+          max_participants: 2,
+          force_complete: true,
+          overall_score: result.recruiter_score || null,
+          recommendation: result.report_card?.recommendation || 'next_round',
+        });
         setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
       } catch {}
       setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
@@ -640,8 +689,8 @@ const VideoInterviewRoom: React.FC = () => {
     // Check immediately
     checkGrace();
 
-    // Then check every 30 seconds
-    graceCheckIntervalRef.current = setInterval(checkGrace, 30000);
+    // Then check every 60 seconds (reduced from 30s to save bandwidth)
+    graceCheckIntervalRef.current = setInterval(checkGrace, 60000);
   };
 
   // Device check on mount (no permission request — LiveKit handles that to avoid double prompts in incognito)
@@ -722,7 +771,10 @@ const VideoInterviewRoom: React.FC = () => {
     return `${h}:${m}:${s}`;
   };
 
-  const isUserCandidate = isGuest || user?.role === 'candidate';
+  // ?role=candidate in URL = candidate view (email link), regardless of login
+  // Guest (no login) = candidate view
+  // candidate role = candidate view
+  const isUserCandidate = isGuest || isCandidateLink || user?.role === 'candidate';
 
   const handleStart = () => {
     console.log('🎬 handleStart called, user role:', user?.role);
@@ -955,6 +1007,13 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
+  // Auto-show consent dialog for candidates on page load (one-click join)
+  useEffect(() => {
+    if (interview && (isGuest || user?.role === 'candidate') && !isActive && interview?.status !== 'completed' && !interview.recording_consent && !showConsentDialog) {
+      setShowConsentDialog(true);
+    }
+  }, [interview, isGuest, user, isActive, showConsentDialog]);
+
   if (loading) {
     return (
       <Box sx={{
@@ -975,7 +1034,7 @@ const VideoInterviewRoom: React.FC = () => {
       <Box sx={{
         display: 'flex',
         flexDirection: 'column',
-        height: isGuest ? '100vh' : 'calc(100vh - 64px)',
+        height: isUserCandidate ? '100vh' : 'calc(100vh - 64px)',
         width: '100%',
         overflow: 'hidden',
         backgroundColor: '#f8fafc'
@@ -993,7 +1052,7 @@ const VideoInterviewRoom: React.FC = () => {
           gap: 1
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, minWidth: 0, flex: 1 }}>
-            {!isGuest && (
+            {!isUserCandidate && (
               <IconButton
                 onClick={() => navigate('/video-interviews')}
                 sx={{
@@ -1016,7 +1075,7 @@ const VideoInterviewRoom: React.FC = () => {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis'
               }}>
-                {interview?.job_title || 'Software QA Engineer'}
+                {isUserCandidate ? 'Video Interview' : (interview?.job_title || 'Video Interview')}
               </Typography>
               <Typography sx={{
                 color: '#64748b',
@@ -1025,7 +1084,7 @@ const VideoInterviewRoom: React.FC = () => {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis'
               }}>
-                {interview?.candidate_name || 'pooja Mishra'} • Interview #{videoId}
+                {isUserCandidate ? `Interview #${videoId}` : `${interview?.candidate_name || 'Candidate'} • Interview #${videoId}`}
               </Typography>
             </Box>
           </Box>
@@ -1105,7 +1164,7 @@ const VideoInterviewRoom: React.FC = () => {
           {/* LEFT SIDE - Questions Panel (recruiter only) */}
           {!isUserCandidate && <Box sx={{
             width: { xs: '100%', md: interviewMode === 'classic' ? '100%' : '40%' },
-            maxHeight: { xs: isActive ? '30vh' : '40vh', md: 'none' },
+            maxHeight: { xs: isActive && interviewMode !== 'classic' ? '30vh' : '40vh', md: 'none' },
             backgroundColor: 'white',
             borderRight: { md: '1px solid #e2e8f0' },
             borderBottom: { xs: '1px solid #e2e8f0', md: 'none' },
@@ -1304,52 +1363,38 @@ const VideoInterviewRoom: React.FC = () => {
 
             {/* Live captions now show directly on video panel — no need for separate transcript panel here */}
 
-            {/* Classic Mode: Transcript & Submit Section */}
+            {/* Classic Mode: Transcript (collapsible) */}
             {interviewMode === 'classic' && !isUserCandidate && (
-              <Box sx={{ p: '16px 20px', borderTop: '1px solid #e2e8f0', background: '#fff' }}>
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: 1 }}>
-                  Interview Transcript (Optional)
-                </Typography>
-                <Typography sx={{ fontSize: '11px', color: '#94a3b8', mb: 1.5 }}>
-                  Paste the interview transcript for AI scoring. You can also submit with just your ratings.
-                </Typography>
-                <TextField
-                  multiline rows={3} fullWidth
-                  placeholder="Paste interview transcript here..."
-                  value={classicTranscript}
-                  onChange={e => setClassicTranscript(e.target.value)}
-                  sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: '12px' } }}
-                />
-                <Button
-                  onClick={handleClassicSubmit}
-                  disabled={submittingClassic || Object.keys(questionRatings).length === 0}
-                  fullWidth
-                  sx={{
-                    background: '#020291', color: '#fff', borderRadius: '10px', textTransform: 'none',
-                    fontWeight: 600, fontSize: '13px', py: 1.2,
-                    '&:hover': { background: '#010178' },
-                    '&:disabled': { opacity: 0.5, color: '#fff', background: '#020291' }
-                  }}
+              <Box sx={{ p: '12px 20px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                <Typography
+                  onClick={() => setShowTranscriptInput(prev => !prev)}
+                  sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0.5 }}
                 >
-                  {submittingClassic ? (
-                    <><CircularProgress size={16} sx={{ mr: 1, color: '#fff' }} /> Generating Report...</>
-                  ) : (
-                    `Submit & Generate Report (${Object.keys(questionRatings).length}/${questions.length} rated)`
-                  )}
-                </Button>
+                  {showTranscriptInput ? '▾' : '▸'} Paste Transcript (Optional)
+                </Typography>
+                {showTranscriptInput && (
+                  <TextField
+                    multiline rows={3} fullWidth
+                    placeholder="Paste interview transcript here for AI scoring..."
+                    value={classicTranscript}
+                    onChange={e => setClassicTranscript(e.target.value)}
+                    sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: '12px' } }}
+                  />
+                )}
               </Box>
             )}
+
           </Box>}
 
-          {/* RIGHT SIDE - Video Panel (hidden in classic mode) */}
-          {interviewMode === 'video' && <Box sx={{
+          {/* RIGHT SIDE - Video Panel / Mode Selection */}
+          <Box sx={{
+            display: interviewMode === 'classic' && isActive ? 'none' : 'flex',
             width: { xs: '100%', md: '60%' },
             flex: 1,
             minHeight: 0,
             height: '100%',
             background: 'white',
             position: 'relative',
-            display: 'flex',
             flexDirection: 'column',
             p: { xs: 0, md: 1.5 },
           }}>
@@ -1393,14 +1438,15 @@ const VideoInterviewRoom: React.FC = () => {
                           adaptiveStream: true,
                           dynacast: true,
                           videoCaptureDefaults: {
-                            resolution: VideoPresets.h720.resolution,
+                            resolution: VideoPresets.h360.resolution,
                             facingMode: 'user',
                           },
                           publishDefaults: {
-                            videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360],
+                            videoSimulcastLayers: [VideoPresets.h180],
                             videoCodec: 'vp8',
                             dtx: true,
                             red: true,
+                            screenShareEncoding: { maxBitrate: 500000, maxFramerate: 15 },
                           },
                         } as RoomOptions}
                         onConnected={() => {
@@ -1635,7 +1681,7 @@ const VideoInterviewRoom: React.FC = () => {
                       variant="contained"
                       size="large"
                       startIcon={interviewMode === 'classic' && !isUserCandidate && !hasExited ? <Description /> : <Videocam />}
-                      onClick={interviewMode === 'classic' && !isUserCandidate && !hasExited ? () => { /* Classic mode: no video join needed, just scroll to questions */ toast.success('Classic mode — Rate questions on the left panel and submit when done.', { duration: 4000 }); } : handleStart}
+                      onClick={interviewMode === 'classic' && !isUserCandidate && !hasExited ? () => { setIsActive(true); toast.success('Classic mode started — Rate questions and submit when done.', { duration: 3000 }); } : handleStart}
                       sx={{
                         background: interviewMode === 'classic' && !isUserCandidate && !hasExited
                           ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
@@ -1662,8 +1708,56 @@ const VideoInterviewRoom: React.FC = () => {
             </Box>
 
             {/* End Meeting button removed — already inside VideoTilesGrid control bar */}
-          </Box>}
+          </Box>
         </Box>
+
+        {/* Classic Mode: Fixed Submit Bar at bottom - outside scroll area */}
+        {interviewMode === 'classic' && !isUserCandidate && (
+          <Box sx={{
+            p: '12px 20px',
+            borderTop: '2px solid #e2e8f0',
+            background: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            boxShadow: '0 -4px 12px rgba(0,0,0,0.08)',
+            flexShrink: 0,
+          }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                {Object.keys(questionRatings).length}/{questions.length} Questions Rated
+              </Typography>
+              <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                {Object.keys(questionRatings).length === 0 ? 'Rate at least one question to submit' : 'Ready to submit & generate report'}
+              </Typography>
+            </Box>
+            <Button
+              onClick={handleClassicSubmit}
+              disabled={submittingClassic || Object.keys(questionRatings).length === 0}
+              variant="contained"
+              sx={{
+                background: 'linear-gradient(135deg, #020291 0%, #010178 100%)',
+                color: '#fff',
+                borderRadius: '10px',
+                textTransform: 'none',
+                fontWeight: 700,
+                fontSize: '14px',
+                px: 4,
+                py: 1.5,
+                minWidth: 220,
+                boxShadow: '0 4px 12px rgba(2,2,145,0.3)',
+                '&:hover': { background: 'linear-gradient(135deg, #010178 0%, #000066 100%)', boxShadow: '0 6px 16px rgba(2,2,145,0.4)' },
+                '&:disabled': { opacity: 0.5, color: '#fff', background: '#020291' }
+              }}
+            >
+              {submittingClassic ? (
+                <><CircularProgress size={18} sx={{ mr: 1, color: '#fff' }} /> Generating Report...</>
+              ) : (
+                'Submit & Complete Interview'
+              )}
+            </Button>
+          </Box>
+        )}
 
         {/* Recording upload happens in background — no blocking overlay */}
 
@@ -1723,7 +1817,7 @@ const VideoInterviewRoom: React.FC = () => {
       </Box>
   );
 
-  return isGuest ? content : <Navigation>{content}</Navigation>;
+  return isUserCandidate ? content : <Navigation>{content}</Navigation>;
 };
 
 export default VideoInterviewRoom;

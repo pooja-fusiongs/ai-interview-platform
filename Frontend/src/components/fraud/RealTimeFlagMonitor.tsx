@@ -160,9 +160,9 @@ const RealTimeFlagMonitor: React.FC = () => {
   useEffect(() => {
     loadSessions();
     intervalRef.current = setInterval(() => {
-      // Only poll when tab is visible — saves DB connections
+      // Only poll when tab is visible — saves DB connections & bandwidth
       if (!document.hidden) loadSessions();
-    }, 15000); // 15s
+    }, 30000); // 30s (reduced from 15s to save bandwidth)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 

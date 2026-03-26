@@ -81,28 +81,37 @@ const VideoInterviewDetail: React.FC = () => {
 
  
 
-  // Auto-poll for transcript if recording exists but transcript is missing (background thread may be generating)
+  // Auto-poll for transcript with exponential backoff to reduce bandwidth
   useEffect(() => {
     if (transcript || !interview?.recording_url || interview?.status !== 'completed') return;
     let cancelled = false;
     let attempts = 0;
-    const maxAttempts = 24; // Poll for ~2 minutes
+    const maxAttempts = 12; // Fewer attempts with longer gaps
+    let timeoutId: ReturnType<typeof setTimeout>;
 
-    const poll = setInterval(async () => {
+    const pollWithBackoff = async () => {
+      if (attempts >= maxAttempts || cancelled) return;
       attempts++;
-      if (attempts > maxAttempts || cancelled) { clearInterval(poll); return; }
+      // Exponential backoff: 10s, 15s, 20s, 30s, 30s... (caps at 30s)
+      const delay = Math.min(10000 + attempts * 5000, 30000);
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
         if (data.transcript && !cancelled) {
           setTranscript(data.transcript);
           setInterview(data);
-          clearInterval(poll);
           toast.success('Transcript is ready!');
+          return; // Stop polling
         }
       } catch { /* ignore polling errors */ }
-    }, 5000); // every 5 seconds
+      if (!cancelled) {
+        timeoutId = setTimeout(pollWithBackoff, delay);
+      }
+    };
 
-    return () => { cancelled = true; clearInterval(poll); };
+    // Start first poll after 10 seconds
+    timeoutId = setTimeout(pollWithBackoff, 10000);
+
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [interview?.recording_url, interview?.status, transcript, videoId]);
 
 

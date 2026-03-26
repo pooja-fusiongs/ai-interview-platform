@@ -39,22 +39,40 @@ def transcribe_audio_file(file_path: str) -> str:
         raise TranscriptionError(f"Recording file too small ({file_size} bytes), no valid audio")
     
     logger.info(f"[transcribe] Starting real transcription of {os.path.basename(file_path)} ({file_size} bytes)")
-    
-    # Try Groq Whisper first (free, fast)
-    if config.GROQ_API_KEY:
-        try:
-            return _transcribe_with_groq(file_path)
-        except TranscriptionError as e:
-            logger.warning(f"[transcribe] Groq failed: {e}, trying Deepgram fallback...")
 
-    # Fallback: Deepgram pre-recorded API
+    # Try both services and use the one that captured more words
+    groq_result = None
+    deepgram_result = None
+
     if config.DEEPGRAM_API_KEY:
         try:
-            return _transcribe_with_deepgram(file_path)
+            deepgram_result = _transcribe_with_deepgram(file_path)
+            logger.info(f"[transcribe] DeepGram: {len(deepgram_result.split())} words")
         except TranscriptionError as e:
-            logger.warning(f"[transcribe] Deepgram also failed: {e}")
+            logger.warning(f"[transcribe] DeepGram failed: {e}")
 
-    # No transcription service configured or all failed
+    if config.GROQ_API_KEY:
+        try:
+            groq_result = _transcribe_with_groq(file_path)
+            logger.info(f"[transcribe] Groq Whisper: {len(groq_result.split())} words")
+        except TranscriptionError as e:
+            logger.warning(f"[transcribe] Groq failed: {e}")
+
+    # Use the result with more words (more complete transcript)
+    if groq_result and deepgram_result:
+        groq_words = len(groq_result.split())
+        dg_words = len(deepgram_result.split())
+        if dg_words > groq_words:
+            logger.info(f"[transcribe] Using DeepGram ({dg_words} > {groq_words} words)")
+            return deepgram_result
+        else:
+            logger.info(f"[transcribe] Using Groq ({groq_words} >= {dg_words} words)")
+            return groq_result
+    elif deepgram_result:
+        return deepgram_result
+    elif groq_result:
+        return groq_result
+
     raise TranscriptionError("Transcription failed. Check GROQ_API_KEY and DEEPGRAM_API_KEY in .env")
 
 
@@ -176,7 +194,7 @@ def _extract_audio_from_video(video_path: str) -> str:
                 "-vn",                  # No video
                 "-ac", "1",             # Mono
                 "-ar", "16000",         # 16kHz sample rate (optimal for Whisper)
-                "-b:a", "32k",          # Low bitrate to keep file small
+                "-b:a", "96k",          # Higher bitrate for better word capture
                 "-f", "mp3",
                 output_path
             ],

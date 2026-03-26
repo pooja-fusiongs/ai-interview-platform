@@ -41,7 +41,7 @@ export const videoInterviewService = {
     const response = await apiClient.post(`/api/video/interviews/${id}/start`);
     return response.data;
   },
-  endInterview: async (id: number, data?: { max_participants?: number }) => {
+  endInterview: async (id: number, data?: { max_participants?: number; force_complete?: boolean; overall_score?: number | null; recommendation?: string }) => {
     const response = await apiClient.post(`/api/video/interviews/${id}/end`, data || {});
     return response.data;
   },

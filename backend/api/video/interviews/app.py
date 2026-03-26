@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 import sys
 import os
+import hashlib
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
@@ -42,6 +43,13 @@ from services.email_service import send_interview_notification, send_interview_r
 from services.groq_service import transcribe_audio_with_groq
 
 router = APIRouter(tags=["Video Interviews"])
+
+
+def generate_candidate_token(interview_id: int, candidate_id: int) -> str:
+    """Generate a secure token for candidate interview links. Cannot be guessed or removed."""
+    secret = os.getenv("SECRET_KEY", "fallback-secret")
+    raw = f"{interview_id}-{candidate_id}-{secret}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +324,9 @@ def schedule_video_interview(
 
             # Use video-room URL instead of Zoom meeting URL
             frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
-            meeting_url = f"{frontend_url}/video-room/{vi.id}"
+            candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
+            meeting_url = f"{frontend_url}/video-room/{vi.id}?token={candidate_token}"
+            print(f"📧 Candidate email link: {meeting_url}")
 
             send_interview_notification(
                 candidate_email=candidate_email_for_notification,
@@ -1237,10 +1247,18 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                     chosen_source = "recording+realtime"
                     print(f"[BG Transcription] Using recording transcript (more words), both sources available")
                 else:
-                    # Real-time is good enough
-                    final_transcript = realtime_transcript if rt_words >= rec_words else transcript_text
-                    chosen_source = "realtime" if rt_words >= rec_words else "recording"
+                    # Use the longer one — it captured more words
+                    if rt_words >= rec_words:
+                        final_transcript = realtime_transcript
+                        chosen_source = "realtime"
+                    else:
+                        final_transcript = transcript_text
+                        chosen_source = "recording"
                     print(f"[BG Transcription] Using {chosen_source} transcript ({max(rt_words, rec_words)} words)")
+                    # If real-time has speaker labels, append it as reference
+                    if rt_has_speakers and chosen_source == "recording":
+                        final_transcript = final_transcript + "\n\n--- Speaker-Labeled Transcript ---\n" + realtime_transcript
+                        chosen_source = "recording+realtime"
 
             bg_vi.transcript = final_transcript
             bg_vi.transcript_source = chosen_source
@@ -1359,6 +1377,7 @@ async def guest_upload_recording(
         print(f"🎥 Guest recording already exists for vi={video_id}, skipping duplicate upload")
         return {"message": "Recording already uploaded", "recording_url": vi.recording_url}
 
+    # Save file locally (needed for transcription)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"interview_{video_id}_{timestamp}.webm"
     recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "recordings")
@@ -1369,19 +1388,26 @@ async def guest_upload_recording(
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    vi.recording_url = f"/uploads/recordings/{filename}"
-    vi.recording_data = contents  # Store in DB for cross-machine access
+    # Upload to Cloudinary for persistent storage (avoids large binary in DB)
+    from services.cloudinary_upload import upload_recording as cloudinary_upload
+    cloudinary_url = cloudinary_upload(file_path, video_id)
+
+    if cloudinary_url:
+        vi.recording_url = cloudinary_url
+        print(f"🎥 Guest recording uploaded to Cloudinary: {cloudinary_url} ({len(contents)} bytes)")
+    else:
+        vi.recording_url = f"/uploads/recordings/{filename}"
+        print(f"🎥 Cloudinary not configured, using local: {file_path} ({len(contents)} bytes)")
+
     db.commit()
     db.refresh(vi)
-
-    print(f"🎥 Guest recording saved: {file_path} + DB ({len(contents)} bytes)")
 
     # AUTOMATIC TRANSCRIPTION: Trigger immediately after upload
     _start_background_transcription_task(
         vi_id=video_id,
         job_id=vi.job_id,
         started_at=vi.started_at or vi.scheduled_at,
-        recording_url_hint=vi.recording_url,
+        recording_url_hint=f"/uploads/recordings/{filename}",
         session_id=vi.session_id
     )
 
@@ -1414,7 +1440,40 @@ def end_video_interview(
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     max_participants = body.max_participants if body else None
-    print(f"[end_interview] video_id={video_id}, max_participants={max_participants}, current_status={vi.status}")
+    force_complete = body.force_complete if body else False
+    print(f"[end_interview] video_id={video_id}, max_participants={max_participants}, force_complete={force_complete}, current_status={vi.status}")
+
+    # Classic mode: force complete regardless of participant count
+    if force_complete:
+        print(f"[end_interview] Force complete (classic mode) — marking as COMPLETED")
+        vi.status = VideoInterviewStatus.COMPLETED.value
+        vi.ended_at = datetime.now(timezone.utc)
+
+        # Create InterviewSession with score for classic mode
+        if body.overall_score is not None and not vi.session_id:
+            from models import InterviewSession, InterviewSessionStatus, Recommendation
+            # Convert 1-10 recruiter score to 0-100 scale
+            score_100 = float(body.overall_score) * 10
+            rec_str = body.recommendation or 'next_round'
+            rec_enum = Recommendation(rec_str) if rec_str in ('select', 'next_round', 'reject') else Recommendation.NEXT_ROUND
+
+            session = InterviewSession(
+                job_id=vi.job_id,
+                candidate_id=vi.candidate_id,
+                status=InterviewSessionStatus.SCORED,
+                overall_score=score_100,
+                recommendation=rec_enum,
+                strengths="Classic mode — scored by recruiter",
+                weaknesses="",
+            )
+            db.add(session)
+            db.flush()
+            vi.session_id = session.id
+            print(f"[end_interview] Classic mode: created InterviewSession #{session.id}, score={score_100}/100")
+
+        db.commit()
+        db.refresh(vi)
+        return _build_response(vi, db)
 
     # If status is WAITING_FOR_CANDIDATE, don't change it when recruiter leaves
     if vi.status == VideoInterviewStatus.WAITING.value:
@@ -1755,12 +1814,20 @@ def create_demo_video_interview(
 @router.get("/api/video/interviews/{video_id}/ai-questions")
 def get_ai_interview_questions(
     video_id: int,
+    token: str = None,
     db: Session = Depends(get_db),
 ):
     """
     Get approved questions for AI-driven interview.
-    NO AUTH REQUIRED - AI agent cannot authenticate.
+    Blocked for candidates — only interviewers/AI agents can access.
+    If ?token= matches candidate token, reject (candidate trying to access questions).
     """
+    # Block candidate token holders from seeing questions
+    vi_check = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if vi_check and token:
+        expected_token = generate_candidate_token(video_id, vi_check.candidate_id)
+        if token == expected_token:
+            raise HTTPException(status_code=403, detail="Candidates cannot access interview questions")
     from models import InterviewQuestion, JobApplication
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
@@ -2620,7 +2687,7 @@ async def upload_recording(
         print(f"🎥 Recording already exists for vi={video_id}, skipping duplicate upload")
         return {"message": "Recording already uploaded", "recording_url": vi.recording_url}
 
-    # Save file to uploads/recordings/
+    # Save file locally (needed for transcription)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"interview_{video_id}_{timestamp}.webm"
     recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "recordings")
@@ -2631,12 +2698,19 @@ async def upload_recording(
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    vi.recording_url = f"/uploads/recordings/{filename}"
-    vi.recording_data = contents  # Store in DB for cross-machine access
+    # Upload to Cloudinary for persistent storage (avoids large binary in DB)
+    from services.cloudinary_upload import upload_recording as cloudinary_upload
+    cloudinary_url = cloudinary_upload(file_path, video_id)
+
+    if cloudinary_url:
+        vi.recording_url = cloudinary_url
+        print(f"🎥 Recording uploaded to Cloudinary: {cloudinary_url} ({len(contents)} bytes)")
+    else:
+        vi.recording_url = f"/uploads/recordings/{filename}"
+        print(f"🎥 Cloudinary not configured, using local: {file_path} ({len(contents)} bytes)")
+
     db.commit()
     db.refresh(vi)
-
-    print(f"🎥 Recording saved: {file_path} + DB ({len(contents)} bytes)")
 
     # AUTOMATIC TRANSCRIPTION: Trigger immediately after upload
     _start_background_transcription_task(
@@ -2645,7 +2719,7 @@ async def upload_recording(
         candidate_id=vi.candidate_id,
         candidate_email=vi.candidate.email if vi.candidate else None,
         started_at=vi.started_at or vi.scheduled_at,
-        recording_url_hint=vi.recording_url,
+        recording_url_hint=f"/uploads/recordings/{filename}",
         session_id=vi.session_id
     )
 
@@ -2674,19 +2748,15 @@ def get_recording(
     if current_user.role == UserRole.CANDIDATE and vi.candidate_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Try local file first
+    # If Cloudinary URL, redirect to it
+    if vi.recording_url.startswith("http"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=vi.recording_url)
+
+    # Try local file
     file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", vi.recording_url.lstrip("/"))
     if os.path.exists(file_path):
         return FileResponse(file_path, media_type="video/webm", filename=os.path.basename(file_path))
-
-    # Fallback: serve from DB
-    if vi.recording_data:
-        from fastapi.responses import Response
-        return Response(
-            content=vi.recording_data,
-            media_type="video/webm",
-            headers={"Content-Disposition": f"inline; filename=interview_{video_id}.webm"}
-        )
 
     raise HTTPException(status_code=404, detail="Recording file not found")
 
@@ -2700,15 +2770,65 @@ def stream_recording(video_id: int, db: Session = Depends(get_db)):
     if not vi or not vi.recording_url:
         raise HTTPException(status_code=404, detail="Recording not found")
 
-    # 1. Try local file
+    # If Cloudinary URL, redirect to it
+    if vi.recording_url.startswith("http"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=vi.recording_url)
+
+    # Try local file
     file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", vi.recording_url.lstrip("/"))
     if os.path.exists(file_path):
         mime = "video/mp4" if file_path.endswith(".mp4") else "video/webm"
         return FileResponse(file_path, media_type=mime)
 
-    # 2. Try DB
-    if vi.recording_data:
-        mime = "video/mp4" if vi.recording_url.endswith(".mp4") else "video/webm"
-        return Response(content=vi.recording_data, media_type=mime)
-
     raise HTTPException(status_code=404, detail="Recording file not found")
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/migrate-recordings-to-cloudinary
+# One-time migration: upload local recordings to Cloudinary & update DB URLs
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/migrate-recordings-to-cloudinary")
+def migrate_recordings_to_cloudinary(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Migrate local recordings to Cloudinary (admin only, one-time)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from services.cloudinary_upload import upload_recording as cloudinary_upload
+
+    interviews = db.query(VideoInterview).filter(
+        VideoInterview.recording_url.isnot(None),
+        ~VideoInterview.recording_url.like("http%"),
+    ).all()
+
+    results = {"success": 0, "failed": 0, "skipped": 0, "details": []}
+
+    for vi in interviews:
+        filename = os.path.basename(vi.recording_url)
+        recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "recordings")
+        file_path = os.path.join(recordings_dir, filename)
+
+        if not os.path.exists(file_path):
+            results["skipped"] += 1
+            results["details"].append(f"ID={vi.id}: file not found ({filename})")
+            continue
+
+        try:
+            url = cloudinary_upload(file_path, vi.id)
+            if url:
+                vi.recording_url = url
+                db.commit()
+                results["success"] += 1
+                results["details"].append(f"ID={vi.id}: OK -> {url}")
+            else:
+                results["failed"] += 1
+                results["details"].append(f"ID={vi.id}: Cloudinary returned None")
+        except Exception as e:
+            results["failed"] += 1
+            results["details"].append(f"ID={vi.id}: ERROR {e}")
+
+    return results

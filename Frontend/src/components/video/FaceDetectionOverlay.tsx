@@ -152,13 +152,16 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     }
   }, [rawFaceCount, cameraTrackEnabled]);
 
-  // --- Send Unified Stats Every 5 Seconds ---
+  // --- Send Unified Stats Every 15 Seconds (batched to reduce bandwidth) ---
   useEffect(() => {
     if (!videoInterviewId || !enabled || status !== 'running') return;
 
     const interval = setInterval(async () => {
+      // Skip if tab is hidden — no need to send when user isn't looking
+      if (document.hidden) return;
+
       const payload = extractAndResetPayload(videoInterviewId);
-      
+
       // Prevent sending empty payloads if detection just started
       if (payload.total_detections === 0 && payload.total_segments === 0) return;
 
@@ -167,7 +170,7 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
       } catch (err) {
          console.error('[FraudDetection] Unified event failed:', err);
       }
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, [videoInterviewId, enabled, status, extractAndResetPayload]);

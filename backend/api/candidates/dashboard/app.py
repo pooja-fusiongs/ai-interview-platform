@@ -8,7 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 from database import get_db
 from models import (
     User, UserRole, JobApplication, InterviewSession, InterviewSessionStatus,
-    VideoInterview, Notification
+    VideoInterview, 
 )
 from api.auth.jwt_handler import get_current_active_user
 
