@@ -465,18 +465,41 @@ Respond ONLY with valid JSON:
         # The prompt explicitly asks for 0-100 scale. Trust the LLM's output.
 
         # Validate overall_score — only count questions that were actually asked
-        asked_scores = [pq.get("score", 0) for pq in result.get("per_question", [])
-                        if not any(phrase in str(pq.get("extracted_answer", "")).lower()
-                                   for phrase in ["not asked", "not answered", "no answer", "not covered"])]
-        overall = result.get("overall_score")
+        # Discard unanswered questions so partial interviews are scored fairly
+        not_asked_phrases = ["not asked", "not answered", "no answer", "not covered",
+                             "not discussed", "not mentioned", "question was not"]
+        asked_questions = []
+        not_asked_questions = []
+        for pq in result.get("per_question", []):
+            extracted = str(pq.get("extracted_answer", "")).lower()
+            is_not_asked = any(phrase in extracted for phrase in not_asked_phrases)
+            # Also treat 0-scored questions with no meaningful answer as not asked
+            if not is_not_asked:
+                extracted_words = [w for w in extracted.split() if len(w) > 1]
+                _greetings = {'hello', 'hi', 'hey', 'ok', 'okay', 'yes', 'no', 'yeah',
+                              'thanks', 'thank', 'you', 'good', 'fine', 'sure', 'um', 'uh', 'bye'}
+                meaningful_words = [w for w in extracted_words if w not in _greetings]
+                if len(meaningful_words) < 3 and pq.get("score", 0) == 0:
+                    is_not_asked = True
+            if is_not_asked:
+                not_asked_questions.append(pq)
+            else:
+                asked_questions.append(pq)
+
+        # Mark not-asked questions explicitly
+        for pq in not_asked_questions:
+            pq["not_asked"] = True
+
+        asked_scores = [pq.get("score", 0) for pq in asked_questions]
+
         if not asked_scores:
-            # No questions were asked — overall score is 0
             overall = 0.0
-        elif overall is None or not isinstance(overall, (int, float)):
-            overall = sum(asked_scores) / len(asked_scores) if asked_scores else 0.0
         else:
-            overall = float(overall)
+            # Always recompute from asked questions only (don't trust AI's overall which includes 0s for unanswered)
+            overall = sum(asked_scores) / len(asked_scores)
         result["overall_score"] = round(max(0.0, min(100.0, overall)), 1)
+
+        print(f"   Questions asked: {len(asked_questions)}, Not asked: {len(not_asked_questions)}")
 
         # Normalize recommendation using 0-100 thresholds
         ov = result["overall_score"]

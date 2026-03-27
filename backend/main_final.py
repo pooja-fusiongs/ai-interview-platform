@@ -857,12 +857,13 @@ def get_candidates(
     try:
         print(f"Fetching candidates from job_applications...")
 
-        # Fetch all job applications
-        query = db.query(JobApplication)
+        from sqlalchemy import distinct
 
+        # Base filter for search
+        base_filter = []
         if search:
             search_term = f"%{search.lower()}%"
-            query = query.filter(
+            base_filter.append(
                 or_(
                     JobApplication.applicant_name.ilike(search_term),
                     JobApplication.applicant_email.ilike(search_term),
@@ -870,10 +871,40 @@ def get_candidates(
                 )
             )
 
-        all_applications = query.order_by(JobApplication.applied_at.desc()).all()
+        # Step 1: Get total count of distinct candidate emails (for pagination metadata)
+        count_query = db.query(func.count(distinct(func.lower(JobApplication.applicant_email))))
+        for f in base_filter:
+            count_query = count_query.filter(f)
+        total = count_query.scalar() or 0
 
-        if not all_applications:
+        if total == 0:
             return {"success": True, "data": [], "total": 0, "message": "No candidates found"}
+
+        # Step 2: Get the paginated set of distinct emails, ordered by latest application date
+        email_page_query = db.query(
+            func.lower(JobApplication.applicant_email).label("email"),
+            func.max(JobApplication.applied_at).label("latest_applied")
+        )
+        for f in base_filter:
+            email_page_query = email_page_query.filter(f)
+        email_page_query = email_page_query.group_by(
+            func.lower(JobApplication.applicant_email)
+        ).order_by(
+            func.max(JobApplication.applied_at).desc()
+        ).offset(skip).limit(limit)
+
+        paginated_emails = [row.email for row in email_page_query.all()]
+
+        if not paginated_emails:
+            return {"success": True, "data": [], "total": total, "message": f"Found {total} candidates"}
+
+        # Step 3: Load ALL applications only for the paginated set of emails
+        app_query = db.query(JobApplication).filter(
+            func.lower(JobApplication.applicant_email).in_(paginated_emails)
+        )
+        for f in base_filter:
+            app_query = app_query.filter(f)
+        all_applications = app_query.order_by(JobApplication.applied_at.desc()).all()
 
         # --- Deduplicate by email: keep all applications but group by email ---
         email_to_apps = {}
@@ -1031,9 +1062,9 @@ def get_candidates(
             }
             candidate_list.append(candidate_data)
 
-        # Apply pagination
-        total = len(candidate_list)
-        candidate_list = candidate_list[skip:skip + limit]
+        # Sort candidate_list to match the paginated email order
+        email_order = {e: i for i, e in enumerate(paginated_emails)}
+        candidate_list.sort(key=lambda c: email_order.get(c["email"].lower(), 0))
 
         return {
             "success": True,

@@ -1179,19 +1179,23 @@ const VideoInterviewRoom: React.FC = () => {
                 px: '20px', py: '12px',
                 background: 'white',
                 borderBottom: '1px solid #e2e8f0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
               }}>
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
-                  Rated: {Object.keys(questionRatings).length} / {questions.length} questions
-                </Typography>
-                {Object.keys(questionRatings).length > 0 && (
-                  <Chip
-                    label={`Avg: ${(Object.values(questionRatings).reduce((a, b) => a + b, 0) / Object.values(questionRatings).length).toFixed(1)}/10`}
-                    size="small"
-                    sx={{ fontSize: '11px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed' }}
-                  />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+                    Rated: {Object.keys(questionRatings).length} / {questions.length} questions
+                  </Typography>
+                  {Object.keys(questionRatings).length > 0 && (
+                    <Chip
+                      label={`Avg: ${(Object.values(questionRatings).reduce((a, b) => a + b, 0) / Object.values(questionRatings).length).toFixed(1)}/10`}
+                      size="small"
+                      sx={{ fontSize: '11px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed' }}
+                    />
+                  )}
+                </Box>
+                {Object.keys(questionRatings).length > 0 && Object.keys(questionRatings).length < questions.length && (
+                  <Typography sx={{ fontSize: '11px', color: '#64748b', mt: '4px' }}>
+                    Only rated questions will be considered in final scoring
+                  </Typography>
                 )}
               </Box>
             )}

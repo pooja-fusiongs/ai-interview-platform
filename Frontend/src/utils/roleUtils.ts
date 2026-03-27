@@ -96,8 +96,8 @@ export const getRouteAccess = (): RouteAccess[] => [
   {
     path: '/video-scheduler',
     allowedRoles: ['recruiter', 'admin'],
-    label: 'Schedule Interview',
-    icon: 'fas fa-calendar-plus'
+    label: 'Scheduled Interviews',
+    icon: 'fas fa-calendar-check'
   },
   // Fraud Detection
   {

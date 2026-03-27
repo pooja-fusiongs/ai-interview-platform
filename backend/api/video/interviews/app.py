@@ -7,7 +7,7 @@ Zoom service for meeting creation/deletion and checks for associated
 fraud analysis records.
 """
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import List
@@ -402,6 +402,9 @@ def schedule_video_interview(
     response_model=List[VideoInterviewListResponse],
 )
 def list_video_interviews(
+    response: Response,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=200, description="Max records to return"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -433,8 +436,12 @@ def list_video_interviews(
             query = query.filter(VideoInterview.interviewer_id == current_user.id)
             print(f"[DEBUG] Filtering for interviewer_id: {current_user.id}")
 
-        interviews = query.order_by(VideoInterview.scheduled_at.desc()).limit(100).all()
-        print(f"[DEBUG] Found {len(interviews)} interviews")
+        # Total count for pagination (before applying offset/limit)
+        total_count = query.count()
+        response.headers["X-Total-Count"] = str(total_count)
+
+        interviews = query.order_by(VideoInterview.scheduled_at.desc()).offset(skip).limit(limit).all()
+        print(f"[DEBUG] Found {len(interviews)} interviews (total: {total_count}, skip={skip}, limit={limit})")
         
         # Optimize: Fetch all fraud analyses in one query
         interview_ids = [vi.id for vi in interviews]
@@ -2236,9 +2243,13 @@ def generate_interview_score(
         session.weaknesses = llm_result.get("weaknesses", "")
         session.status = InterviewSessionStatus.SCORED
 
-        # Save per-question scores
+        # Save per-question scores (skip questions that were not asked/answered)
         per_question_scores = llm_result.get("per_question", [])
         for pq in per_question_scores:
+            # Skip questions that were not asked in the interview
+            if pq.get("not_asked"):
+                continue
+
             q_id = pq.get("question_id")
 
             if use_direct_scoring:

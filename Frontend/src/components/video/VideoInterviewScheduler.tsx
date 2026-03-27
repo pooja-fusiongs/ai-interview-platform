@@ -15,7 +15,21 @@ import {
   Fade,
   InputAdornment,
   Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  IconButton,
+  TablePagination,
+  Skeleton,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
+import { Visibility, PlayArrow, Cancel, Refresh, ArrowBack } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker';
@@ -64,10 +78,37 @@ const DURATION_OPTIONS = [
   { value: 60, label: '60 min', description: 'Technical deep-dive' },
 ];
 
+const getStatusColor = (status: string): 'primary' | 'warning' | 'success' | 'error' | 'default' => {
+  const s = status.toLowerCase();
+  if (s === 'scheduled') return 'primary';
+  if (s === 'in_progress') return 'warning';
+  if (s === 'completed') return 'success';
+  if (s === 'cancelled' || s === 'no_show') return 'error';
+  return 'default';
+};
+
+const getStatusLabel = (status: string): string => {
+  const s = status.toLowerCase();
+  if (s === 'no_show') return 'Candidate Absent';
+  return s.replace('_', ' ');
+};
+
 const VideoInterviewScheduler: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // Form state
+  // View mode: 'list' (default) or 'form'
+  const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
+
+  // ========== List State ==========
+  const [interviews, setInterviews] = useState<any[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [listError, setListError] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // ========== Form State ==========
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
@@ -106,10 +147,56 @@ const VideoInterviewScheduler: React.FC = () => {
   // Get minimum date (today)
   const minDate = useMemo(() => dayjs(), []);
 
-  // Load jobs on mount
+  // ========== List Functions ==========
+  const fetchInterviews = async () => {
+    try {
+      setLoadingList(true);
+      setListError('');
+      const data = await videoInterviewService.getInterviews();
+      // Only show scheduled interviews (other statuses are shown on Video Interviews page)
+      const scheduledOnly = (data || []).filter((i: any) => {
+        const s = (i.status || '').toLowerCase();
+        return s === 'scheduled';
+      });
+      setInterviews(scheduledOnly);
+    } catch (err: any) {
+      setListError(err.message || 'Failed to load interviews.');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInterviews();
+  }, []);
+
+  const handleCancelInterview = async (id: number) => {
+    try {
+      await videoInterviewService.cancelInterview(id);
+      setInterviews((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, status: 'cancelled' } : i))
+      );
+    } catch (err: any) {
+      setListError(err.message || 'Failed to cancel interview.');
+    }
+  };
+
+  // Sort by scheduled_at descending
+  const sortedInterviews = [...interviews].sort((a, b) => {
+    const dateA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
+    const dateB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  const paginatedInterviews = sortedInterviews.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
+
+  // ========== Form Functions ==========
+  // Load jobs on mount (for form)
   useEffect(() => {
     loadJobs();
-    // Also load all candidates as fallback
     loadAllCandidates();
   }, []);
 
@@ -123,11 +210,7 @@ const VideoInterviewScheduler: React.FC = () => {
   const loadJobs = async () => {
     setLoadingJobs(true);
     try {
-      // Try without status filter first
       const response = await jobService.getJobs({ limit: 100 });
-      console.log('Jobs API raw response:', response);
-
-      // Handle various API response structures
       let rawJobs: any[] = [];
       if (Array.isArray(response)) {
         rawJobs = response;
@@ -138,15 +221,8 @@ const VideoInterviewScheduler: React.FC = () => {
       } else if (response?.data?.jobs && Array.isArray(response.data.jobs)) {
         rawJobs = response.data.jobs;
       }
-
-      // Normalize each job to ensure consistent field names
       const normalizedJobs = rawJobs.map(normalizeJob).filter(job => job.id);
-      console.log('Normalized jobs:', normalizedJobs);
       setJobs(normalizedJobs);
-
-      if (normalizedJobs.length === 0) {
-        console.warn('No jobs found in API response');
-      }
     } catch (err: any) {
       console.error('Failed to load jobs:', err?.response?.data || err?.message || err);
       setJobs([]);
@@ -155,14 +231,11 @@ const VideoInterviewScheduler: React.FC = () => {
     }
   };
 
-  // Store all candidates for fallback
   const [allCandidates, setAllCandidates] = useState<Candidate[]>([]);
 
   const loadAllCandidates = async () => {
     try {
       const response = await candidateService.getCandidates({ limit: 100 });
-      console.log('All candidates API raw response:', response);
-
       let rawCandidates: any[] = [];
       if (Array.isArray(response)) {
         rawCandidates = response;
@@ -173,9 +246,7 @@ const VideoInterviewScheduler: React.FC = () => {
       } else if (response?.data?.candidates && Array.isArray(response.data.candidates)) {
         rawCandidates = response.data.candidates;
       }
-
       const normalizedCandidates = rawCandidates.map(normalizeCandidate).filter(c => c.id);
-      console.log('All normalized candidates:', normalizedCandidates);
       setAllCandidates(normalizedCandidates);
     } catch (err: any) {
       console.error('Failed to load all candidates:', err?.response?.data || err?.message || err);
@@ -186,8 +257,6 @@ const VideoInterviewScheduler: React.FC = () => {
     setLoadingCandidates(true);
     try {
       const response = await candidateService.getCandidatesByJob(jobId, { limit: 100 });
-      console.log('Candidates by job API raw response:', response);
-
       let rawCandidates: any[] = [];
       if (Array.isArray(response)) {
         rawCandidates = response;
@@ -198,22 +267,15 @@ const VideoInterviewScheduler: React.FC = () => {
       } else if (response?.data?.candidates && Array.isArray(response.data.candidates)) {
         rawCandidates = response.data.candidates;
       }
-
       const normalizedCandidates = rawCandidates.map(normalizeCandidate).filter(c => c.id);
-      console.log('Normalized candidates for job:', normalizedCandidates);
-
-      // If no candidates found for this job, use all candidates as fallback
       if (normalizedCandidates.length === 0 && allCandidates.length > 0) {
-        console.log('Using all candidates as fallback');
         setCandidates(allCandidates);
       } else {
         setCandidates(normalizedCandidates);
       }
     } catch (err: any) {
       console.error('Failed to load candidates by job:', err?.response?.data || err?.message || err);
-      // Use all candidates as fallback on error
       if (allCandidates.length > 0) {
-        console.log('Using all candidates as fallback due to error');
         setCandidates(allCandidates);
       } else {
         setCandidates([]);
@@ -242,6 +304,17 @@ const VideoInterviewScheduler: React.FC = () => {
 
   const isFormValid = validation.job && validation.candidate && validation.scheduledAt;
 
+  const resetForm = () => {
+    setSelectedJob(null);
+    setSelectedCandidate(null);
+    setSelectedDate(null);
+    setSelectedTime(dayjs().hour(0).minute(0));
+    setDuration(45);
+    setTouched({ job: false, candidate: false, scheduledAt: false });
+    setError('');
+    setSuccess(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) {
@@ -259,7 +332,6 @@ const VideoInterviewScheduler: React.FC = () => {
     setSuccess(null);
 
     try {
-      // Combine date and time for API
       const scheduledDateTime = selectedDate!
         .hour(selectedTime!.hour())
         .minute(selectedTime!.minute())
@@ -274,16 +346,17 @@ const VideoInterviewScheduler: React.FC = () => {
       });
 
       if (result.questions_approved === false) {
-        // Interview created but questions need approval - redirect to interview-outline page
         setError('Interview scheduled! Please approve the interview questions first, then the interview will be ready.');
         setTimeout(() => {
           navigate(`/interview-outline/${result.question_session_id}?from=schedule-interview&jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}&interviewId=${result.id}`);
         }, 2500);
       } else {
         setSuccess(result);
-        // Redirect to video interviews list on success
+        // Go back to list and refresh
         setTimeout(() => {
-          navigate('/video-interviews');
+          resetForm();
+          setViewMode('list');
+          fetchInterviews();
         }, 1500);
       }
     } catch (err: any) {
@@ -353,560 +426,836 @@ const VideoInterviewScheduler: React.FC = () => {
     );
   };
 
+  // ========== RENDER ==========
   return (
     <Navigation>
-      <Box
-        sx={{
-          minHeight: '100vh',
-          background: '#F8F9FB',
-          padding: { xs: '16px 12px', sm: '24px 20px', md: '32px 24px' },
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        {/* Page Header */}
-        <Box sx={{ width: '100%', maxWidth: 520, mb: { xs: '20px', md: '28px' } }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' }, mb: '6px' }}>
-            <Box
-              sx={{
-                width: { xs: 38, md: 44 },
-                height: { xs: 38, md: 44 },
-                borderRadius: '12px',
-                background: ' #020291',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)',
-                flexShrink: 0,
-              }}
-            >
-              <i className="fas fa-video" style={{ color: '#fff', fontSize: '16px' }} />
-            </Box>
-            <Box>
-              <Typography
-                sx={{
-                  fontSize: { xs: '18px', sm: '20px', md: '22px' },
-                  fontWeight: 700,
-                  color: '#1e293b',
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                Schedule Interview
-              </Typography>
-              <Typography sx={{ fontSize: { xs: '12px', md: '14px' }, color: '#64748b' }}>
-                Set up a video interview with your candidate
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-
-        {/* Main Card */}
-        <Card
-          sx={{
-            width: '100%',
-            maxWidth: 520,
-            borderRadius: '12px',
-            border: '1px solid #e5e7eb',
-            boxShadow: '0px 8px 24px rgba(2, 2, 145, 0.12)',
-            overflow: 'visible',
-          }}
-        >
-          <CardContent sx={{ padding: { xs: '16px 16px 20px', sm: '20px 22px 26px', md: '28px 28px 32px' } }}>
-            <form onSubmit={handleSubmit}>
-              {/* Job Selection */}
-              <Box sx={{ mb: '22px' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
-                  <Typography
-                    sx={{
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: '#374151',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <i className="fas fa-briefcase" style={{ fontSize: '11px', color: '#6b7280' }} />
-                    Job Position
-                  </Typography>
-                  <ValidationIcon isValid={validation.job} show={touched.job} />
-                </Box>
-                <Autocomplete
-                  options={jobs}
-                  value={selectedJob}
-                  onChange={(_, value) => {
-                    setSelectedJob(value);
-                    setTouched((prev) => ({ ...prev, job: true }));
-                  }}
-                  onBlur={() => setTouched((prev) => ({ ...prev, job: true }))}
-                  getOptionLabel={(option) => {
-                    if (!option) return '';
-                    const title = option.title || 'Untitled';
-                    const company = option.company;
-                    return company ? `${title} - ${company}` : title;
-                  }}
-                  loading={loadingJobs}
-                  isOptionEqualToValue={(option, value) => option?.id === value?.id}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      placeholder="Search and select a job..."
-                      error={touched.job && !validation.job}
-                      helperText={touched.job && !validation.job ? 'Please select a job position' : ''}
-                      sx={inputStyles}
-                      InputProps={{
-                        ...params.InputProps,
-                        startAdornment: (
-                          <>
-                            <InputAdornment position="start">
-                              <i className="fas fa-search" style={{ color: '#9ca3af', fontSize: '13px' }} />
-                            </InputAdornment>
-                            {params.InputProps.startAdornment}
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                  renderOption={(props, option) => (
-                    <Box component="li" {...props} key={option.id} sx={{ padding: '10px 14px !important' }}>
-                      <Box>
-                        <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>
-                          {option.title || 'Untitled Job'}
-                        </Typography>
-                        {option.company && (
-                          <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                            {option.company}
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  )}
-                />
-              </Box>
-
-              {/* Candidate Selection */}
-              <Box sx={{ mb: '22px' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
-                  <Typography
-                    sx={{
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: '#374151',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <i className="fas fa-user" style={{ fontSize: '11px', color: '#6b7280' }} />
-                    Candidate
-                  </Typography>
-                  <ValidationIcon isValid={validation.candidate} show={touched.candidate} />
-                </Box>
-                <Autocomplete
-                  options={candidates}
-                  value={selectedCandidate}
-                  onChange={(_, value) => {
-                    setSelectedCandidate(value);
-                    setTouched((prev) => ({ ...prev, candidate: true }));
-                  }}
-                  onBlur={() => setTouched((prev) => ({ ...prev, candidate: true }))}
-                  getOptionLabel={(option) => {
-                    if (!option) return '';
-                    const name = option.name || 'Unknown';
-                    const email = option.email;
-                    return email ? `${name} (${email})` : name;
-                  }}
-                  loading={loadingCandidates}
-                  disabled={!selectedJob || loadingCandidates}
-                  isOptionEqualToValue={(option, value) => option?.id === value?.id}
-                  noOptionsText={selectedJob ? 'No candidates found for this job' : 'Select a job first'}
-                  filterOptions={(options, { inputValue }) => {
-                    const filterValue = inputValue.toLowerCase();
-                    return options.filter(
-                      (option) =>
-                        option.name?.toLowerCase().includes(filterValue) ||
-                        option.email?.toLowerCase().includes(filterValue)
-                    );
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      placeholder={selectedJob ? 'Search and select a candidate...' : 'Select a job first'}
-                      error={touched.candidate && !validation.candidate}
-                      helperText={touched.candidate && !validation.candidate ? 'Please select a candidate' : ''}
-                      sx={inputStyles}
-                      InputProps={{
-                        ...params.InputProps,
-                        startAdornment: (
-                          <>
-                            <InputAdornment position="start">
-                              <i className="fas fa-search" style={{ color: '#9ca3af', fontSize: '13px' }} />
-                            </InputAdornment>
-                            {params.InputProps.startAdornment}
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                  renderOption={(props, option) => (
-                    <Box component="li" {...props} key={option.id} sx={{ padding: '10px 14px !important' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Box
-                          sx={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: '8px',
-                            background: 'linear-gradient(135deg, #020291, #020291)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#fff',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {(option.name || 'U').charAt(0).toUpperCase()}
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>
-                            {option.name || 'Unknown Candidate'}
-                          </Typography>
-                          <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                            {option.email || 'No email'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-                  )}
-                />
-              </Box>
-
-              {/* Date & Time */}
-              <Box sx={{ mb: '22px' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
-                  <Typography
-                    sx={{
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: '#374151',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <i className="fas fa-calendar-alt" style={{ fontSize: '11px', color: '#6b7280' }} />
-                    Date & Time
-                  </Typography>
-                  <ValidationIcon isValid={validation.scheduledAt} show={touched.scheduledAt} />
-                </Box>
-
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Box sx={{ display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap', flexDirection: { xs: 'column', sm: 'row' } }}>
-                    {/* Date Picker - Opens Modal */}
-                    <MobileDatePicker
-                      value={selectedDate}
-                      onChange={(newValue) => {
-                        setSelectedDate(newValue);
-                        setTouched((prev) => ({ ...prev, scheduledAt: true }));
-                      }}
-                      minDate={minDate}
-                      format="DD-MM-YYYY"
-                      sx={{ flex: 1, minWidth: 0 }}
-                      slotProps={{
-                        textField: {
-                          size: 'medium',
-                          placeholder: 'Select date',
-                          error: touched.scheduledAt && !selectedDate,
-                          helperText: touched.scheduledAt && !selectedDate ? 'Date is required' : '',
-                          sx: { ...inputStyles, width: '100%' },
-                          InputProps: {
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <i className="fas fa-calendar" style={{ color: '#9ca3af', fontSize: '14px' }} />
-                              </InputAdornment>
-                            ),
-                          },
-                        },
-                        dialog: {
-                          sx: {
-                            '& .MuiPickersCalendarHeader-root': {
-                              backgroundColor: '#020291',
-                              color: '#fff',
-                            },
-                            '& .MuiPickersDay-root.Mui-selected': {
-                              backgroundColor: '#020291',
-                            },
-                            '& .MuiButton-root': {
-                              color: '#020291',
-                            },
-                          },
-                        },
-                      }}
-                    />
-
-                    {/* Time Picker - Opens Modal */}
-                    <MobileTimePicker
-                      value={selectedTime}
-                      onChange={(newValue) => {
-                        setSelectedTime(newValue);
-                        setTouched((prev) => ({ ...prev, scheduledAt: true }));
-                      }}
-                      format="HH:mm"
-                      ampm={false}
-                      sx={{ flex: 1, minWidth: 0 }}
-                      slotProps={{
-                        textField: {
-                          size: 'medium',
-                          placeholder: 'Select time',
-                          error: touched.scheduledAt && !selectedTime,
-                          helperText: touched.scheduledAt && !selectedTime ? 'Time is required' : '',
-                          sx: { ...inputStyles, width: '100%' },
-                          InputProps: {
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <i className="fas fa-clock" style={{ color: '#9ca3af', fontSize: '14px' }} />
-                              </InputAdornment>
-                            ),
-                          },
-                        },
-                        dialog: {
-                          sx: {
-                            '& .MuiPickersToolbar-root': {
-                              backgroundColor: '#020291',
-                              color: '#fff',
-                            },
-                            '& .MuiClock-pin, & .MuiClockPointer-root, & .MuiClockPointer-thumb': {
-                              backgroundColor: '#020291',
-                            },
-                            '& .MuiButton-root': {
-                              color: '#020291',
-                            },
-                          },
-                        },
-                      }}
-                    />
-                  </Box>
-                </LocalizationProvider>
-
-                {touched.scheduledAt && !validation.scheduledAt && (
-                  <Typography sx={{ fontSize: '12px', color: '#ef4444', mt: '6px', ml: '14px' }}>
-                    Please select a future date and time
-                  </Typography>
-                )}
-
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: '8px' }}>
-                  <i className="fas fa-globe" style={{ fontSize: '11px', color: '#9ca3af' }} />
-                  <Typography sx={{ fontSize: '12px', color: '#6b7280' }}>
-                    {userTimezone} ({timezoneOffset})
-                  </Typography>
-                </Box>
-              </Box>
-
-              {/* Duration Pills */}
-              <Box sx={{ mb: '28px' }}>
-                <Typography
+      <Box sx={{ padding: { xs: '12px', sm: '16px', md: '20px' }, background: '#f8fafc', minHeight: '100vh' }}>
+        {viewMode === 'list' ? (
+          /* ==================== LIST VIEW ==================== */
+          <>
+            {/* Header with title and Schedule Interview button */}
+            <Box sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              justifyContent: 'space-between',
+              alignItems: { xs: 'stretch', sm: 'center' },
+              gap: { xs: 2, sm: 0 },
+              mb: 3
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' } }}>
+                <Box
                   sx={{
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: '#374151',
-                    mb: '10px',
+                    width: { xs: 38, md: 44 },
+                    height: { xs: 38, md: 44 },
+                    borderRadius: '12px',
+                    background: '#020291',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(2, 2, 145, 0.25)',
+                    flexShrink: 0,
                   }}
                 >
-                  <i className="fas fa-hourglass-half" style={{ fontSize: '11px', color: '#6b7280' }} />
-                  Duration
-                </Typography>
-                <Box sx={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {DURATION_OPTIONS.map((option) => (
-                    <Tooltip
-                      key={option.value}
-                      title={option.description}
-                      arrow
-                      placement="top"
-                    >
-                      <Box
-                        onClick={() => setDuration(option.value)}
-                        sx={{
-                          flex: { xs: '1 1 100%', sm: 1 },
-                          minWidth: { xs: 'auto', sm: 0 },
-                          padding: '14px 12px',
-                          borderRadius: '10px',
-                          border: `1.5px solid ${duration === option.value ? '#020291' : '#e5e7eb'}`,
-                          backgroundColor: duration === option.value ? '#EEF0FF' : '#fff',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          textAlign: 'center',
-                          position: 'relative',
-                          '&:hover': {
-                            borderColor: duration === option.value ? '#020291' : '#d1d5db',
-                            backgroundColor: duration === option.value ? '#EEF0FF' : '#fafafa',
-                          },
-                        }}
-                      >
-                        {option.recommended && (
-                          <Box
-                            sx={{
-                              position: 'absolute',
-                              top: '-8px',
-                              left: '50%',
-                              transform: 'translateX(-50%)',
-                              backgroundColor: '#020291',
-                              color: '#fff',
-                              fontSize: '9px',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
-                            }}
-                          >
-                            Best
-                          </Box>
-                        )}
-                        <Typography
-                          sx={{
-                            fontSize: '15px',
-                            fontWeight: 600,
-                            color: duration === option.value ? '#020291' : '#374151',
-                          }}
-                        >
-                          {option.label}
-                        </Typography>
-                        <Typography
-                          sx={{
-                            fontSize: '11px',
-                            color: '#6b7280',
-                            mt: '2px',
-                          }}
-                        >
-                          {option.description}
-                        </Typography>
-                      </Box>
-                    </Tooltip>
-                  ))}
+                  <i className="fas fa-calendar-alt" style={{ color: '#fff', fontSize: '16px' }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: { xs: '20px', sm: '24px', md: '28px' }, fontWeight: 700, color: '#1e293b' }}>
+                    Scheduled Interviews
+                  </Typography>
+                  <Typography sx={{ fontSize: { xs: '12px', md: '14px' }, color: '#64748b' }}>
+                    View and manage all scheduled interviews
+                  </Typography>
                 </Box>
               </Box>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={loading || !isFormValid}
-                fullWidth
-                sx={{
-                  padding: '14px 24px',
-                  borderRadius: '10px',
-                  background: isFormValid
-                    ? 'linear-gradient(135deg, #020291 0%, #06109E 100%)'
-                    : '#e5e7eb',
-                  boxShadow: isFormValid ? '0 4px 12px rgba(2, 2, 145, 0.3)' : 'none',
-                  fontSize: '15px',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  color: isFormValid ? '#fff' : '#9ca3af',
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    background: isFormValid
-                      ? '#020291'
-                      : '#e5e7eb',
-                    boxShadow: isFormValid ? '0 6px 16px rgba(2, 2, 145, 0.35)' : 'none',
-                    transform: isFormValid ? 'translateY(-1px)' : 'none',
-                  },
-                  '&:active': {
-                    transform: 'translateY(0)',
-                  },
-                  '&.Mui-disabled': {
-                    background: '#e5e7eb',
-                    color: '#9ca3af',
-                  },
-                }}
-              >
-                {loading ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <CircularProgress size={18} sx={{ color: '#fff' }} />
-                    <span>Scheduling...</span>
-                  </Box>
-                ) : (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <i className="fas fa-calendar-check" style={{ fontSize: '15px' }} />
-                    <span>Schedule Interview</span>
-                  </Box>
-                )}
-              </Button>
-
-              {/* Helper Text */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  mt: '16px',
-                }}
-              >
-                <i className="fas fa-envelope" style={{ fontSize: '11px', color: '#9ca3af' }} />
-                <Typography sx={{ fontSize: '12px', color: '#6b7280' }}>
-                  Calendar invite will be sent to both parties
-                </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                <Tooltip title="Refresh">
+                  <IconButton
+                    onClick={fetchInterviews}
+                    disabled={loadingList}
+                    sx={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      color: '#64748b',
+                      '&:hover': { borderColor: '#020291', color: '#020291', backgroundColor: '#f0f0ff' }
+                    }}
+                  >
+                    <Refresh sx={{ animation: loadingList ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+                  </IconButton>
+                </Tooltip>
+                <Button
+                  variant="contained"
+                  onClick={() => setViewMode('form')}
+                  startIcon={<i className="fas fa-plus" style={{ fontSize: '12px' }} />}
+                  sx={{
+                    background: 'linear-gradient(135deg, #020291 0%, #06109E 100%)',
+                    borderRadius: '10px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    padding: '10px 20px',
+                    boxShadow: '0 4px 12px rgba(2, 2, 145, 0.3)',
+                    '&:hover': {
+                      background: '#020291',
+                      boxShadow: '0 6px 16px rgba(2, 2, 145, 0.35)',
+                    },
+                  }}
+                >
+                  Schedule Interview
+                </Button>
               </Box>
-            </form>
-          </CardContent>
-        </Card>
+            </Box>
+
+            {listError && <Alert severity="error" sx={{ mb: 2 }}>{listError}</Alert>}
+
+            {/* Interview List */}
+            {loadingList ? (
+              <Paper sx={{ width: '100%', overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>#</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Job Title</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Candidate</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Scheduled At</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Duration</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {[...Array(5)].map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton width={20} /></TableCell>
+                          <TableCell><Skeleton width="80%" /></TableCell>
+                          <TableCell><Skeleton width={120} /></TableCell>
+                          <TableCell><Skeleton width={80} height={26} sx={{ borderRadius: '12px' }} /></TableCell>
+                          <TableCell><Skeleton width={140} /></TableCell>
+                          <TableCell><Skeleton width={50} /></TableCell>
+                          <TableCell><Box sx={{ display: 'flex', gap: 0.5 }}><Skeleton variant="circular" width={32} height={32} /><Skeleton variant="circular" width={32} height={32} /></Box></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            ) : isMobile ? (
+              /* Mobile Card View */
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {paginatedInterviews.length === 0 ? (
+                  <Paper sx={{ p: 4, textAlign: 'center', borderRadius: '12px' }}>
+                    <Box sx={{ mb: 2 }}>
+                      <i className="fas fa-calendar-plus" style={{ fontSize: '48px', color: '#cbd5e1' }} />
+                    </Box>
+                    <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 2 }}>No scheduled interviews yet</Typography>
+                    <Button
+                      variant="contained"
+                      onClick={() => setViewMode('form')}
+                      sx={{
+                        background: '#020291',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        borderRadius: '8px',
+                        '&:hover': { background: '#06109E' },
+                      }}
+                    >
+                      Schedule Your First Interview
+                    </Button>
+                  </Paper>
+                ) : (
+                  paginatedInterviews.map((row) => (
+                    <Card
+                      key={row.id}
+                      sx={{
+                        borderRadius: '12px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                        border: '1px solid #e2e8f0',
+                        '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.12)' },
+                      }}
+                    >
+                      <CardContent sx={{ p: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography
+                              variant="subtitle1"
+                              sx={{ fontWeight: 600, color: '#1e293b', cursor: 'pointer', '&:hover': { color: '#3b82f6' } }}
+                              onClick={() => navigate(`/video-detail/${row.id}`)}
+                            >
+                              {row.job_title || 'N/A'}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#64748b' }}>
+                              {row.candidate_name || 'N/A'}
+                            </Typography>
+                          </Box>
+                          <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" sx={{ ml: 1 }} />
+                        </Box>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+                          <Box>
+                            <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>Scheduled</Typography>
+                            <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
+                              {new Date(row.scheduled_at).toLocaleDateString()}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#64748b' }}>
+                              {new Date(row.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block' }}>Duration</Typography>
+                            <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>{row.duration_minutes} min</Typography>
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', pt: 1.5, mt: 1 }}>
+                          <Tooltip title="View Details">
+                            <IconButton size="small" onClick={() => navigate(`/video-detail/${row.id}`)} sx={{ backgroundColor: '#f1f5f9', '&:hover': { backgroundColor: '#e2e8f0' } }}>
+                              <Visibility fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
+                            <span>
+                              <IconButton
+                                size="small" color="success"
+                                onClick={() => navigate(`/video-room/${row.id}`)}
+                                disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                sx={{ backgroundColor: '#f0fdf4', '&:hover': { backgroundColor: '#dcfce7' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                              >
+                                <PlayArrow fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Cancel">
+                            <span>
+                              <IconButton
+                                size="small" color="error"
+                                onClick={() => handleCancelInterview(row.id)}
+                                disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                sx={{ backgroundColor: '#fef2f2', '&:hover': { backgroundColor: '#fee2e2' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                              >
+                                <Cancel fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+                {sortedInterviews.length > 0 && (
+                  <Paper sx={{ borderRadius: '12px', overflow: 'hidden' }}>
+                    <TablePagination
+                      rowsPerPageOptions={[5, 10, 25]}
+                      component="div"
+                      count={sortedInterviews.length}
+                      rowsPerPage={rowsPerPage}
+                      page={page}
+                      onPageChange={(_, newPage) => setPage(newPage)}
+                      onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+                      labelRowsPerPage="Per page:"
+                      sx={{
+                        '.MuiTablePagination-toolbar': { flexWrap: 'wrap', justifyContent: 'center', padding: '8px' },
+                        '.MuiTablePagination-spacer': { display: 'none' },
+                        '.MuiTablePagination-displayedRows': { margin: '8px 0', width: '100%', textAlign: 'center' },
+                        '.MuiTablePagination-actions': { marginLeft: 0 },
+                      }}
+                    />
+                  </Paper>
+                )}
+              </Box>
+            ) : (
+              /* Desktop Table View */
+              <Paper sx={{ width: '100%', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 200px)', overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <TableContainer sx={{ flex: 1, overflowX: 'auto' }}>
+                  <Table stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>#</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Job Title</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Candidate</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Scheduled At</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Duration</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc' }}>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody sx={{ '& .MuiTableCell-root': { padding: '12px' } }}>
+                      {paginatedInterviews.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                            <Box sx={{ mb: 2 }}>
+                              <i className="fas fa-calendar-plus" style={{ fontSize: '48px', color: '#cbd5e1' }} />
+                            </Box>
+                            <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 2 }}>No scheduled interviews yet</Typography>
+                            <Button
+                              variant="contained"
+                              onClick={() => setViewMode('form')}
+                              sx={{
+                                background: '#020291',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                borderRadius: '8px',
+                                '&:hover': { background: '#06109E' },
+                              }}
+                            >
+                              Schedule Your First Interview
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        paginatedInterviews.map((row, index) => (
+                          <TableRow key={row.id} sx={{ '&:hover': { backgroundColor: '#f8fafc' } }}>
+                            <TableCell>{page * rowsPerPage + index + 1}</TableCell>
+                            <TableCell>
+                              <Typography
+                                sx={{ cursor: 'pointer', fontWeight: 500, '&:hover': { color: '#3b82f6' } }}
+                                onClick={() => navigate(`/video-detail/${row.id}`)}
+                              >
+                                {row.job_title || 'N/A'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography sx={{ color: '#1e293b', fontWeight: 500 }}>
+                                {row.candidate_name || 'N/A'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" />
+                            </TableCell>
+                            <TableCell>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
+                            <TableCell>{row.duration_minutes} min</TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                <Tooltip title="View Details">
+                                  <IconButton size="small" onClick={() => navigate(`/video-detail/${row.id}`)}>
+                                    <Visibility fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
+                                  <span>
+                                    <IconButton
+                                      size="small" color="success"
+                                      onClick={() => navigate(`/video-room/${row.id}`)}
+                                      disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                    >
+                                      <PlayArrow fontSize="small" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                                <Tooltip title="Cancel">
+                                  <span>
+                                    <IconButton
+                                      size="small" color="error"
+                                      onClick={() => handleCancelInterview(row.id)}
+                                      disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                    >
+                                      <Cancel fontSize="small" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                {sortedInterviews.length > 0 && (
+                  <TablePagination
+                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    component="div"
+                    count={sortedInterviews.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={(_, newPage) => setPage(newPage)}
+                    onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+                    sx={{
+                      flexShrink: 0,
+                      borderTop: '1px solid #e2e8f0',
+                      backgroundColor: '#fff',
+                      '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': { color: '#64748b', fontWeight: 500 },
+                    }}
+                  />
+                )}
+              </Paper>
+            )}
+          </>
+        ) : (
+          /* ==================== FORM VIEW ==================== */
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Back to List button + Header */}
+            <Box sx={{ width: '100%', maxWidth: 520, mb: { xs: '20px', md: '28px' } }}>
+              <Button
+                startIcon={<ArrowBack sx={{ fontSize: '18px !important' }} />}
+                onClick={() => { resetForm(); setViewMode('list'); }}
+                sx={{
+                  color: '#64748b',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  mb: 2,
+                  '&:hover': { color: '#020291', backgroundColor: '#f0f0ff' },
+                }}
+              >
+                Back to Scheduled Interviews
+              </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '10px', md: '14px' }, mb: '6px' }}>
+                <Box
+                  sx={{
+                    width: { xs: 38, md: 44 },
+                    height: { xs: 38, md: 44 },
+                    borderRadius: '12px',
+                    background: ' #020291',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <i className="fas fa-video" style={{ color: '#fff', fontSize: '16px' }} />
+                </Box>
+                <Box>
+                  <Typography
+                    sx={{
+                      fontSize: { xs: '18px', sm: '20px', md: '22px' },
+                      fontWeight: 700,
+                      color: '#1e293b',
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    Schedule Interview
+                  </Typography>
+                  <Typography sx={{ fontSize: { xs: '12px', md: '14px' }, color: '#64748b' }}>
+                    Set up a video interview with your candidate
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+
+            {/* Main Card */}
+            <Card
+              sx={{
+                width: '100%',
+                maxWidth: 520,
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb',
+                boxShadow: '0px 8px 24px rgba(2, 2, 145, 0.12)',
+                overflow: 'visible',
+              }}
+            >
+              <CardContent sx={{ padding: { xs: '16px 16px 20px', sm: '20px 22px 26px', md: '28px 28px 32px' } }}>
+                <form onSubmit={handleSubmit}>
+                  {/* Job Selection */}
+                  <Box sx={{ mb: '22px' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#374151',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <i className="fas fa-briefcase" style={{ fontSize: '11px', color: '#6b7280' }} />
+                        Job Position
+                      </Typography>
+                      <ValidationIcon isValid={validation.job} show={touched.job} />
+                    </Box>
+                    <Autocomplete
+                      options={jobs}
+                      value={selectedJob}
+                      onChange={(_, value) => {
+                        setSelectedJob(value);
+                        setTouched((prev) => ({ ...prev, job: true }));
+                      }}
+                      onBlur={() => setTouched((prev) => ({ ...prev, job: true }))}
+                      getOptionLabel={(option) => {
+                        if (!option) return '';
+                        const title = option.title || 'Untitled';
+                        const company = option.company;
+                        return company ? `${title} - ${company}` : title;
+                      }}
+                      loading={loadingJobs}
+                      isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder="Search and select a job..."
+                          error={touched.job && !validation.job}
+                          helperText={touched.job && !validation.job ? 'Please select a job position' : ''}
+                          sx={inputStyles}
+                          InputProps={{
+                            ...params.InputProps,
+                            startAdornment: (
+                              <>
+                                <InputAdornment position="start">
+                                  <i className="fas fa-search" style={{ color: '#9ca3af', fontSize: '13px' }} />
+                                </InputAdornment>
+                                {params.InputProps.startAdornment}
+                              </>
+                            ),
+                          }}
+                        />
+                      )}
+                      renderOption={(props, option) => (
+                        <Box component="li" {...props} key={option.id} sx={{ padding: '10px 14px !important' }}>
+                          <Box>
+                            <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>
+                              {option.title || 'Untitled Job'}
+                            </Typography>
+                            {option.company && (
+                              <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                                {option.company}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      )}
+                    />
+                  </Box>
+
+                  {/* Candidate Selection */}
+                  <Box sx={{ mb: '22px' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#374151',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <i className="fas fa-user" style={{ fontSize: '11px', color: '#6b7280' }} />
+                        Candidate
+                      </Typography>
+                      <ValidationIcon isValid={validation.candidate} show={touched.candidate} />
+                    </Box>
+                    <Autocomplete
+                      options={candidates}
+                      value={selectedCandidate}
+                      onChange={(_, value) => {
+                        setSelectedCandidate(value);
+                        setTouched((prev) => ({ ...prev, candidate: true }));
+                      }}
+                      onBlur={() => setTouched((prev) => ({ ...prev, candidate: true }))}
+                      getOptionLabel={(option) => {
+                        if (!option) return '';
+                        const name = option.name || 'Unknown';
+                        const email = option.email;
+                        return email ? `${name} (${email})` : name;
+                      }}
+                      loading={loadingCandidates}
+                      disabled={!selectedJob || loadingCandidates}
+                      isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                      noOptionsText={selectedJob ? 'No candidates found for this job' : 'Select a job first'}
+                      filterOptions={(options, { inputValue }) => {
+                        const filterValue = inputValue.toLowerCase();
+                        return options.filter(
+                          (option) =>
+                            option.name?.toLowerCase().includes(filterValue) ||
+                            option.email?.toLowerCase().includes(filterValue)
+                        );
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder={selectedJob ? 'Search and select a candidate...' : 'Select a job first'}
+                          error={touched.candidate && !validation.candidate}
+                          helperText={touched.candidate && !validation.candidate ? 'Please select a candidate' : ''}
+                          sx={inputStyles}
+                          InputProps={{
+                            ...params.InputProps,
+                            startAdornment: (
+                              <>
+                                <InputAdornment position="start">
+                                  <i className="fas fa-search" style={{ color: '#9ca3af', fontSize: '13px' }} />
+                                </InputAdornment>
+                                {params.InputProps.startAdornment}
+                              </>
+                            ),
+                          }}
+                        />
+                      )}
+                      renderOption={(props, option) => (
+                        <Box component="li" {...props} key={option.id} sx={{ padding: '10px 14px !important' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Box
+                              sx={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: '8px',
+                                background: 'linear-gradient(135deg, #020291, #020291)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {(option.name || 'U').charAt(0).toUpperCase()}
+                            </Box>
+                            <Box>
+                              <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>
+                                {option.name || 'Unknown Candidate'}
+                              </Typography>
+                              <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                                {option.email || 'No email'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+                    />
+                  </Box>
+
+                  {/* Date & Time */}
+                  <Box sx={{ mb: '22px' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#374151',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <i className="fas fa-calendar-alt" style={{ fontSize: '11px', color: '#6b7280' }} />
+                        Date & Time
+                      </Typography>
+                      <ValidationIcon isValid={validation.scheduledAt} show={touched.scheduledAt} />
+                    </Box>
+
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <Box sx={{ display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap', flexDirection: { xs: 'column', sm: 'row' } }}>
+                        <MobileDatePicker
+                          value={selectedDate}
+                          onChange={(newValue) => {
+                            setSelectedDate(newValue);
+                            setTouched((prev) => ({ ...prev, scheduledAt: true }));
+                          }}
+                          minDate={minDate}
+                          format="DD-MM-YYYY"
+                          sx={{ flex: 1, minWidth: 0 }}
+                          slotProps={{
+                            textField: {
+                              size: 'medium',
+                              placeholder: 'Select date',
+                              error: touched.scheduledAt && !selectedDate,
+                              helperText: touched.scheduledAt && !selectedDate ? 'Date is required' : '',
+                              sx: { ...inputStyles, width: '100%' },
+                              InputProps: {
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <i className="fas fa-calendar" style={{ color: '#9ca3af', fontSize: '14px' }} />
+                                  </InputAdornment>
+                                ),
+                              },
+                            },
+                            dialog: {
+                              sx: {
+                                '& .MuiPickersCalendarHeader-root': { backgroundColor: '#020291', color: '#fff' },
+                                '& .MuiPickersDay-root.Mui-selected': { backgroundColor: '#020291' },
+                                '& .MuiButton-root': { color: '#020291' },
+                              },
+                            },
+                          }}
+                        />
+                        <MobileTimePicker
+                          value={selectedTime}
+                          onChange={(newValue) => {
+                            setSelectedTime(newValue);
+                            setTouched((prev) => ({ ...prev, scheduledAt: true }));
+                          }}
+                          format="HH:mm"
+                          ampm={false}
+                          sx={{ flex: 1, minWidth: 0 }}
+                          slotProps={{
+                            textField: {
+                              size: 'medium',
+                              placeholder: 'Select time',
+                              error: touched.scheduledAt && !selectedTime,
+                              helperText: touched.scheduledAt && !selectedTime ? 'Time is required' : '',
+                              sx: { ...inputStyles, width: '100%' },
+                              InputProps: {
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <i className="fas fa-clock" style={{ color: '#9ca3af', fontSize: '14px' }} />
+                                  </InputAdornment>
+                                ),
+                              },
+                            },
+                            dialog: {
+                              sx: {
+                                '& .MuiPickersToolbar-root': { backgroundColor: '#020291', color: '#fff' },
+                                '& .MuiClock-pin, & .MuiClockPointer-root, & .MuiClockPointer-thumb': { backgroundColor: '#020291' },
+                                '& .MuiButton-root': { color: '#020291' },
+                              },
+                            },
+                          }}
+                        />
+                      </Box>
+                    </LocalizationProvider>
+
+                    {touched.scheduledAt && !validation.scheduledAt && (
+                      <Typography sx={{ fontSize: '12px', color: '#ef4444', mt: '6px', ml: '14px' }}>
+                        Please select a future date and time
+                      </Typography>
+                    )}
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: '8px' }}>
+                      <i className="fas fa-globe" style={{ fontSize: '11px', color: '#9ca3af' }} />
+                      <Typography sx={{ fontSize: '12px', color: '#6b7280' }}>
+                        {userTimezone} ({timezoneOffset})
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Duration Pills */}
+                  <Box sx={{ mb: '28px' }}>
+                    <Typography
+                      sx={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: '#374151',
+                        mb: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <i className="fas fa-hourglass-half" style={{ fontSize: '11px', color: '#6b7280' }} />
+                      Duration
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {DURATION_OPTIONS.map((option) => (
+                        <Tooltip key={option.value} title={option.description} arrow placement="top">
+                          <Box
+                            onClick={() => setDuration(option.value)}
+                            sx={{
+                              flex: { xs: '1 1 100%', sm: 1 },
+                              minWidth: { xs: 'auto', sm: 0 },
+                              padding: '14px 12px',
+                              borderRadius: '10px',
+                              border: `1.5px solid ${duration === option.value ? '#020291' : '#e5e7eb'}`,
+                              backgroundColor: duration === option.value ? '#EEF0FF' : '#fff',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              textAlign: 'center',
+                              position: 'relative',
+                              '&:hover': {
+                                borderColor: duration === option.value ? '#020291' : '#d1d5db',
+                                backgroundColor: duration === option.value ? '#EEF0FF' : '#fafafa',
+                              },
+                            }}
+                          >
+                            {option.recommended && (
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  top: '-8px',
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  backgroundColor: '#020291',
+                                  color: '#fff',
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px',
+                                }}
+                              >
+                                Best
+                              </Box>
+                            )}
+                            <Typography sx={{ fontSize: '15px', fontWeight: 600, color: duration === option.value ? '#020291' : '#374151' }}>
+                              {option.label}
+                            </Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#6b7280', mt: '2px' }}>
+                              {option.description}
+                            </Typography>
+                          </Box>
+                        </Tooltip>
+                      ))}
+                    </Box>
+                  </Box>
+
+                  {/* Submit Button */}
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    size="large"
+                    disabled={loading || !isFormValid}
+                    fullWidth
+                    sx={{
+                      padding: '14px 24px',
+                      borderRadius: '10px',
+                      background: isFormValid
+                        ? 'linear-gradient(135deg, #020291 0%, #06109E 100%)'
+                        : '#e5e7eb',
+                      boxShadow: isFormValid ? '0 4px 12px rgba(2, 2, 145, 0.3)' : 'none',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      color: isFormValid ? '#fff' : '#9ca3af',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        background: isFormValid ? '#020291' : '#e5e7eb',
+                        boxShadow: isFormValid ? '0 6px 16px rgba(2, 2, 145, 0.35)' : 'none',
+                        transform: isFormValid ? 'translateY(-1px)' : 'none',
+                      },
+                      '&:active': { transform: 'translateY(0)' },
+                      '&.Mui-disabled': { background: '#e5e7eb', color: '#9ca3af' },
+                    }}
+                  >
+                    {loading ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CircularProgress size={18} sx={{ color: '#fff' }} />
+                        <span>Scheduling...</span>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <i className="fas fa-calendar-check" style={{ fontSize: '15px' }} />
+                        <span>Schedule Interview</span>
+                      </Box>
+                    )}
+                  </Button>
+
+                  {/* Helper Text */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', mt: '16px' }}>
+                    <i className="fas fa-envelope" style={{ fontSize: '11px', color: '#9ca3af' }} />
+                    <Typography sx={{ fontSize: '12px', color: '#6b7280' }}>
+                      Calendar invite will be sent to both parties
+                    </Typography>
+                  </Box>
+                </form>
+              </CardContent>
+            </Card>
+          </Box>
+        )}
 
         {/* Success Snackbar */}
-        <Snackbar
-          open={!!success}
-          autoHideDuration={6000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <Alert
-            onClose={handleCloseSnackbar}
-            severity="success"
-            variant="filled"
-            sx={{
-              borderRadius: '10px',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
-              '& .MuiAlert-icon': {
-                fontSize: '20px',
-              },
-            }}
-          >
+        <Snackbar open={!!success} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+          <Alert onClose={handleCloseSnackbar} severity="success" variant="filled" sx={{ borderRadius: '10px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)' }}>
             <Box>
-              <Typography sx={{ fontWeight: 600, fontSize: '14px' }}>
-                Interview scheduled successfully!
-              </Typography>
-              <Typography sx={{ fontSize: '13px', opacity: 0.9 }}>
-                Email confirmation sent to candidate.
-              </Typography>
+              <Typography sx={{ fontWeight: 600, fontSize: '14px' }}>Interview scheduled successfully!</Typography>
+              <Typography sx={{ fontSize: '13px', opacity: 0.9 }}>Email confirmation sent to candidate.</Typography>
             </Box>
           </Alert>
         </Snackbar>
 
         {/* Error Snackbar */}
-        <Snackbar
-          open={!!error}
-          autoHideDuration={10000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
+        <Snackbar open={!!error} autoHideDuration={10000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
           <Alert
             onClose={handleCloseSnackbar}
             severity={error.toLowerCase().includes('approve') ? 'warning' : 'error'}
             variant="filled"
-            sx={{
-              borderRadius: '10px',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
-              maxWidth: '500px',
-              '& .MuiAlert-message': {
-                fontSize: '14px',
-                lineHeight: 1.5,
-              },
-            }}
+            sx={{ borderRadius: '10px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)', maxWidth: '500px', '& .MuiAlert-message': { fontSize: '14px', lineHeight: 1.5 } }}
           >
             {error}
           </Alert>

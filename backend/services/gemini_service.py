@@ -516,17 +516,37 @@ REMEMBER: Each extracted_answer MUST be unique and specific to that question. Do
             per_question = _manual_parse_transcript(transcript_text, questions_with_answers, per_question)
             result["per_question"] = per_question
 
+        # Filter out unanswered questions and recompute overall_score from asked questions only
+        not_asked_phrases = ["not asked", "not answered", "no answer", "not covered",
+                             "not discussed", "not mentioned", "question was not", "no answer found"]
+        for pq in result.get("per_question", []):
+            extracted = str(pq.get("extracted_answer", "")).lower()
+            is_not_asked = any(phrase in extracted for phrase in not_asked_phrases)
+            if is_not_asked:
+                pq["not_asked"] = True
+                for key in ["score", "relevance_score", "completeness_score", "accuracy_score", "clarity_score"]:
+                    pq[key] = 0.0
+
+        asked_scores = [float(pq.get("score", 0)) for pq in result.get("per_question", [])
+                        if not pq.get("not_asked")]
+        not_asked_count = sum(1 for pq in result.get("per_question", []) if pq.get("not_asked"))
+
+        if asked_scores:
+            result["overall_score"] = round(sum(asked_scores) / len(asked_scores), 1)
+        else:
+            result["overall_score"] = 0.0
+
+        print(f"   Questions asked: {len(asked_scores)}, Not asked: {not_asked_count}")
+
         # Normalize recommendation
-        rec = result.get("recommendation", "reject").lower()
-        if rec not in {"select", "next_round", "reject"}:
-            score = float(result.get("overall_score", 0))
-            rec = "select" if score >= 75 else "next_round" if score >= 50 else "reject"
-            result["recommendation"] = rec
+        ov = float(result.get("overall_score", 0))
+        rec = "select" if ov >= 75 else "next_round" if ov >= 50 else "reject"
+        result["recommendation"] = rec
 
         print(f"\n[OK] [score_transcript] SCORING COMPLETED SUCCESSFULLY!")
         print(f"   Overall Score: {result.get('overall_score', 'N/A')}")
         print(f"   Recommendation: {result.get('recommendation', 'N/A')}")
-        print(f"   Questions scored: {len(result.get('per_question', []))}")
+        print(f"   Questions scored: {len(asked_scores)} (out of {len(result.get('per_question', []))})")
         print(f"{'='*60}\n")
 
         return result

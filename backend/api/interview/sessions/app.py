@@ -358,18 +358,12 @@ def complete_session(
     # Score all answers using Groq AI (with rule-based fallback)
     answers = (
         db.query(InterviewAnswer)
+        .options(joinedload(InterviewAnswer.question))
         .filter(InterviewAnswer.session_id == session_id)
         .all()
     )
 
-    # Count total questions for this job to account for unanswered ones
-    total_questions = (
-        db.query(InterviewQuestion)
-        .filter(InterviewQuestion.job_id == session.job_id, InterviewQuestion.is_approved == True)
-        .count()
-    )
-
-    # Build data for batch AI scoring
+    # Build data for batch AI scoring (only answered questions are scored)
     answers_data = []
     valid_answers = []
     for answer in answers:
@@ -398,11 +392,11 @@ def complete_session(
             answer.clarity_score = result["clarity_score"]
             answer.feedback = result["feedback"]
 
-    # Recompute overall_score: average over ALL questions (unanswered = 0)
+    # Recompute overall_score: average over only answered questions (unanswered questions are discarded)
     answered_scores = [s["score"] for s in scored_answers] if scored_answers else []
-    total_q = max(total_questions, len(answered_scores))  # at least as many as answered
+    answered_count = len(answered_scores)
     score_sum = sum(answered_scores)
-    computed_overall = round(score_sum / total_q, 1) if total_q > 0 else 0.0
+    computed_overall = round(score_sum / answered_count, 1) if answered_count > 0 else 0.0
 
     session.status = InterviewSessionStatus.SCORED
     session.overall_score = computed_overall
