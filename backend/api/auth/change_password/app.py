@@ -64,5 +64,3 @@ def change_password(
             status_code=500,
             detail=f"Failed to change password: {str(e)}"
         )
-
-print("✅ Change Password module loaded")

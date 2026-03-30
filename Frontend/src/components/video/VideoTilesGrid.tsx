@@ -84,6 +84,14 @@ export const VideoTilesGrid: React.FC<{
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+
+  // Sync isCamOn/isMicOn with actual LiveKit participant state
+  useEffect(() => {
+    if (localParticipant) {
+      setIsCamOn(localParticipant.isCameraEnabled);
+      setIsMicOn(localParticipant.isMicrophoneEnabled);
+    }
+  }, [localParticipant, localParticipant?.isCameraEnabled, localParticipant?.isMicrophoneEnabled]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -434,9 +442,22 @@ export const VideoTilesGrid: React.FC<{
                 </Box>
               )}
             </>
+          ) : !remoteParticipant && localParticipant?.isCameraEnabled && localCameraTrack?.publication ? (
+            <>
+              {/* Alone in room with camera on — show own video in main area */}
+              <VideoTrack
+                trackRef={{ participant: localCameraTrack.participant, source: localCameraTrack.source, publication: localCameraTrack.publication }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirrorSelfView ? 'scaleX(-1)' : 'none' }}
+              />
+              <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
+                <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+                  {localName} (You)
+                </Typography>
+              </Box>
+            </>
           ) : (
             <>
-              {/* Waiting for other participant */}
+              {/* Camera off or waiting — show avatar */}
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 {remoteParticipant ? (
                   /* Remote participant joined but camera off — show avatar */
@@ -448,7 +469,7 @@ export const VideoTilesGrid: React.FC<{
                     <Typography sx={{ color: 'white', fontSize: 40, fontWeight: 400 }}>{remoteInitial}</Typography>
                   </Box>
                 ) : (
-                  /* No remote participant yet — show local user's avatar (Google Meet style) */
+                  /* No remote participant, camera off — show local avatar */
                   <Box sx={{
                     width: 120, height: 120, borderRadius: '50%',
                     background: localAvatarColor,
@@ -458,7 +479,7 @@ export const VideoTilesGrid: React.FC<{
                   </Box>
                 )}
               </Box>
-              {/* Name bottom-left: remote name when camera off, local name when alone */}
+              {/* Name bottom-left */}
               <Box sx={{ position: 'absolute', bottom: 12, left: 14 }}>
                 <Typography sx={{ color: '#e8eaed', fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
                   {remoteParticipant ? remoteName : localName}

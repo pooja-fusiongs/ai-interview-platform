@@ -192,7 +192,6 @@ def update_user_profile(
             "message": str(e)
         }
 
-print("✅ Auth module loaded with folder structure (signup/, signIn/, and change_password/ folders)")
 
 # Export commonly used functions for backward compatibility
 __all__ = [

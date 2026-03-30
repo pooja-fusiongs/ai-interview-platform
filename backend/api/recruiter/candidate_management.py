@@ -144,7 +144,7 @@ async def add_candidate_to_job(
         expected_salary=expected_ctc or None,
         interview_datetime=parsed_interview_dt,
         duration_minutes=duration_minutes,
-        status="Added by Recruiter",
+        status="Applied",
         added_by=current_user.id
     )
     db.add(application)
@@ -252,7 +252,7 @@ def add_existing_candidate_to_job(
         availability=source_app.availability or None,
         current_ctc=source_app.current_ctc or None,
         expected_salary=source_app.expected_salary or None,
-        status="Added by Recruiter",
+        status="Applied",
         added_by=current_user.id
     )
     db.add(application)

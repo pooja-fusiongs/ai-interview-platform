@@ -36,5 +36,3 @@ def create_job_endpoint(
         print(f"❌ Error creating job: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create job: {str(e)}")
-
-print("✅ Create Job module loaded")

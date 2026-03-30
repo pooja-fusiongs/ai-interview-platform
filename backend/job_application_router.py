@@ -273,7 +273,7 @@ def update_application_status(
     db: Session = Depends(get_db)
 ):
     valid_statuses = [
-        "Applied", "Added by Recruiter", "Questions Generated",
+        "Applied", "Questions Generated",
         "Interview Scheduled", "Interview Completed",
         "Offer Sent", "Offer Declined", "Hired", "Rejected"
     ]

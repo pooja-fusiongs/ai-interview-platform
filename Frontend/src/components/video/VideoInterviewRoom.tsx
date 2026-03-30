@@ -1018,7 +1018,7 @@ const VideoInterviewRoom: React.FC = () => {
     return (
       <Box sx={{
         display: 'flex', justifyContent: 'center', alignItems: 'center',
-        minHeight: '100vh', background: '#0f172a'
+        minHeight: '100dvh', background: '#0f172a'
       }}>
         <Box sx={{ textAlign: 'center' }}>
           <CircularProgress sx={{ color: '#60a5fa', mb: 2 }} />
@@ -1034,7 +1034,7 @@ const VideoInterviewRoom: React.FC = () => {
       <Box sx={{
         display: 'flex',
         flexDirection: 'column',
-        height: isUserCandidate ? '100vh' : 'calc(100vh - 64px)',
+        height: isUserCandidate ? '100dvh' : 'calc(100dvh - 64px)',
         width: '100%',
         overflow: 'hidden',
         backgroundColor: '#f8fafc'
@@ -1592,9 +1592,10 @@ const VideoInterviewRoom: React.FC = () => {
                   </Box>
                 ) : (
                   <Box sx={{
-                    textAlign: 'center', p: { xs: 3, sm: 4 },
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    textAlign: 'center', p: { xs: 2, sm: 4 }, pb: { xs: 4, sm: 4 },
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: { xs: 'flex-start', md: 'center' },
                     width: '100%', height: '100%',
+                    overflowY: 'auto',
                     background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 50%, #e0e7ff 100%)',
                   }}>
                     {/* Mode Selection for Recruiter (before joining) */}
@@ -1603,10 +1604,10 @@ const VideoInterviewRoom: React.FC = () => {
                         <Typography sx={{ color: '#1e293b', fontSize: '20px', fontWeight: 700, mb: 1 }}>
                           Choose Interview Mode
                         </Typography>
-                        <Typography sx={{ color: '#64748b', fontSize: '13px', mb: 3, maxWidth: 400 }}>
+                        <Typography sx={{ color: '#64748b', fontSize: '13px', mb: { xs: '10px', md: 3 }, maxWidth: 400 }}>
                           Select how you want to conduct this interview
                         </Typography>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 4, width: '100%', maxWidth: 420, px: 2 }}>
+                        <Box sx={{ display: 'flex', gap: 2, mb: { xs: '16px', md: 4 }, width: '100%', maxWidth: 420, px: 2 }}>
                           {/* Video Mode Card */}
                           <Box
                             onClick={() => setInterviewMode('video')}
@@ -1690,7 +1691,7 @@ const VideoInterviewRoom: React.FC = () => {
                         background: interviewMode === 'classic' && !isUserCandidate && !hasExited
                           ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
                           : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-                        padding: '14px 36px',
+                        padding: { xs: '5px 10px', md: '14px 36px' },
                         borderRadius: '12px',
                         fontWeight: 700,
                         fontSize: '16px',

@@ -35,7 +35,6 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case 'Open':
     case 'Applied':
-    case 'Added by Recruiter':
       return { bg: '#dcfce7', color: '#16a34a' }
     case 'Questions Generated':
       return { bg: '#EEF0FF', color: '#020291' }
@@ -296,6 +295,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         const allCandidates = response.data?.data || []
         const currentEmails = candidates.map((c: any) => c.applicant_email?.toLowerCase())
 
+        // --- Parse job skills ---
         let jobSkills: string[] = []
         if (Array.isArray(selectedJob.requirements) && selectedJob.requirements.length > 0) {
           jobSkills = selectedJob.requirements
@@ -312,18 +312,115 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             }
           }
         }
+        // If no skills defined, extract keywords from job description/title
+        if (jobSkills.length === 0 && selectedJob.description) {
+          const desc = (selectedJob.description || '').toLowerCase()
+          const commonKeywords = ['python', 'java', 'javascript', 'react', 'node', 'sql', 'aws', 'azure', 'docker',
+            'kubernetes', 'machine learning', 'data science', 'analytics', 'statistics', 'tensorflow', 'pytorch',
+            'excel', 'tableau', 'power bi', 'r', 'scala', 'spark', 'hadoop', 'mongodb', 'postgresql', 'mysql',
+            'html', 'css', 'typescript', 'angular', 'vue', 'django', 'flask', 'spring', 'git', 'linux',
+            'c++', 'c#', '.net', 'php', 'ruby', 'go', 'rust', 'swift', 'kotlin', 'figma', 'photoshop',
+            'salesforce', 'sap', 'jira', 'agile', 'scrum', 'devops', 'ci/cd', 'api', 'rest', 'graphql',
+            'deep learning', 'nlp', 'computer vision', 'data analysis', 'data modeling', 'etl', 'data warehouse',
+            'communication', 'leadership', 'project management', 'problem solving', 'teamwork']
+          jobSkills = commonKeywords.filter(kw => desc.includes(kw))
+        }
         const jobSkillsLower = jobSkills.map(s => s.toLowerCase())
         const jobTitle = (selectedJob.title || '').toLowerCase()
-        const jobCategory = (selectedJob.category || selectedJob.company || '').toLowerCase()
+        const jobCategory = (selectedJob.category || selectedJob.department || '').toLowerCase()
+        // --- Parse job experience requirement ---
+        const jobExpStr = selectedJob.experience_level || selectedJob.experienceLevel || ''
+        const jobExpMatch = jobExpStr.match(/(\d+)/)
+        const jobExpYears = jobExpMatch ? parseInt(jobExpMatch[1]) : 0
+
+        const titleWords = jobTitle.split(' ').filter((w: string) => w.length > 2)
+
+        console.log('[SimilarCandidates] Job:', selectedJob.title, '| jobSkills:', jobSkills, '| jobExpYears:', jobExpYears, '| jobCategory:', jobCategory)
+        console.log('[SimilarCandidates] Total candidates fetched:', allCandidates.length)
 
         const scored = allCandidates
           .filter((c: any) => !currentEmails.includes(c.email?.toLowerCase()) && c.is_active !== false)
           .map((c: any) => {
+            // --- 1. Skills match (0-100) weight: 35% ---
             const cSkills = (c.skills || []).map((s: string) => s.toLowerCase())
-            const skillMatch = cSkills.filter((s: string) => jobSkillsLower.some(js => s.includes(js) || js.includes(s))).length
-            const deptMatch = (c.department || '').toLowerCase().includes(jobCategory) || jobCategory.includes((c.department || '').toLowerCase()) ? 1 : 0
-            const titleMatch = jobTitle.split(' ').filter((w: string) => w.length > 2 && (c.department || '').toLowerCase().includes(w)).length
-            return { ...c, _score: (skillMatch * 3) + (deptMatch * 2) + titleMatch }
+            const matchedSkillsList = cSkills.filter((s: string) => jobSkillsLower.some(js => s.includes(js) || js.includes(s)))
+            let skillScore = 0
+            if (jobSkillsLower.length > 0 && cSkills.length > 0) {
+              skillScore = Math.min(100, Math.round((matchedSkillsList.length / jobSkillsLower.length) * 100))
+            }
+
+            // --- 2. Position/title relevance (0-100) weight: 25% ---
+            const candidatePos = (c.currentPosition || '').toLowerCase()
+            let titleScore = 0
+            if (titleWords.length > 0 && candidatePos) {
+              const posWords = candidatePos.split(/[\s,\-\/]+/).filter((w: string) => w.length > 2)
+              const matchedTitleWords = titleWords.filter((tw: string) =>
+                posWords.some((pw: string) => pw.includes(tw) || tw.includes(pw))
+              )
+              titleScore = Math.round((matchedTitleWords.length / titleWords.length) * 100)
+              if (candidatePos.includes(jobTitle) || jobTitle.includes(candidatePos)) {
+                titleScore = Math.min(100, titleScore + 30)
+              }
+            }
+
+            // --- 3. Applied to similar roles (0-100) weight: 20% ---
+            let roleScore = 0
+            const appliedJobs = c.appliedJobs || []
+            if (appliedJobs.length > 0 && titleWords.length > 0) {
+              let bestJobMatch = 0
+              for (const aj of appliedJobs) {
+                const ajTitle = (aj.title || '').toLowerCase()
+                const ajWords = ajTitle.split(/[\s,\-\/]+/).filter((w: string) => w.length > 2)
+                const matched = titleWords.filter((tw: string) =>
+                  ajWords.some((aw: string) => aw.includes(tw) || tw.includes(aw))
+                ).length
+                const pct = titleWords.length > 0 ? Math.round((matched / titleWords.length) * 100) : 0
+                if (pct > bestJobMatch) bestJobMatch = pct
+              }
+              roleScore = bestJobMatch
+            }
+
+            // --- 4. Experience fit (0-100) weight: 15% ---
+            let expScore = 0
+            const expStr = c.experience || ''
+            const expMatch = expStr.match(/(\d+)/)
+            const candExpYears = expMatch ? parseInt(expMatch[1]) : 0
+            if (candExpYears > 0) {
+              if (jobExpYears > 0) {
+                const diff = Math.abs(candExpYears - jobExpYears)
+                if (diff === 0) expScore = 100
+                else if (diff <= 2) expScore = 85
+                else if (diff <= 5) expScore = 65
+                else if (diff <= 10) expScore = 40
+                else expScore = 20
+                if (candExpYears >= jobExpYears && expScore < 100) expScore = Math.min(100, expScore + 10)
+              } else {
+                expScore = candExpYears >= 5 ? 70 : candExpYears >= 3 ? 55 : candExpYears >= 1 ? 35 : 15
+              }
+            }
+
+            // --- 5. Department/company match (0-100) weight: 5% ---
+            let deptScore = 0
+            const candDept = (c.department || '').toLowerCase()
+            if (jobCategory && candDept) {
+              if (candDept.includes(jobCategory) || jobCategory.includes(candDept)) {
+                deptScore = 100
+              }
+            }
+
+            // --- Weighted composite ---
+            const _matchPercent = Math.round(
+              (skillScore * 0.35) + (titleScore * 0.25) + (roleScore * 0.20) + (expScore * 0.15) + (deptScore * 0.05)
+            )
+            const _score = _matchPercent
+
+            const _matchedSkills = (c.skills || []).filter((s: string) =>
+              jobSkillsLower.some((js: string) => s.toLowerCase().includes(js) || js.includes(s.toLowerCase()))
+            )
+
+            console.log(`[SimilarCandidates] ${c.name}: skills=${skillScore} title=${titleScore} role=${roleScore} exp=${expScore} dept=${deptScore} => ${_matchPercent}% | candidateSkills=${JSON.stringify(cSkills)} | position="${candidatePos}" | exp="${expStr}" | appliedJobs=${appliedJobs.map((j:any)=>j.title).join(',')}`)
+
+            return { ...c, _score, _matchPercent, _matchedSkills }
           })
           .filter((c: any) => c._score > 0)
           .sort((a: any, b: any) => b._score - a._score)
@@ -724,18 +821,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               </Box>
             ) : (
               similarCandidates.map((candidate: any) => {
-                const jobSkills = (() => {
-                  try {
-                    if (Array.isArray(selectedJob.requirements) && selectedJob.requirements.length > 0) return selectedJob.requirements
-                    if (typeof selectedJob.skills_required === 'string') return JSON.parse(selectedJob.skills_required)
-                    if (Array.isArray(selectedJob.skills_required)) return selectedJob.skills_required
-                  } catch {}
-                  return []
-                })()
-                const jobSkillsLower = jobSkills.map((s: string) => s.toLowerCase())
-                const candidateSkills = (candidate.skills || [])
-                const matchedSkills = candidateSkills.filter((s: string) => jobSkillsLower.some((js: string) => s.toLowerCase().includes(js) || js.includes(s.toLowerCase())))
-                const matchPercent = jobSkills.length > 0 ? Math.round((matchedSkills.length / jobSkills.length) * 100) : 0
+                const matchPercent = candidate._matchPercent || 0
                 return (
                   <Box
                     key={candidate.id}
@@ -817,7 +903,6 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               >
                 <MenuItem value="all">All Status</MenuItem>
                 <MenuItem value="Applied">Applied</MenuItem>
-                <MenuItem value="Added by Recruiter">Added by Recruiter</MenuItem>
                 <MenuItem value="Questions Generated">Questions Generated</MenuItem>
                 <MenuItem value="Interview Scheduled">Interview Scheduled</MenuItem>
                 <MenuItem value="Interview Completed">Interview Completed</MenuItem>
@@ -1303,18 +1388,8 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               </Box>
             ) : (
               similarCandidates.map((candidate: any) => {
-                const jobSkills = (() => {
-                  try {
-                    if (Array.isArray(selectedJob.requirements) && selectedJob.requirements.length > 0) return selectedJob.requirements
-                    if (typeof selectedJob.skills_required === 'string') return JSON.parse(selectedJob.skills_required)
-                    if (Array.isArray(selectedJob.skills_required)) return selectedJob.skills_required
-                  } catch {}
-                  return []
-                })()
-                const jobSkillsLower = jobSkills.map((s: string) => s.toLowerCase())
-                const candidateSkills = (candidate.skills || [])
-                const matchedSkills = candidateSkills.filter((s: string) => jobSkillsLower.some((js: string) => s.toLowerCase().includes(js) || js.includes(s.toLowerCase())))
-                const matchPercent = jobSkills.length > 0 ? Math.round((matchedSkills.length / jobSkills.length) * 100) : 0
+                const matchPercent = candidate._matchPercent || 0
+                const matchedSkills = candidate._matchedSkills || []
 
                 return (
                   <Box

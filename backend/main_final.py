@@ -45,126 +45,117 @@ from api.jobs.create_job.app import router as create_job_router
 from services.ai_question_generator import get_question_generator
 from pydantic import BaseModel
 
-print("🚀 Starting AI Interview Platform API...")
-print("📊 ONLY DATABASE DATA - NO SAMPLE DATA")
-print("🔧 All data loaded dynamically from your database")
 
-# Create database tables ONLY - NO SAMPLE DATA
-try:
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created/verified")
-except Exception as e:
-    print(f"⚠️ Database table creation warning: {e}")
-    print("Tables may already exist or need manual creation via SQL editor.")
-
-# Auto-migrate: add missing columns to existing tables
-def auto_migrate():
-    """Add columns that exist in models but not in the database."""
-    from sqlalchemy import inspect, text
-    inspector = inspect(engine)
-
-    # Define expected columns per table: (table, column, SQL type)
-    expected_columns = [
-        ("users", "is_online", "BOOLEAN DEFAULT FALSE"),
-        ("users", "last_activity", "TIMESTAMP"),
-        ("users", "last_login", "TIMESTAMP"),
-        ("users", "full_name", "VARCHAR"),
-        ("users", "phone", "VARCHAR"),
-        ("users", "department", "VARCHAR"),
-        ("users", "skills", "TEXT"),
-        ("users", "experience_years", "INTEGER"),
-        ("users", "current_position", "VARCHAR"),
-        ("users", "bio", "TEXT"),
-        ("users", "mobile", "VARCHAR"),
-        ("users", "gender", "VARCHAR"),
-        ("users", "location", "VARCHAR"),
-        ("users", "education", "TEXT"),
-        ("users", "has_internship", "BOOLEAN DEFAULT FALSE"),
-        ("users", "internship_company", "VARCHAR"),
-        ("users", "internship_position", "VARCHAR"),
-        ("users", "internship_duration", "VARCHAR"),
-        ("users", "internship_salary", "VARCHAR"),
-        ("users", "languages", "TEXT"),
-        ("users", "profile_image", "VARCHAR"),
-        ("video_interviews", "transcript_source", "VARCHAR"),
-        # Client merge: new fields for jobs
-        ("jobs", "skills_weightage_json", "TEXT"),
-        ("jobs", "description_file_path", "VARCHAR"),
-        ("jobs", "years_experience", "INTEGER"),
-        # Client merge: new fields for job_applications (candidate scoring)
-        ("job_applications", "location", "VARCHAR"),
-        ("job_applications", "linkedin_url", "VARCHAR"),
-        ("job_applications", "current_ctc", "VARCHAR"),
-        ("job_applications", "interview_datetime", "TIMESTAMP"),
-        ("job_applications", "duration_minutes", "INTEGER DEFAULT 30"),
-        ("job_applications", "overall_score", "INTEGER"),
-        ("job_applications", "ai_score", "FLOAT"),
-        ("job_applications", "final_score", "FLOAT"),
-        ("job_applications", "transcript_text", "TEXT"),
-        ("job_applications", "transcript_path", "VARCHAR"),
-        ("job_applications", "report_card_json", "TEXT"),
-        ("job_applications", "added_by", "INTEGER REFERENCES users(id)"),
-        # Client merge: new fields for interview_questions
-        ("interview_questions", "suggested_answer", "TEXT"),
-        ("interview_questions", "category", "VARCHAR(100)"),
-        ("interview_questions", "order_number", "INTEGER DEFAULT 0"),
-        # Face detection columns for fraud analysis
-        ("fraud_analyses", "face_detection_score", "FLOAT"),
-        ("fraud_analyses", "face_detection_details", "TEXT"),
-        # Transcript-extracted question text (for test analysis / direct scoring without pre-defined questions)
-        ("interview_answers", "question_text_override", "TEXT"),
-        # Recording binary data stored in DB
-        ("video_interviews", "recording_data", "BYTEA"),
-    ]
-
-    with engine.begin() as conn:
-        for table, column, col_type in expected_columns:
-            if not inspector.has_table(table):
-                continue
-            existing = [c["name"] for c in inspector.get_columns(table)]
-            if column not in existing:
-                try:
-                    conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}'))
-                    print(f"  ✅ Added missing column: {table}.{column}")
-                except Exception as e:
-                    print(f"  ⚠️ Could not add {table}.{column}: {e}")
-
-try:
-    auto_migrate()
-    print("✅ Auto-migration complete")
-except Exception as e:
-    print(f"⚠️ Auto-migration skipped: {e}")
-
-# Make interview_answers.question_id nullable (for transcript-extracted Q&A without pre-defined questions)
-try:
-    from sqlalchemy import text as _text_qa
-    with engine.begin() as conn:
-        conn.execute(_text_qa(
-            "ALTER TABLE interview_answers ALTER COLUMN question_id DROP NOT NULL"
-        ))
-    print("✅ Made interview_answers.question_id nullable")
-except Exception:
-    pass  # Already nullable or table doesn't exist yet
-
-# Migrate video_interviews.status from ENUM to VARCHAR (to support new statuses like no_show)
-try:
-    from sqlalchemy import text as _text
-    with engine.begin() as conn:
-        conn.execute(_text(
-            "ALTER TABLE video_interviews ALTER COLUMN status TYPE VARCHAR USING status::text"
-        ))
-        print("✅ Migrated video_interviews.status to VARCHAR")
-except Exception as e:
-    if "already" in str(e).lower() or "type" in str(e).lower():
-        pass  # Column is already VARCHAR
-    else:
-        print(f"⚠️ video_interviews.status migration skipped: {e}")
+# DB migrations moved to startup event — server starts listening FIRST
+print("Starting AI Interview Platform API...")
 
 app = FastAPI(
-    title="AI Interview Platform API - Database Only", 
+    title="AI Interview Platform API - Database Only",
     version="1.0.0",
     description="API that uses ONLY your database data - no sample data"
 )
+
+@app.on_event("startup")
+def run_migrations():
+    """Run DB migrations after server starts listening (non-blocking for Cloud Run health check)."""
+    import threading
+    def _migrate():
+        try:
+            print("Running database migrations...")
+            Base.metadata.create_all(bind=engine)
+            print("Database tables verified.")
+        except Exception as e:
+            print(f"⚠️ Table creation: {e}")
+
+        # Auto-migrate columns
+        try:
+            from sqlalchemy import inspect, text
+            inspector = inspect(engine)
+            expected_columns = [
+                ("users", "is_online", "BOOLEAN DEFAULT FALSE"),
+                ("users", "last_activity", "TIMESTAMP"),
+                ("users", "last_login", "TIMESTAMP"),
+                ("users", "full_name", "VARCHAR"),
+                ("users", "phone", "VARCHAR"),
+                ("users", "department", "VARCHAR"),
+                ("users", "skills", "TEXT"),
+                ("users", "experience_years", "INTEGER"),
+                ("users", "current_position", "VARCHAR"),
+                ("users", "bio", "TEXT"),
+                ("users", "mobile", "VARCHAR"),
+                ("users", "gender", "VARCHAR"),
+                ("users", "location", "VARCHAR"),
+                ("users", "education", "TEXT"),
+                ("users", "has_internship", "BOOLEAN DEFAULT FALSE"),
+                ("users", "internship_company", "VARCHAR"),
+                ("users", "internship_position", "VARCHAR"),
+                ("users", "internship_duration", "VARCHAR"),
+                ("users", "internship_salary", "VARCHAR"),
+                ("users", "languages", "TEXT"),
+                ("users", "profile_image", "VARCHAR"),
+                ("video_interviews", "transcript_source", "VARCHAR"),
+                ("jobs", "skills_weightage_json", "TEXT"),
+                ("jobs", "description_file_path", "VARCHAR"),
+                ("jobs", "years_experience", "INTEGER"),
+                ("job_applications", "location", "VARCHAR"),
+                ("job_applications", "linkedin_url", "VARCHAR"),
+                ("job_applications", "current_ctc", "VARCHAR"),
+                ("job_applications", "interview_datetime", "TIMESTAMP"),
+                ("job_applications", "duration_minutes", "INTEGER DEFAULT 30"),
+                ("job_applications", "overall_score", "INTEGER"),
+                ("job_applications", "ai_score", "FLOAT"),
+                ("job_applications", "final_score", "FLOAT"),
+                ("job_applications", "transcript_text", "TEXT"),
+                ("job_applications", "transcript_path", "VARCHAR"),
+                ("job_applications", "report_card_json", "TEXT"),
+                ("job_applications", "added_by", "INTEGER REFERENCES users(id)"),
+                ("interview_questions", "suggested_answer", "TEXT"),
+                ("interview_questions", "category", "VARCHAR(100)"),
+                ("interview_questions", "order_number", "INTEGER DEFAULT 0"),
+                ("fraud_analyses", "face_detection_score", "FLOAT"),
+                ("fraud_analyses", "face_detection_details", "TEXT"),
+                ("interview_answers", "question_text_override", "TEXT"),
+                ("video_interviews", "recording_data", "BYTEA"),
+            ]
+            with engine.begin() as conn:
+                for table, column, col_type in expected_columns:
+                    if not inspector.has_table(table):
+                        continue
+                    existing = [c["name"] for c in inspector.get_columns(table)]
+                    if column not in existing:
+                        try:
+                            conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}'))
+                            print(f"  Added {table}.{column}")
+                        except Exception as e:
+                            pass
+            print("Auto-migration complete.")
+        except Exception as e:
+            print(f"⚠️ Auto-migration skipped: {e}")
+
+        # Make question_id nullable
+        try:
+            from sqlalchemy import text as _t
+            with engine.begin() as conn:
+                conn.execute(_t("ALTER TABLE interview_answers ALTER COLUMN question_id DROP NOT NULL"))
+        except Exception:
+            pass
+
+        # Migrate status ENUM to VARCHAR
+        try:
+            from sqlalchemy import text as _t2
+            with engine.begin() as conn:
+                conn.execute(_t2("ALTER TABLE video_interviews ALTER COLUMN status TYPE VARCHAR USING status::text"))
+        except Exception:
+            pass
+
+        print("All migrations done.")
+
+    # Run in background thread so server starts immediately
+    threading.Thread(target=_migrate, daemon=True).start()
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 # Mount static files for uploads
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
@@ -213,7 +204,6 @@ try:
     app.include_router(candidate_matching_router, prefix="/api/candidates", tags=["Candidates"])
     app.include_router(profile_image_router, tags=["Profile Image"])
     app.include_router(resume_upload_router, tags=["Resume Upload"])
-    print("✅ Resume, Candidate Matching, Profile Image, and Resume Upload endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load resume endpoints: {e}")
 
@@ -221,7 +211,6 @@ except Exception as e:
 try:
     from job_application_router import router as job_application_router
     app.include_router(job_application_router, tags=["Job Applications"])
-    print("✅ Job Application endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load job application endpoints: {e}")
 
@@ -229,7 +218,6 @@ except Exception as e:
 try:
     from api.interview.question_generation.app import router as question_generation_router
     app.include_router(question_generation_router, tags=["Question Generation"])
-    print("✅ Question Generation endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load question generation endpoints: {e}")
 
@@ -237,7 +225,6 @@ except Exception as e:
 try:
     from api.interview.sessions.app import router as interview_session_router
     app.include_router(interview_session_router, tags=["Interview Sessions"])
-    print("✅ Interview Session endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load interview session endpoints: {e}")
 
@@ -245,7 +232,6 @@ except Exception as e:
 try:
     from api.recruiter.candidate_management import router as recruiter_router
     app.include_router(recruiter_router, tags=["Recruiter Flow"])
-    print("✅ Recruiter Flow endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load recruiter flow endpoints: {e}")
 
@@ -255,7 +241,6 @@ except Exception as e:
 try:
     from api.candidates.dashboard.app import router as candidate_dashboard_router
     app.include_router(candidate_dashboard_router, tags=["Candidate Dashboard"])
-    print("✅ Candidate Dashboard endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load candidate dashboard endpoints: {e}")
 
@@ -274,7 +259,6 @@ try:
     app.include_router(gdpr_retention_router, tags=["GDPR Retention"])
     app.include_router(gdpr_audit_router, tags=["GDPR Audit"])
     app.include_router(gdpr_privacy_router, tags=["GDPR Privacy"])
-    print("✅ GDPR endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load GDPR endpoints: {e}")
 
@@ -286,7 +270,6 @@ try:
     app.include_router(ats_connections_router, tags=["ATS Connections"])
     app.include_router(ats_sync_router, tags=["ATS Sync"])
     app.include_router(ats_webhooks_router, tags=["ATS Webhooks"])
-    print("✅ ATS endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load ATS endpoints: {e}")
 
@@ -308,11 +291,6 @@ try:
     from api.video.test_upload.app import router as video_test_router
     app.include_router(video_test_router, prefix="/api/video/test", tags=["Test Video Upload"])
 
-    print("✅ Video Interview & Fraud Detection endpoints included")
-    print(f"   Routes registered: {len(video_interviews_router.routes)} video interview routes")
-    print("   Video Interview Routes:")
-    for route in video_interviews_router.routes:
-        print(f"     {list(route.methods)} {route.path}")
 except Exception as e:
     import traceback
     print(f"❌ ERROR importing Video Interview endpoints: {e}")
@@ -323,11 +301,7 @@ except Exception as e:
 # Import and mount LiveKit endpoints
 try:
     from routers.livekit_router import router as livekit_router
-    print(f"🔍 LiveKit router imported: {livekit_router}")
-    print(f"🔍 LiveKit router prefix: {livekit_router.prefix}")
-    print(f"🔍 LiveKit router routes: {len(livekit_router.routes)}")
     app.include_router(livekit_router, prefix="/api/livekit")
-    print("✅ LiveKit endpoints included")
 except Exception as e:
     import traceback
     print(f"⚠️ Could not load LiveKit endpoints: {e}")
@@ -337,7 +311,6 @@ except Exception as e:
 try:
     from routers.transcription_ws import router as transcription_ws_router
     app.include_router(transcription_ws_router, tags=["Real-Time Transcription"])
-    print("✅ Real-Time Transcription WebSocket endpoint included")
 except Exception as e:
     print(f"⚠️ Could not load Real-Time Transcription endpoints: {e}")
 
@@ -345,7 +318,6 @@ except Exception as e:
 try:
     from api.ratings.app import router as ratings_router
     app.include_router(ratings_router, tags=["Interview Ratings"])
-    print("✅ Interview Rating & Report Card endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load Interview Rating endpoints: {e}")
 
@@ -355,13 +327,9 @@ try:
     from api.feedback.quality.app import router as feedback_quality_router
     app.include_router(feedback_submissions_router, tags=["Post-Hire Feedback"])
     app.include_router(feedback_quality_router, tags=["Quality Metrics"])
-    print("✅ Post-Hire Feedback & Quality Metrics endpoints included")
 except Exception as e:
     print(f"⚠️ Could not load Feedback endpoints: {e}")
 
-print("✅ Auth Router included")
-print("🌐 CORS enabled for frontend")
-print("📡 API ready - ONLY YOUR DATABASE DATA")
 
 @app.get("/")
 def read_root(db: Session = Depends(get_db)):
@@ -513,8 +481,6 @@ def read_jobs(
 ):
     """Fetch jobs from YOUR database ONLY"""
     try:
-        print(f"🔍 Fetching jobs from YOUR database...")
-        print(f"🔍 Filters: status={status}, company={company}")
         
         # Build query with filters (eager-load applications for application_count)
         from sqlalchemy.orm import subqueryload
@@ -531,14 +497,6 @@ def read_jobs(
         
         # Sort newest first, then apply pagination
         jobs = query.order_by(Job.created_at.desc()).offset(skip).limit(limit).all()
-        
-        print(f"📊 Found {len(jobs)} jobs in YOUR database")
-        if len(jobs) == 0:
-            print("⚠️ No jobs found - database might be empty")
-        else:
-            for job in jobs:
-                print(f"   - Job: {job.id}, {job.title} at {job.company}")
-        
         return jobs
         
     except Exception as e:
@@ -818,12 +776,10 @@ async def apply_for_job_with_resume(
                 "parsed_text_length": len(parsed_text) if parsed_text else 0,
                 "parsed_skills": parsed_skills
             }
-            print(f"✅ Resume uploaded and parsed: {resume.filename}")
 
         db.commit()
         db.refresh(new_application)
 
-        print(f"✅ Application submitted successfully: ID={new_application.id}")
 
         return {
             "message": "Application submitted successfully",
@@ -1140,6 +1096,7 @@ def toggle_candidate_status(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     email = application.applicant_email.lower()
+    # Find ALL users with this email (handle potential duplicates)
     user = db.query(User).filter(func.lower(User.email) == email).first()
 
     if user:
@@ -1148,8 +1105,23 @@ def toggle_candidate_status(
         db.refresh(user)
         return {"id": candidate_id, "email": email, "is_active": user.is_active}
     else:
-        # No user account — just return current state
-        return {"id": candidate_id, "email": email, "is_active": True, "message": "No user account found"}
+        # No user account — create one with is_active=False (toggling from default active to inactive)
+        try:
+            new_user = User(
+                username=application.applicant_name or email.split('@')[0],
+                email=application.applicant_email,
+                hashed_password="",
+                role=UserRole.CANDIDATE,
+                is_active=False
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            return {"id": candidate_id, "email": email, "is_active": new_user.is_active}
+        except Exception as e:
+            db.rollback()
+            print(f"[toggle-status] Error creating user: {e}")
+            return {"id": candidate_id, "email": email, "is_active": True}
 
 
 @app.delete("/api/candidates/{candidate_id}")
@@ -1895,7 +1867,6 @@ def generate_score_for_candidate(
     
     # Use AI results if available
     if llm_result:
-        print(f"✅ AI scoring successful!")
         for pq in llm_result.get("per_question", []):
             q_id = pq.get("question_id")
             

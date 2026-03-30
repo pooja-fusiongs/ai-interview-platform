@@ -509,7 +509,7 @@ def expert_review_question(
         ).count()
         
         if reviewed_questions == total_questions:
-            session.expert_review_status = "completed"
+            session.expert_review_status = "approved"
 
             # Notify recruiter that review is completed
             try:

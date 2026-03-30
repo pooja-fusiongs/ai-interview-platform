@@ -728,6 +728,7 @@ async def join_video_interview(
         if is_recruiter:
             # Recruiter joins first -> waiting for candidate
             vi.status = VideoInterviewStatus.WAITING.value
+            vi.started_at = datetime.now(timezone.utc)  # Track when waiting started (for grace period)
             print(f"✅ Recruiter joined, status: SCHEDULED -> WAITING_FOR_CANDIDATE")
         elif is_candidate:
             # Candidate joins directly (recruiter not joined yet)
@@ -1591,11 +1592,14 @@ def check_grace_period(
             "message": "Interview is not in WAITING status"
         }
     
-    # Calculate if grace period expired
-    scheduled_time = vi.scheduled_at
+    # Calculate grace period from when recruiter joined (started_at), not scheduled_at
+    grace_start = vi.started_at or vi.scheduled_at
     now = datetime.now(timezone.utc)
-    grace_period_end = scheduled_time + timedelta(minutes=grace_minutes)
-    
+    # Ensure grace_start is timezone-aware
+    if grace_start.tzinfo is None:
+        grace_start = grace_start.replace(tzinfo=timezone.utc)
+    grace_period_end = grace_start + timedelta(minutes=grace_minutes)
+
     if now > grace_period_end:
         # Grace period expired - mark as NO_SHOW
         vi.status = VideoInterviewStatus.NO_SHOW.value
@@ -1608,7 +1612,7 @@ def check_grace_period(
             "status": vi.status,
             "message": "Grace period expired, candidate marked absent"
         }
-    
+
     # Still within grace period
     remaining_seconds = int((grace_period_end - now).total_seconds())
     return {
@@ -1720,10 +1724,12 @@ def check_grace_period(
             "message": "Interview is not in WAITING status"
         }
 
-    # Calculate if grace period expired
-    scheduled_time = vi.scheduled_at
+    # Calculate grace period from when recruiter joined (started_at), not scheduled_at
+    grace_start = vi.started_at or vi.scheduled_at
     now = datetime.now(timezone.utc)
-    grace_period_end = scheduled_time + timedelta(minutes=grace_minutes)
+    if grace_start.tzinfo is None:
+        grace_start = grace_start.replace(tzinfo=timezone.utc)
+    grace_period_end = grace_start + timedelta(minutes=grace_minutes)
 
     if now > grace_period_end:
         # Grace period expired - mark as NO_SHOW

@@ -83,7 +83,12 @@ const Navigation: React.FC<NavigationProps> = ({ children, noScroll = false }) =
     if (route === '/feedback-list' && location.pathname.startsWith('/feedback')) {
       return true
     }
-
+  if (route === '/video-interviews' && location.pathname.startsWith('/video-room')) {
+      return true
+    }
+     if (route === '/video-interviews' && location.pathname.startsWith('/video-detail')) {
+      return true
+    }
     return location.pathname.startsWith(route)
   }
 

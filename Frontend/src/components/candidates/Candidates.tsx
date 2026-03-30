@@ -467,10 +467,15 @@ const Candidates = () => {
     const matchesSearch = !query ? true : haystack.includes(query)
     if (!matchesSearch) return false
 
-    // status filter
-    // status filter (if no status selected, show all)
+    // status filter (active/pending = account status based on is_active)
     const selectedStatuses = Object.entries((filters.statuses as Record<string, boolean>) || {}).filter(([, v]) => v).map(([k]) => k)
-    if (selectedStatuses.length > 0 && !selectedStatuses.includes(candidate.status)) return false
+    if (selectedStatuses.length > 0) {
+      const isActive = candidate.is_active !== false
+      const matchesStatus = selectedStatuses.some(s =>
+        (s === 'active' && isActive) || (s === 'inactive' && !isActive)
+      )
+      if (!matchesStatus) return false
+    }
 
     // min score filter
     if (typeof candidate.score === 'number' && candidate.score < (filters.minScore ?? 0)) return false
@@ -1393,7 +1398,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               Status
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
-              {['active', 'pending'].map(status => {
+              {['active', 'inactive'].map(status => {
                 const checked = (filters.statuses as Record<string, boolean>)[status] ?? false
                 return (
                   <Chip

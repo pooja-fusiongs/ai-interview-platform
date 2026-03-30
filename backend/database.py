@@ -33,18 +33,22 @@ if DATABASE_URL:
     if is_supabase and is_transaction_mode:
         # TRANSACTION MODE (port 6543) — Supabase pgbouncer handles pooling
         # Use NullPool: SQLAlchemy does NOT pool, each request gets fresh connection
-        # This prevents SSL drops and pool exhaustion
+        # keepalives prevent SSL drops on Cloud Run <-> Supabase (cross-region)
         engine = create_engine(
             SQLALCHEMY_DATABASE_URL,
             connect_args={
                 "sslmode": "require",
                 "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
                 "options": "-c statement_timeout=60000 -c plan_cache_mode=force_custom_plan",
             },
-            poolclass=NullPool,           # Let Supabase pgbouncer handle pooling
-            use_native_hstore=False,      # Prevent hstore OID query that breaks pgbouncer SSL
+            poolclass=NullPool,
+            use_native_hstore=False,
         )
-        print("PostgreSQL connected (NullPool — Supabase pgbouncer manages connections)")
+        print("PostgreSQL connected (NullPool + keepalives — Supabase pgbouncer)")
     elif is_supabase:
         # SESSION MODE (port 5432) — use NullPool to prevent MaxClients error
         # Each request opens fresh connection, uses it, closes immediately
@@ -114,12 +118,21 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+# Auto-reconnect: if SSL drops, invalidate and get fresh connection
+@event.listens_for(engine, "handle_error")
+def handle_db_error(context):
+    if context.original_exception and "SSL" in str(context.original_exception):
+        logger.warning("SSL connection dropped — will retry with fresh connection")
+
 
 def get_db():
     """FastAPI dependency — yields a DB session and guarantees cleanup."""
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

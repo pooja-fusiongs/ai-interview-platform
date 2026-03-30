@@ -81,8 +81,9 @@ class AIQuestionGenerator:
                 db.add(question)
                 saved_questions.append(question)
 
-            # Update session
+            # Update session — auto-approve questions
             session.status = "generated"
+            session.expert_review_status = "approved"
             session.generated_at = datetime.utcnow()
             db.commit()
 
