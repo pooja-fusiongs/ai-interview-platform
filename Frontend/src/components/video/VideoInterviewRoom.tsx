@@ -1031,9 +1031,9 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
-  // Auto-show consent dialog for candidates on page load (one-click join)
+  // Show consent dialog only when candidate clicks "Start Interview" (handled in handleStart)
   useEffect(() => {
-    if (interview && (isGuest || user?.role === 'candidate') && !isActive && interview?.status !== 'completed' && !interview.recording_consent && !showConsentDialog) {
+    if (false) {
       setShowConsentDialog(true);
     }
   }, [interview, isGuest, user, isActive, showConsentDialog]);
