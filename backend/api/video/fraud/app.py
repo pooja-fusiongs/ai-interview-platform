@@ -123,7 +123,7 @@ def submit_face_events(
 
     # Only block face events for fully ended interviews
     vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
-    if vi_status in ("cancelled", "no_show"):
+    if vi_status in ("cancelled", "no_show", "completed"):
         raise HTTPException(status_code=400, detail="Interview is no longer active")
 
     # Calculate face detection score (0-1, higher = better/more trustworthy)
@@ -267,7 +267,7 @@ def submit_lip_events(
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
-    if vi_status in ("cancelled", "no_show"):
+    if vi_status in ("cancelled", "no_show", "completed"):
         raise HTTPException(status_code=400, detail="Interview is no longer active")
 
     # Calculate lip sync score
@@ -402,7 +402,7 @@ def submit_voice_events(
         raise HTTPException(status_code=404, detail="Video interview not found")
 
     vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
-    if vi_status in ("cancelled", "no_show"):
+    if vi_status in ("cancelled", "no_show", "completed"):
         raise HTTPException(status_code=400, detail="Interview is no longer active")
 
     # Calculate voice consistency score

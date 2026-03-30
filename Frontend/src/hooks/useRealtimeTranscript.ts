@@ -145,7 +145,7 @@ export function useRealtimeTranscript({
           } catch {}
         };
         recorder.onerror = () => {}; // Silent
-        recorder.start(200);
+        recorder.start(500); // 500ms chunks — better for Deepgram sentence detection
         return recorder;
       } catch {
         return null;

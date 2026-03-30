@@ -126,8 +126,16 @@ def handle_db_error(context):
 
 
 def get_db():
-    """FastAPI dependency — yields a DB session and guarantees cleanup."""
+    """FastAPI dependency — yields a DB session. Retries once on SSL drop."""
+    from sqlalchemy import text
     db = SessionLocal()
+    try:
+        # Ping to check connection is alive
+        db.execute(text("SELECT 1"))
+    except Exception:
+        # SSL dropped — close dead session, create fresh one
+        db.close()
+        db = SessionLocal()
     try:
         yield db
     except Exception:

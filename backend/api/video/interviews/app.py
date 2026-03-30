@@ -1004,6 +1004,15 @@ async def guest_end_interview(
         vi.status = VideoInterviewStatus.COMPLETED.value
         vi.ended_at = datetime.now(timezone.utc)
 
+    # Mark ALL fraud analyses as completed
+    pending_fas = db.query(FraudAnalysis).filter(
+        FraudAnalysis.video_interview_id == video_id,
+        FraudAnalysis.analysis_status == "pending"
+    ).all()
+    for fa in pending_fas:
+        fa.analysis_status = "completed"
+        fa.analyzed_at = datetime.now(timezone.utc)
+
     # Create InterviewSession only if one doesn't already exist (avoid duplicates when both sides call /end)
     if not vi.session_id:
         try:
@@ -1036,7 +1045,35 @@ async def guest_end_interview(
     db.commit()
     db.refresh(vi)
 
-    # Start background transcription only if not already completed (avoid duplicate processing)
+    # Build transcript from real-time chunks FIRST (instant, no waiting)
+    if not vi.transcript or vi.transcript_source == "realtime":
+        try:
+            chunks = db.query(TranscriptChunk).filter(
+                TranscriptChunk.video_interview_id == video_id,
+                TranscriptChunk.is_final == True
+            ).order_by(TranscriptChunk.sequence_number).all()
+
+            if chunks and len(chunks) >= 2:
+                # Build formatted transcript from real-time chunks
+                lines = []
+                for c in chunks:
+                    speaker = c.speaker.capitalize() if c.speaker else "Speaker"
+                    lines.append(f"{speaker}: {c.text}")
+                realtime_text = "\n".join(lines)
+
+                start_str = (vi.started_at or vi.scheduled_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                end_str = (vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                vi.transcript = f"[Interview Start: {start_str}]\n\n{realtime_text}\n\n[Interview End: {end_str}]"
+                vi.transcript_source = "realtime"
+                vi.transcript_generated_at = datetime.now(timezone.utc)
+                db.commit()
+                print(f"[EndInterview] Built transcript from {len(chunks)} real-time chunks (instant)")
+            else:
+                print(f"[EndInterview] Only {len(chunks) if chunks else 0} real-time chunks — will try recording transcription")
+        except Exception as e:
+            print(f"[EndInterview] Real-time transcript build failed: {e}")
+
+    # Start background recording transcription only if no transcript yet
     if not vi.transcript:
         _start_background_transcription_task(
             vi_id=video_id,
@@ -1512,6 +1549,17 @@ def end_video_interview(
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
 
+    # Mark ALL fraud analyses as completed when interview ends
+    pending_fas = db.query(FraudAnalysis).filter(
+        FraudAnalysis.video_interview_id == video_id,
+        FraudAnalysis.analysis_status == "pending"
+    ).all()
+    for fa in pending_fas:
+        fa.analysis_status = "completed"
+        fa.analyzed_at = datetime.now(timezone.utc)
+    if pending_fas:
+        print(f"[end_interview] {len(pending_fas)} fraud analysis record(s) marked as completed")
+
     print(f"[end_interview] recording_url={vi.recording_url}")
 
     # Create InterviewSession only if one doesn't already exist (avoid duplicates when both sides call /end)
@@ -1548,7 +1596,34 @@ def end_video_interview(
     db.commit()
     db.refresh(vi)
 
-    # --- Generate transcript in BACKGROUND THREAD (only if not already done) ---
+    # Build transcript from real-time chunks FIRST (instant)
+    if not vi.transcript or vi.transcript_source == "realtime":
+        try:
+            chunks = db.query(TranscriptChunk).filter(
+                TranscriptChunk.video_interview_id == vi.id,
+                TranscriptChunk.is_final == True
+            ).order_by(TranscriptChunk.sequence_number).all()
+
+            if chunks and len(chunks) >= 2:
+                lines = []
+                for c in chunks:
+                    speaker = c.speaker.capitalize() if c.speaker else "Speaker"
+                    lines.append(f"{speaker}: {c.text}")
+                realtime_text = "\n".join(lines)
+
+                start_str = (vi.started_at or vi.scheduled_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                end_str = (vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                vi.transcript = f"[Interview Start: {start_str}]\n\n{realtime_text}\n\n[Interview End: {end_str}]"
+                vi.transcript_source = "realtime"
+                vi.transcript_generated_at = datetime.now(timezone.utc)
+                db.commit()
+                print(f"[end_interview] Built transcript from {len(chunks)} real-time chunks (instant)")
+            else:
+                print(f"[end_interview] Only {len(chunks) if chunks else 0} real-time chunks")
+        except Exception as e:
+            print(f"[end_interview] Real-time transcript build failed: {e}")
+
+    # Fallback: slow recording-based transcription only if no transcript yet
     if not vi.transcript:
         _start_background_transcription_task(
             vi_id=vi.id,

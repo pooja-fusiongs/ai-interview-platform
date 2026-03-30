@@ -93,9 +93,15 @@ const InterviewRecorder: React.FC<{
         camVideoElRef.current = document.createElement('video');
         camVideoElRef.current.muted = true;
         camVideoElRef.current.playsInline = true;
+        camVideoElRef.current.setAttribute('autoplay', '');
       }
+      // Always re-create MediaStream to handle track replacements
       camVideoElRef.current.srcObject = new MediaStream([camMediaTrack]);
       camVideoElRef.current.play().catch(() => {});
+      // Monitor track ended event
+      camMediaTrack.addEventListener('ended', () => {
+        console.warn('⚠️ [Recorder] Local camera track ended — recording may lose local video');
+      });
     } else if (camVideoElRef.current) {
       camVideoElRef.current.srcObject = null;
     }
@@ -124,9 +130,13 @@ const InterviewRecorder: React.FC<{
         remoteCamVideoElRef.current = document.createElement('video');
         remoteCamVideoElRef.current.muted = true;
         remoteCamVideoElRef.current.playsInline = true;
+        remoteCamVideoElRef.current.setAttribute('autoplay', '');
       }
       remoteCamVideoElRef.current.srcObject = new MediaStream([remoteCamMediaTrack]);
       remoteCamVideoElRef.current.play().catch(() => {});
+      remoteCamMediaTrack.addEventListener('ended', () => {
+        console.warn('⚠️ [Recorder] Remote camera track ended — recording may lose remote video');
+      });
     } else if (remoteCamVideoElRef.current) {
       remoteCamVideoElRef.current.srcObject = null;
     }
@@ -232,7 +242,8 @@ const InterviewRecorder: React.FC<{
         const ctx = canvas.getContext('2d')!;
 
         // Draw loop: composites all video tracks onto canvas
-        // Fallback: if hidden video refs aren't ready, try to find visible video elements in the DOM
+        // Always checks DOM as fallback — handles LiveKit track replacements
+        let frameMissCount = 0;
         const drawFrame = () => {
           const localScreenVid = screenVideoElRef.current;
           let localCamVid = camVideoElRef.current;
@@ -244,18 +255,27 @@ const InterviewRecorder: React.FC<{
           const hasRemoteScreen = remoteScreenVid?.srcObject && remoteScreenVid.readyState >= 2;
           let hasRemoteCam = !!(remoteCamVid?.srcObject && remoteCamVid.readyState >= 2);
 
-          // Fallback: try to find video elements from the DOM if hidden refs aren't working
-          if (!hasLocalCam && !hasRemoteCam) {
-            const domVideos = document.querySelectorAll<HTMLVideoElement>('video[data-lk-local-participant="true"], video');
+          // ALWAYS check DOM for live video elements — handles track replacements
+          if (!hasLocalCam || !hasRemoteCam) {
+            const domVideos = document.querySelectorAll<HTMLVideoElement>('video');
             for (const v of domVideos) {
-              if (v.srcObject && v.readyState >= 2 && v.videoWidth > 0 && !v.muted) {
-                // Likely remote camera (not muted = has audio = remote)
-                if (!hasRemoteCam) { remoteCamVid = v; hasRemoteCam = true; }
-              } else if (v.srcObject && v.readyState >= 2 && v.videoWidth > 0 && v.muted) {
-                // Likely local camera (muted = local preview)
-                if (!hasLocalCam) { localCamVid = v; hasLocalCam = true; }
+              if (!v.srcObject || v.readyState < 2 || v.videoWidth === 0) continue;
+              if (v.muted && !hasLocalCam) {
+                localCamVid = v; hasLocalCam = true;
+              } else if (!v.muted && !hasRemoteCam) {
+                remoteCamVid = v; hasRemoteCam = true;
               }
             }
+          }
+
+          // Track missed frames — log warning if canvas has nothing for 30+ frames
+          if (!hasLocalCam && !hasRemoteCam && !hasLocalScreen && !hasRemoteScreen) {
+            frameMissCount++;
+            if (frameMissCount === 90) { // ~3 sec at 30fps
+              console.warn('⚠️ [Recording] No video sources for 3+ seconds — recording may be blank');
+            }
+          } else {
+            frameMissCount = 0;
           }
 
           // Dark background
@@ -827,15 +847,18 @@ const VideoInterviewRoom: React.FC = () => {
       console.warn('AudioContext unlock failed:', e);
     }
 
+    // Start LiveKit + recording IMMEDIATELY — don't wait for API calls
+    setIsActive(true);
+    toast.success('Joining interview...');
+
+    // API calls run in background — consent save + join
     try {
-      // Save consent to backend
       if (isGuest) {
         await videoInterviewService.guestUpdateRecordingConsent(Number(videoId), true);
       } else {
         await videoInterviewService.updateRecordingConsent(Number(videoId), true);
       }
 
-      // If interview is already in_progress (started by recruiter), just join
       if (interview?.status !== 'in_progress') {
         if (isGuest) {
           await videoInterviewService.guestJoinInterview(Number(videoId));
@@ -848,11 +871,9 @@ const VideoInterviewRoom: React.FC = () => {
         }
         setElapsed(0);
       }
-
-      setIsActive(true);
-      toast.success('Joining interview...');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to join interview');
+      console.error('Background join API failed:', err);
+      // Don't stop the interview — LiveKit is already connected
     }
   };
 
@@ -930,11 +951,14 @@ const VideoInterviewRoom: React.FC = () => {
     console.log(`📊 Recorder: exists=${!!mediaRecorderRef.current}, state=${mediaRecorderRef.current?.state || 'N/A'}, chunks=${recordedChunksRef.current.length}`);
     console.log(`📊 Participants: maxParticipants=${maxParticipantsRef.current}`);
 
-    // 1) INSTANT UI update — user sees "completed" immediately
+    // 1) INSTANT UI update — user sees "Interview Completed" screen immediately
     setIsActive(false);
     setCallJoined(false);
     setIsRecording(false);
     setEnding(false);
+    // Mark interview as completed INSTANTLY so "Interview Completed" screen shows
+    // while recording uploads in background
+    setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
 
     // 2) Stop recorder (fast — just stops MediaRecorder, no upload)
     let recordingBlob: Blob | null = null;
