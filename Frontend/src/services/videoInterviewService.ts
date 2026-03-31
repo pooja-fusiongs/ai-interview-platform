@@ -13,10 +13,11 @@ const guestClient = axios.create({
 export const videoInterviewService = {
   scheduleInterview: async (data: any) => {
     try {
-      const response = await apiClient.post('/api/video/interviews', data);
+      const response = await apiClient.post('/api/video/interviews', data, {
+        timeout: 180000, // 3 min — generates questions + sends email
+      });
       return response.data;
     } catch (error: any) {
-      // Extract the actual error message from API response
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to schedule interview';
       throw new Error(errorMessage);
     }

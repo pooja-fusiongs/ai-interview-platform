@@ -70,7 +70,8 @@ export const VideoTilesGrid: React.FC<{
   onEndCall?: () => void;
   onExitCall?: () => void;
   captionEntries?: CaptionEntry[];
-}> = ({ onEndCall, onExitCall, captionEntries = [] }) => {
+  isCandidate?: boolean;
+}> = ({ onEndCall, onExitCall, captionEntries = [], isCandidate = false }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   const tracks = useTracks(
@@ -748,7 +749,7 @@ export const VideoTilesGrid: React.FC<{
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="End Interview — Permanently end and generate report" arrow>
+          <Tooltip title={isCandidate ? "Leave Interview" : "End Interview"} arrow>
             <IconButton onClick={onEndCall} sx={{
               ...ctrlBtn(false, true),
               borderRadius: '24px', width: { xs: 48, md: 56 }, height: { xs: 40, md: 48 }, px: { xs: 1.5, md: 2 },

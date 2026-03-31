@@ -82,7 +82,6 @@ async def rate_question(
     if existing_rating:
         existing_rating.rating = rating_data.rating
         existing_rating.notes = rating_data.notes
-        _update_overall_score(candidate, db)
         db.commit()
         db.refresh(existing_rating)
         return existing_rating
@@ -93,12 +92,40 @@ async def rate_question(
         notes=rating_data.notes
     )
     db.add(new_rating)
-    db.flush()
-    _update_overall_score(candidate, db)
     db.commit()
     db.refresh(new_rating)
 
     return new_rating
+
+
+@router.delete("/questions/{question_id}/rate")
+async def delete_rating(
+    job_id: int,
+    candidate_id: int,
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete a rating (unselect score)."""
+    job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
+
+    question = db.query(InterviewQuestion).filter(
+        InterviewQuestion.id == question_id,
+        InterviewQuestion.candidate_id == candidate.id
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    rating = db.query(InterviewRating).filter(
+        InterviewRating.question_id == question.id
+    ).first()
+    if not rating:
+        return {"status": "ok", "message": "No rating to delete"}
+
+    db.delete(rating)
+    _update_overall_score(candidate, db)
+    db.commit()
+    return {"status": "ok", "message": "Rating deleted"}
 
 
 @router.put("/questions/{question_id}/rate", response_model=RatingResponse)
@@ -328,8 +355,9 @@ def _build_report_card(
     questions_data: list[dict],
     ai_feedback: str = "",
     transcript_text: str = "",
+    fraud_scores: dict = None,
 ) -> dict:
-    """Build report card with strengths/improvements context from ratings."""
+    """Build report card with strengths/improvements context from ratings + fraud analysis."""
     strengths_context = []
     improvements_context = []
 
@@ -352,7 +380,11 @@ def _build_report_card(
         {"label": "Recruiter Rating", "score": recruiter_score},
     ]
 
-    return generate_report_card(
+    # Add fraud/trust scores if available
+    if fraud_scores:
+        scores.append({"label": "Trust Score", "score": fraud_scores.get("overall_trust_score")})
+
+    report = generate_report_card(
         candidate_name=candidate.applicant_name,
         job_title=job.title,
         score_breakdown=scores,
@@ -361,6 +393,12 @@ def _build_report_card(
         transcript_feedback=ai_feedback,
         transcript_text=transcript_text,
     )
+
+    # Attach fraud analysis breakdown to report card
+    if fraud_scores:
+        report["fraud_analysis"] = fraud_scores
+
+    return report
 
 
 def _get_saved_report_card(candidate: JobApplication) -> Optional[dict]:
@@ -452,9 +490,32 @@ async def finalize_interview_report(
             "notes": rating.notes if rating else None,
         })
 
-    # Build and save report card
+    # Fetch fraud analysis scores if available (via VideoInterview link)
+    fraud_scores = None
+    try:
+        from models import VideoInterview, FraudAnalysis
+        # Find video interview for this job + candidate
+        vi = db.query(VideoInterview).filter(
+            VideoInterview.job_id == job_id,
+        ).order_by(VideoInterview.created_at.desc()).first()
+        if vi:
+            fraud = db.query(FraudAnalysis).filter(
+                FraudAnalysis.video_interview_id == vi.id
+            ).first()
+            if fraud and fraud.overall_trust_score is not None:
+                fraud_scores = {
+                    "overall_trust_score": round(fraud.overall_trust_score, 1) if fraud.overall_trust_score else None,
+                    "face_detection_score": round(fraud.face_detection_score, 2) if fraud.face_detection_score else None,
+                    "voice_consistency_score": round(fraud.voice_consistency_score, 2) if fraud.voice_consistency_score else None,
+                    "lip_sync_score": round(fraud.lip_sync_score, 2) if fraud.lip_sync_score else None,
+                    "body_movement_score": round(fraud.body_movement_score, 2) if fraud.body_movement_score else None,
+                }
+    except Exception as e:
+        print(f"⚠️ Could not fetch fraud scores: {e}")
+
+    # Build and save report card (with fraud scores if available)
     report_card = _build_report_card(
-        job, candidate, questions_data, "", ""
+        job, candidate, questions_data, "", "", fraud_scores=fraud_scores
     )
     candidate.report_card_json = json.dumps(report_card)
     db.commit()

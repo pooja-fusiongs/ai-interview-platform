@@ -77,7 +77,7 @@ export const ratingService = {
     const response = await apiClient.post(
       `/api/jobs/${jobId}/candidates/${candidateId}/questions/${questionId}/rate`,
       data,
-      { timeout: 10000 }
+      { timeout: 15000 }
     );
     return response.data;
   },
@@ -95,6 +95,18 @@ export const ratingService = {
       { timeout: 10000 }
     );
     return response.data;
+  },
+
+  /** Delete a rating (unselect score) */
+  deleteRating: async (
+    jobId: number,
+    candidateId: number,
+    questionId: number
+  ): Promise<void> => {
+    await apiClient.delete(
+      `/api/jobs/${jobId}/candidates/${candidateId}/questions/${questionId}/rate`,
+      { timeout: 10000 }
+    );
   },
 
   /** Get interview summary with all ratings */

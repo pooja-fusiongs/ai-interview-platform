@@ -3,25 +3,9 @@ from typing import List, Optional
 from models import User, Job
 from schemas import UserCreate, JobCreate, JobUpdate
 import json
-import hashlib
 
-def get_password_hash(password: str) -> str:
-    """Create SHA256 hash of password"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against hash"""
-    # Try SHA256 hash first (for existing users)
-    sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
-    if hashed_password == sha256_hash:
-        return True
-    
-    # Try simple hash format (for backward compatibility)
-    simple_hash = f"hashed_{plain_password}"
-    if hashed_password == simple_hash:
-        return True
-    
-    return False
+# Import from single source of truth — no duplicate password logic
+from api.auth.jwt_handler import get_password_hash, verify_password, needs_password_upgrade
 
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
@@ -72,8 +56,16 @@ def authenticate_user(db: Session, username: str, password: str):
     for test_pwd in test_passwords:
         if verify_password(test_pwd, user.hashed_password):
             print(f"✅ Password verified with: '{test_pwd}'")
+            # Auto-upgrade legacy hash to bcrypt on successful login
+            if needs_password_upgrade(user.hashed_password):
+                try:
+                    user.hashed_password = get_password_hash(test_pwd)
+                    db.commit()
+                    print(f"🔒 Password hash upgraded to bcrypt for user {user.username}")
+                except Exception:
+                    db.rollback()  # Non-critical, don't break login
             return user
-    
+
     print(f"❌ Password verification failed for all attempts")
     return False
 

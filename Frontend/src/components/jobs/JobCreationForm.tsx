@@ -119,9 +119,12 @@ const JobCreationForm: React.FC<JobCreationFormProps> = ({ open, onClose, onJobC
         formData.append('description_file', file)
         response = await apiClient.post('/api/createJob', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000, // 2 min for file upload
         })
       } else {
-        response = await apiClient.post('/api/createJob', jobPayload)
+        response = await apiClient.post('/api/createJob', jobPayload, {
+          timeout: 60000,
+        })
       }
 
       const createdJob = response.data

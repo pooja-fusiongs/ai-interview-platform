@@ -692,7 +692,7 @@ const VideoInterviewRoom: React.FC = () => {
     }
   };
 
-  // Process rating queue one at a time to prevent DB race conditions
+  // Process rating queue one at a time with retry
   const processRatingQueue = async () => {
     if (isProcessingRatingRef.current || !interviewJobId || !applicationId) return;
     isProcessingRatingRef.current = true;
@@ -700,17 +700,18 @@ const VideoInterviewRoom: React.FC = () => {
     while (ratingQueueRef.current.length > 0) {
       const { questionId, rating } = ratingQueueRef.current.shift()!;
       setSavingRating(questionId);
-      try {
-        // Always use POST — backend handles upsert (creates or updates existing rating)
-        await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
-        questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
-        setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
-      } catch (err: any) {
-        // Don't show error for cancelled/aborted requests (e.g., rapid clicks or navigation)
-        const isCancel = err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError' || err?.message?.includes('canceled');
-        if (!isCancel) {
-          toast.error('Failed to save rating');
-          console.error('Rating error:', err);
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+          questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
+          setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
+          break;
+        } catch (err: any) {
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, attempt * 1000)); // Wait 1s, 2s before retry
+          }
+          // Never show error toast — silently retry, UI already shows the selected score
         }
       }
     }
@@ -730,6 +731,27 @@ const VideoInterviewRoom: React.FC = () => {
     ratingQueueRef.current = ratingQueueRef.current.filter(r => r.questionId !== questionId);
     ratingQueueRef.current.push({ questionId, rating });
     processRatingQueue();
+  };
+
+  const handleUnrateQuestion = (questionId: number) => {
+    if (!interviewJobId || !applicationId) return;
+    // Remove from UI
+    setQuestionRatings(prev => {
+      const updated = { ...prev };
+      delete updated[questionId];
+      return updated;
+    });
+    // Remove from ref
+    const updatedRef = { ...questionRatingsRef.current };
+    delete updatedRef[questionId];
+    questionRatingsRef.current = updatedRef;
+    // Remove from queue (don't send any pending rating for this question)
+    ratingQueueRef.current = ratingQueueRef.current.filter(r => r.questionId !== questionId);
+    // Delete rating from backend
+    ratingService.deleteRating(interviewJobId, applicationId, questionId).catch(() => {
+      // If delete fails, silently ignore — rating stays on backend
+      console.warn('Failed to delete rating for question', questionId);
+    });
   };
 
   const handleClassicSubmit = async () => {
@@ -786,15 +808,29 @@ const VideoInterviewRoom: React.FC = () => {
         const response = await videoInterviewService.checkGracePeriod(Number(videoId), 10); // 10 minutes grace
 
         if (response.grace_period_expired) {
-          // Grace period expired, candidate didn't join
-          toast.error('Candidate did not join within grace period');
+          // Grace period expired, candidate didn't join — stop everything
           if (graceCheckIntervalRef.current) {
             clearInterval(graceCheckIntervalRef.current);
             graceCheckIntervalRef.current = null;
           }
-          // Refresh interview data
-          const data = await videoInterviewService.getInterview(Number(videoId));
-          setInterview(data);
+          // Stop LiveKit and recording
+          setIsActive(false);
+          setCallJoined(false);
+          setIsRecording(false);
+          cleanupVideoCall();
+
+          toast.error('Candidate did not join within grace period. Redirecting...', { duration: 3000 });
+
+          // End interview on backend (marks as no_show)
+          try {
+            await videoInterviewService.endInterview(Number(videoId), {
+              max_participants: maxParticipantsRef.current,
+            });
+          } catch {}
+
+          // Redirect to detail page
+          setTimeout(() => navigate(`/video-detail/${videoId}`), 2500);
+          return;
         } else if (response.remaining_seconds) {
           setGracePeriodTimer(response.remaining_seconds);
         }
@@ -1039,23 +1075,44 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const handleEnd = async () => {
-    // Idempotent — prevent double execution
-    if (endingRef.current) return;
+    // Prevent double execution but allow retry after 30s timeout
+    if (endingRef.current) {
+      console.warn('handleEnd already in progress');
+      return;
+    }
     endingRef.current = true;
+    // Safety: reset after 30s in case end flow hangs
+    setTimeout(() => { endingRef.current = false; }, 30000);
 
     console.log(`\n========== 🔴 END INTERVIEW FLOW START ==========`);
     console.log(`📊 State: isActive=${isActive}, callJoined=${callJoined}, isRecording=${isRecording}, isGuest=${isGuest}`);
     console.log(`📊 Recorder: exists=${!!mediaRecorderRef.current}, state=${mediaRecorderRef.current?.state || 'N/A'}, chunks=${recordedChunksRef.current.length}`);
     console.log(`📊 Participants: maxParticipants=${maxParticipantsRef.current}`);
 
-    // 1) INSTANT UI update — user sees "Interview Completed" screen immediately
+    // 1) INSTANT UI update — stop video/recording immediately
     setIsActive(false);
     setCallJoined(false);
     setIsRecording(false);
     setEnding(false);
-    // Mark interview as completed INSTANTLY so "Interview Completed" screen shows
-    // while recording uploads in background
-    setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
+    const candidateEverJoined = maxParticipantsRef.current >= 2;
+    // Show appropriate status instantly while backend processes
+    setInterview((prev: any) => prev ? { ...prev, status: candidateEverJoined ? 'completed' : 'no_show' } : prev);
+
+    // 1.5) Flush pending rating queue — save all unsaved ratings before ending
+    if (ratingQueueRef.current.length > 0 && interviewJobId && applicationId) {
+      console.log(`💾 Flushing ${ratingQueueRef.current.length} pending rating(s) before end...`);
+      const pendingRatings = [...ratingQueueRef.current];
+      ratingQueueRef.current = [];
+      for (const { questionId, rating } of pendingRatings) {
+        try {
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+          questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
+          console.log(`💾 Saved pending rating: Q${questionId} = ${rating}`);
+        } catch (err) {
+          console.warn(`⚠️ Failed to save pending rating Q${questionId}:`, err);
+        }
+      }
+    }
 
     // 2) Stop recorder (fast — just stops MediaRecorder, no upload)
     let recordingBlob: Blob | null = null;
@@ -1098,36 +1155,38 @@ const VideoInterviewRoom: React.FC = () => {
           max_participants: maxParticipantsRef.current
         });
       }
-      setInterview({ ...interview, ...result, status: 'completed' });
-
-      if (result.status === 'no_show') {
-        toast.error('Interview marked as No Show — candidate did not join');
-      } else {
-        toast.success('Interview completed!');
-      }
+      setInterview({ ...interview, ...result });
     } catch (err: any) {
-      setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
-      toast.error(err.response?.data?.detail || 'Failed to end interview');
+      console.error('End interview API failed:', err);
     }
 
-    // 6) Auto-generate report from recruiter ratings (recruiter only)
-    if (!isGuest && interviewJobId && applicationId && Object.keys(questionRatings).length > 0) {
-      try {
-        toast.loading('Generating report card...', { id: 'report-gen' });
-        const reportResult = await ratingService.finalizeReport(interviewJobId, applicationId);
-        if (reportResult.status === 'success') {
-          toast.success(`Report generated! Recruiter Score: ${reportResult.recruiter_score}/10`, { id: 'report-gen', duration: 4000 });
-        } else {
+    // 6) Show appropriate toast and handle report
+    if (candidateEverJoined) {
+      toast.success('Interview completed!');
+      // Auto-generate report from recruiter ratings
+      if (!isGuest && interviewJobId && applicationId && Object.keys(questionRatings).length > 0) {
+        try {
+          toast.loading('Generating report card...', { id: 'report-gen' });
+          const reportResult = await ratingService.finalizeReport(interviewJobId, applicationId);
+          if (reportResult.status === 'success') {
+            toast.success(`Report generated! Recruiter Score: ${reportResult.recruiter_score}/10`, { id: 'report-gen', duration: 4000 });
+          } else {
+            toast.dismiss('report-gen');
+          }
+        } catch (err) {
           toast.dismiss('report-gen');
+          console.error('Report generation failed:', err);
         }
-      } catch (err) {
-        toast.dismiss('report-gen');
-        console.error('Report generation failed:', err);
       }
+    } else {
+      toast('Candidate did not join the interview', { icon: 'ℹ️', duration: 3000 });
     }
 
-    // 7) Navigate (recruiter only)
-    if (!isGuest) {
+    // 7) Clean up session token
+    sessionStorage.removeItem(`interview_token_${videoId}`);
+
+    // 8) Navigate to detail page (recruiter only, only if interview completed — not no_show)
+    if (!isGuest && candidateEverJoined) {
       setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
     }
   };
@@ -1419,7 +1478,16 @@ const VideoInterviewRoom: React.FC = () => {
                       {[1,2,3,4,5,6,7,8,9,10].map(n => (
                         <Box
                           key={n}
-                          onClick={() => { if (savingRating !== q.id) handleRateQuestion(q.id, n); }}
+                          onClick={() => {
+                            if (savingRating !== q.id) {
+                              if (rating === n) {
+                                // Click same score = deselect
+                                handleUnrateQuestion(q.id);
+                              } else {
+                                handleRateQuestion(q.id, n);
+                              }
+                            }
+                          }}
                           sx={{
                             width: '26px', height: '26px', borderRadius: '6px',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1682,7 +1750,7 @@ const VideoInterviewRoom: React.FC = () => {
                           onConnectionChange={setTranscriptConnected}
                         />
                         {isUserCandidate && <FaceDetectionOverlay enabled={callJoined} videoInterviewId={videoId ? parseInt(videoId) : undefined} />}
-                        <VideoTilesGrid onEndCall={handleEnd} onExitCall={handleExit} captionEntries={transcriptEntries} />
+                        <VideoTilesGrid onEndCall={handleEnd} onExitCall={handleExit} captionEntries={transcriptEntries} isCandidate={isUserCandidate} />
                         <RoomAudioRenderer />
                       </LiveKitRoom>
                     ) : (

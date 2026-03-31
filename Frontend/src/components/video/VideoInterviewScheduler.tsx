@@ -410,6 +410,7 @@ const VideoInterviewScheduler: React.FC = () => {
     setLoading(true);
     setError('');
     setSuccess(null);
+    toast.loading('Scheduling interview...', { id: 'schedule-loading' });
 
     try {
       const scheduledDateTime = selectedDate!
@@ -425,14 +426,15 @@ const VideoInterviewScheduler: React.FC = () => {
         duration_minutes: duration,
       });
 
+      toast.dismiss('schedule-loading');
       if (result.questions_approved === false) {
-        setError('Interview scheduled! Please approve the interview questions first, then the interview will be ready.');
+        toast.success('Interview scheduled! Redirecting to approve questions...', { duration: 2500 });
         setTimeout(() => {
           navigate(`/interview-outline/${result.question_session_id}?from=schedule-interview&jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}&interviewId=${result.id}`);
         }, 2500);
       } else {
+        toast.success('Interview scheduled successfully!');
         setSuccess(result);
-        // Go back to list and refresh
         setTimeout(() => {
           resetForm();
           setViewMode('list');
@@ -440,6 +442,7 @@ const VideoInterviewScheduler: React.FC = () => {
         }, 1500);
       }
     } catch (err: any) {
+      toast.dismiss('schedule-loading');
       const errorMsg = err.message || 'Failed to schedule interview. Please try again.';
       setError(errorMsg);
     } finally {

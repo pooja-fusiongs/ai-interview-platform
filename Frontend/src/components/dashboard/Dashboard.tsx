@@ -70,9 +70,9 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
-      // Fetch all data in parallel
+      // Fetch all data in parallel (with limits for performance)
       const [jobsData, interviewsData, questionSetsData] = await Promise.allSettled([
-        jobService.getJobs(),
+        jobService.getJobs({ limit: 50 }),
         videoInterviewService.getInterviews(),
         questionGenerationService.getQuestionSets()
       ])

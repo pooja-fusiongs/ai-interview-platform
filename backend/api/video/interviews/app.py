@@ -441,17 +441,6 @@ def list_video_interviews(
     List video interviews.
     Recruiters/Admins see all; Candidates see only their own.
     """
-    print(f"[DEBUG] list_video_interviews called by: {current_user.email}, role: {current_user.role}")
-    
-    # Test database connection
-    try:
-        from sqlalchemy import text
-        db.execute(text("SELECT 1"))
-        print("[DEBUG] Database connection OK")
-    except Exception as e:
-        print(f"[DEBUG] Database connection failed: {e}")
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    
     try:
         query = db.query(VideoInterview).options(
             joinedload(VideoInterview.candidate),
@@ -848,10 +837,21 @@ async def join_video_interview(
 
         room_name = f"interview_{video_id}"
 
+        # Use candidate name from application if this is a candidate, else user's own name
+        participant_name = current_user.full_name or current_user.username
+        if is_candidate and vi.candidate:
+            # Ensure candidate sees their application name, not their username
+            app = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email
+            ).first()
+            if app and app.applicant_name:
+                participant_name = app.applicant_name
+
         token_data = await generate_livekit_token(TokenRequest(
             room_name=room_name,
-            participant_name=current_user.full_name or current_user.username,
-            participant_identity=str(current_user.id),
+            participant_name=participant_name,
+            participant_identity=f"{'recruiter' if is_recruiter else 'candidate'}_{current_user.id}",
             role="interviewer" if is_recruiter else "candidate"
         ))
 
@@ -1610,13 +1610,7 @@ def end_video_interview(
         db.refresh(vi)
         return _build_response(vi, db)
 
-    # If status is WAITING_FOR_CANDIDATE, don't change it when recruiter leaves
-    if vi.status == VideoInterviewStatus.WAITING.value:
-        print(f"[end_interview] Status is WAITING_FOR_CANDIDATE, keeping it (recruiter left)")
-        # Don't change status, candidate can still join within grace period
-        return _build_response(vi, db)
-
-    # Only mark as no_show if candidate never actually joined
+    # Mark as no_show if candidate never joined (regardless of current status)
     if max_participants is not None and max_participants < 2:
         if not vi.candidate_joined_at:
             print(f"[end_interview] No-show detected: max_participants={max_participants}, candidate_joined_at={vi.candidate_joined_at}")

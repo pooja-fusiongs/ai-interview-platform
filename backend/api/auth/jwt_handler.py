@@ -11,6 +11,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import os
 import hashlib
+from passlib.context import CryptContext
 from dotenv import load_dotenv
 
 from database import get_db
@@ -25,23 +26,36 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 
 security = HTTPBearer()
 
+# Bcrypt context for secure password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 def verify_password(plain_password, hashed_password):
-    """Enhanced password verification with backward compatibility"""
-    # Try SHA256 hash first (for existing users)
+    """Verify password with backward compatibility for legacy hashes.
+    Supports: bcrypt (new), SHA256 (legacy), simple hash (legacy).
+    """
+    # Try bcrypt first (new secure format)
+    if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
+        return pwd_context.verify(plain_password, hashed_password)
+
+    # Try SHA256 hash (legacy — for existing users before bcrypt migration)
     sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
     if hashed_password == sha256_hash:
         return True
-    
-    # Try simple hash format (for backward compatibility)
+
+    # Try simple hash format (oldest legacy format)
     simple_hash = f"hashed_{plain_password}"
     if hashed_password == simple_hash:
         return True
-    
+
     return False
 
+def needs_password_upgrade(hashed_password):
+    """Check if password hash needs upgrade to bcrypt."""
+    return not (hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"))
+
 def get_password_hash(password):
-    """Create SHA256 hash of password"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Create bcrypt hash of password (secure, salted)."""
+    return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
@@ -108,10 +122,10 @@ def get_current_active_user(current_user: User = Depends(get_current_user), db: 
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    # Auto-update activity: only write to DB if stale (>2 min)
+    # Auto-update activity: only write to DB if stale (>5 min) to reduce DB writes
     try:
         now = datetime.utcnow()
-        if not current_user.last_activity or (now - current_user.last_activity).total_seconds() > 120:
+        if not current_user.last_activity or (now - current_user.last_activity).total_seconds() > 300:
             current_user.last_activity = now
             current_user.is_online = True
             db.commit()

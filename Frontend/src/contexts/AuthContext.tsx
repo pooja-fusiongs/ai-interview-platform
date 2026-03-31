@@ -181,14 +181,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const demoLogin = async (): Promise<{ success: boolean }> => {
-    try {
-      // Use the working test credentials
-      const result = await login('pooja@fusiongs.com', 'password123')
-      return result
-    } catch (error) {
-      console.error('Demo login failed:', error)
-      return { success: false }
-    }
+    // Demo login disabled in production — use regular login
+    return { success: false }
   }
 
   const value: AuthContextType = {

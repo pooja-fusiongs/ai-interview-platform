@@ -625,7 +625,7 @@ def get_question_sets(
     Only returns sessions that have actual questions - OPTIMIZED VERSION
     """
     try:
-        # Limit to recent sessions to avoid timeout
+        # Limit to recent sessions
         sessions = db.query(QuestionGenerationSession).order_by(
             QuestionGenerationSession.generated_at.desc()
         ).limit(50).all()

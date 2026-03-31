@@ -82,54 +82,6 @@ def validate_role(role: str):
         "valid": role in valid_roles
     }
 
-# Test endpoints (for debugging)
-@auth_router.post("/test-login")
-def test_login(user_credentials: UserLogin, db: Session = Depends(get_db)):
-    """Test endpoint to debug login issues"""
-    print(f"🧪 Testing login for: {user_credentials.username}")
-    
-    # Check if user exists
-    user = db.query(User).filter(
-        (User.username == user_credentials.username) | 
-        (User.email == user_credentials.username)
-    ).first()
-    
-    if not user:
-        return {
-            "status": "user_not_found",
-            "message": f"No user found with username/email: {user_credentials.username}",
-            "available_users": [u.username for u in db.query(User).limit(5).all()]
-        }
-    
-    # Test password
-    password_match = verify_password(user_credentials.password, user.hashed_password)
-    
-    return {
-        "status": "user_found",
-        "username": user.username,
-        "email": user.email,
-        "password_match": password_match,
-        "stored_hash": user.hashed_password[:20] + "...",
-        "is_active": user.is_active,
-        "role": user.role.value
-    }
-
-@auth_router.post("/reset-password")
-def reset_password(email: str, new_password: str, db: Session = Depends(get_db)):
-    """Reset password for testing - REMOVE IN PRODUCTION"""
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Update password
-    user.hashed_password = get_password_hash(new_password)
-    db.commit()
-    
-    return {
-        "message": f"Password reset for {email}",
-        "new_hash": user.hashed_password[:20] + "..."
-    }
-
 @auth_router.get("/profile")
 def get_user_profile(
     current_user: User = Depends(get_current_active_user),

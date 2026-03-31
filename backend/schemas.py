@@ -1,20 +1,20 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 from models import UserRole, JobStatus
 
 class UserBase(BaseModel):
-    username: str
+    username: str = Field(..., min_length=2, max_length=50)
     email: EmailStr
-    company: Optional[str] = None
+    company: Optional[str] = Field(None, max_length=100)
     role: UserRole = UserRole.CANDIDATE
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(..., min_length=6, max_length=128)
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=128)
 
 class User(UserBase):
     id: int

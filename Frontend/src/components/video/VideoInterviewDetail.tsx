@@ -510,8 +510,8 @@ const VideoInterviewDetail: React.FC = () => {
                 </Box>
               )}
 
-              {/* Recruiter Rating Score */}
-              {interview.recruiter_score != null && interview.rated_questions > 0 && (() => {
+              {/* Recruiter Rating Score — only show for completed interviews */}
+              {interview.recruiter_score != null && interview.rated_questions > 0 && !['no_show', 'waiting', 'scheduled', 'cancelled'].includes(interview.status?.toLowerCase()) && (() => {
                 const rs = interview.recruiter_score; // 1-10 scale
                 const scoreColor = rs >= 7.5 ? '#10b981' : rs >= 5 ? '#f59e0b' : '#ef4444';
                 const scoreBg = rs >= 7.5 ? '#ecfdf5' : rs >= 5 ? '#fffbeb' : '#fef2f2';

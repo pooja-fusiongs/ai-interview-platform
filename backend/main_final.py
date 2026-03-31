@@ -21,6 +21,7 @@ from sqlalchemy import or_, func
 from typing import List, Optional
 import uvicorn
 import json
+import time
 import uuid
 
 # Load environment variables from .env file FIRST
@@ -44,6 +45,22 @@ from api.auth.app import auth_router, get_current_active_user
 from api.jobs.create_job.app import router as create_job_router
 from services.ai_question_generator import get_question_generator
 from pydantic import BaseModel
+
+
+# Simple in-memory cache for frequently-hit endpoints
+_cache: dict = {}
+
+def cache_get(key: str, max_age_seconds: int = 60):
+    """Get cached value if not expired."""
+    if key in _cache:
+        val, ts = _cache[key]
+        if time.time() - ts < max_age_seconds:
+            return val
+    return None
+
+def cache_set(key: str, value):
+    """Store value in cache."""
+    _cache[key] = (value, time.time())
 
 
 # DB migrations moved to startup event — server starts listening FIRST
@@ -130,6 +147,25 @@ def run_migrations():
                         except Exception as e:
                             pass
             print("Auto-migration complete.")
+
+            # Create indexes for performance (idempotent — IF NOT EXISTS)
+            perf_indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_job_applications_email ON job_applications(applicant_email)",
+                "CREATE INDEX IF NOT EXISTS idx_job_applications_job_id ON job_applications(job_id)",
+                "CREATE INDEX IF NOT EXISTS idx_video_interviews_status ON video_interviews(status)",
+                "CREATE INDEX IF NOT EXISTS idx_video_interviews_scheduled ON video_interviews(scheduled_at)",
+                "CREATE INDEX IF NOT EXISTS idx_video_interviews_candidate ON video_interviews(candidate_id)",
+                "CREATE INDEX IF NOT EXISTS idx_video_interviews_interviewer ON video_interviews(interviewer_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_questions_candidate ON interview_questions(candidate_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_questions_job ON interview_questions(job_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_sessions_candidate ON interview_sessions(candidate_id)",
+            ]
+            for idx_sql in perf_indexes:
+                try:
+                    conn.execute(text(idx_sql))
+                except Exception:
+                    pass
+            print("Performance indexes verified.")
         except Exception as e:
             print(f"⚠️ Auto-migration skipped: {e}")
 
@@ -169,6 +205,7 @@ def start_interview_reminder_scheduler():
             try:
                 from database import SessionLocal
                 from models import VideoInterview, User, Job
+                from sqlalchemy.orm import joinedload
                 from services.email_service import send_interview_notification
                 from api.video.interviews.app import generate_candidate_token
 
@@ -177,8 +214,12 @@ def start_interview_reminder_scheduler():
                 window_start = now + timedelta(minutes=10)
                 window_end = now + timedelta(minutes=20)
 
-                # Find interviews starting in 10-20 min that haven't had a reminder sent
-                upcoming = db.query(VideoInterview).filter(
+                # Find interviews starting in 10-20 min — eager load relationships (1 query instead of 300+)
+                upcoming = db.query(VideoInterview).options(
+                    joinedload(VideoInterview.candidate),
+                    joinedload(VideoInterview.interviewer),
+                    joinedload(VideoInterview.job),
+                ).filter(
                     VideoInterview.status == "scheduled",
                     VideoInterview.scheduled_at >= window_start,
                     VideoInterview.scheduled_at <= window_end,
@@ -187,9 +228,9 @@ def start_interview_reminder_scheduler():
 
                 for vi in upcoming:
                     try:
-                        candidate = db.query(User).filter(User.id == vi.candidate_id).first()
-                        recruiter = db.query(User).filter(User.id == vi.interviewer_id).first() if vi.interviewer_id else None
-                        job = db.query(Job).filter(Job.id == vi.job_id).first()
+                        candidate = vi.candidate
+                        recruiter = vi.interviewer
+                        job = vi.job
                         if not candidate or not candidate.email:
                             continue
 
@@ -255,6 +296,10 @@ os.makedirs(os.path.join(uploads_dir, "profile_images"), exist_ok=True)
 os.makedirs(os.path.join(uploads_dir, "resumes"), exist_ok=True)
 os.makedirs(os.path.join(uploads_dir, "recordings"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+
+# GZip compression — reduces response size by 60-80% for faster API responses
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)  # Compress responses > 500 bytes
 
 # CORS middleware - allow localhost and production domains
 app.add_middleware(
@@ -480,18 +525,23 @@ def health_check():
 @app.get("/api/jobs/stats")
 def get_job_stats(db: Session = Depends(get_db)):
     """Get job statistics from YOUR database ONLY"""
+    # Return cached stats if fresh (60s)
+    cached = cache_get("job_stats", 60)
+    if cached:
+        return cached
     try:
-        from sqlalchemy import func, distinct
-        
-        # Basic counts from YOUR database
-        total_jobs = db.query(Job).filter(Job.is_active == True).count()
-        open_jobs = db.query(Job).filter(
-            Job.status == "Open",
-            Job.is_active == True
-        ).count()
-        closed_jobs = db.query(Job).filter(
-            Job.status == "Closed"
-        ).count()
+        from sqlalchemy import func, distinct, case
+
+        # Single aggregation query for all counts (3 queries → 1)
+        stats = db.query(
+            func.count(case((Job.is_active == True, 1))).label("total"),
+            func.count(case((Job.status == "Open", Job.is_active == True, 1), else_=None)).label("open"),
+            func.count(case((Job.status == "Closed", 1))).label("closed"),
+        ).first()
+
+        total_jobs = stats.total or 0
+        open_jobs = stats.open or 0
+        closed_jobs = stats.closed or 0
 
         if total_jobs == 0:
             return {
@@ -500,23 +550,23 @@ def get_job_stats(db: Session = Depends(get_db)):
                 "open_jobs": 0,
                 "note": "Database is empty - add jobs first"
             }
-        
+
         # Get job counts by type
         job_types = db.query(Job.job_type, func.count(Job.id)).filter(
             Job.is_active == True
         ).group_by(Job.job_type).all()
-        
+
         # Get job counts by experience level
         experience_levels = db.query(Job.experience_level, func.count(Job.id)).filter(
             Job.is_active == True
         ).group_by(Job.experience_level).all()
-        
+
         # Get job counts by company
         companies = db.query(Job.company, func.count(Job.id)).filter(
             Job.is_active == True
         ).group_by(Job.company).all()
         
-        return {
+        result = {
             "total_jobs": total_jobs,
             "open_jobs": open_jobs,
             "closed_jobs": closed_jobs,
@@ -525,6 +575,8 @@ def get_job_stats(db: Session = Depends(get_db)):
             "companies": dict(companies),
             "data_source": "your_database_only"
         }
+        cache_set("job_stats", result)
+        return result
         
     except Exception as e:
         print(f"❌ Error getting job stats: {e}")
@@ -574,8 +626,8 @@ def read_jobs(
     try:
         
         # Build query with filters (eager-load applications for application_count)
-        from sqlalchemy.orm import subqueryload
-        query = db.query(Job).options(subqueryload(Job.applications)).filter(Job.is_active == True)
+        from sqlalchemy.orm import selectinload
+        query = db.query(Job).options(selectinload(Job.applications)).filter(Job.is_active == True)
         
         if status:
             query = query.filter(Job.status == status)
