@@ -99,7 +99,9 @@ export const interviewService = {
 
   /** Complete the session — triggers scoring + recommendation */
   completeSession: async (sessionId: number): Promise<InterviewSession> => {
-    const response = await apiClient.post(`/api/interview/sessions/${sessionId}/complete`);
+    const response = await apiClient.post(`/api/interview/sessions/${sessionId}/complete`, {}, {
+      timeout: 180000, // 3 min — triggers AI scoring + recommendation
+    });
     return response.data;
   },
 

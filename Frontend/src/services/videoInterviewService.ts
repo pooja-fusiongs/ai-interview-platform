@@ -66,12 +66,16 @@ export const videoInterviewService = {
     return response.data;
   },
   generateTranscriptFromRecording: async (id: number) => {
-    const response = await apiClient.post(`/api/video/interviews/${id}/generate-transcript`);
+    const response = await apiClient.post(`/api/video/interviews/${id}/generate-transcript`, {}, {
+      timeout: 300000, // 5 min — Deepgram/Groq transcription is slow
+    });
     return response.data;
   },
   uploadTranscriptAndScore: async (id: number, transcriptText: string) => {
     const response = await apiClient.post(`/api/video/interviews/${id}/upload-transcript`, {
       transcript_text: transcriptText
+    }, {
+      timeout: 180000, // 3 min — LLM scoring
     });
     return response.data;
   },
@@ -87,6 +91,8 @@ export const videoInterviewService = {
   submitAIInterviewAnswers: async (id: number, answers: Array<{ question_id: number; answer_text: string }>) => {
     const response = await apiClient.post(`/api/video/interviews/${id}/ai-submit`, {
       answers: answers
+    }, {
+      timeout: 180000, // 3 min — AI scoring of answers
     });
     return response.data;
   },

@@ -510,6 +510,66 @@ const VideoInterviewDetail: React.FC = () => {
                 </Box>
               )}
 
+              {/* Recruiter Rating Score */}
+              {interview.recruiter_score != null && interview.rated_questions > 0 && (() => {
+                const rs = interview.recruiter_score; // 1-10 scale
+                const scoreColor = rs >= 7.5 ? '#10b981' : rs >= 5 ? '#f59e0b' : '#ef4444';
+                const scoreBg = rs >= 7.5 ? '#ecfdf5' : rs >= 5 ? '#fffbeb' : '#fef2f2';
+                const scoreGradient = rs >= 7.5
+                  ? 'linear-gradient(90deg, #10b981, #34d399)'
+                  : rs >= 5
+                    ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+                    : 'linear-gradient(90deg, #ef4444, #f87171)';
+                return (
+                  <Box sx={{
+                    background: 'white',
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    padding: { xs: '16px', sm: '24px' },
+                    maxWidth: '100%'
+                  }}>
+                    <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Assessment sx={{ fontSize: 18 }} />
+                      Recruiter Rating
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
+                      <Box sx={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: '50%',
+                        background: scoreBg,
+                        border: `3px solid ${scoreColor}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <Typography sx={{ fontSize: '22px', fontWeight: 800, color: scoreColor }}>
+                          {rs}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
+                          {rs} / 10
+                        </Typography>
+                        <Typography sx={{ fontSize: '13px', color: '#64748b' }}>
+                          {interview.rated_questions} of {interview.total_questions} questions rated
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Box sx={{ height: 6, borderRadius: 3, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+                      <Box sx={{
+                        height: '100%',
+                        width: `${(rs / 10) * 100}%`,
+                        borderRadius: 3,
+                        background: scoreGradient,
+                        transition: 'width 0.5s ease',
+                      }} />
+                    </Box>
+                  </Box>
+                );
+              })()}
+
               {/* Score Generated - View Result Button */}
               {scoreResult && (
                 <Box sx={{

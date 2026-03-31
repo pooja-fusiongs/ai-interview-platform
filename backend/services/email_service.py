@@ -8,8 +8,8 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.ver
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
-def send_interview_notification(candidate_email: str, candidate_name: str, job_title: str, interview_date: str, interview_time: str, meeting_url: str = None):
-    """Send interview scheduled notification to candidate"""
+def send_interview_notification(candidate_email: str, candidate_name: str, job_title: str, interview_date: str, interview_time: str, meeting_url: str = None, email_type: str = "scheduled"):
+    """Send interview notification to candidate. email_type: 'scheduled', 'reminder', or 'rescheduled'."""
     # Read env vars at runtime (after dotenv is loaded)
     SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
     SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@ai-interview-platform.com")
@@ -17,14 +17,27 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
     print(f"📧 Email service - API Key exists: {bool(SENDGRID_API_KEY)}")
     print(f"📧 Email service - Sender: {SENDER_EMAIL}")
     print(f"📧 Email service - Recipient: {candidate_email}")
+    print(f"📧 Email service - Type: {email_type}")
 
     if not SENDGRID_API_KEY:
         print("⚠️ SENDGRID_API_KEY not set, skipping email")
         return False
-    
+
     try:
-        subject = f"Interview Scheduled: {job_title}"
-        
+        # Customize subject, heading, and message based on email type
+        if email_type == "reminder":
+            subject = f"Reminder: Your Interview for {job_title} is Starting Soon!"
+            heading = "Interview Reminder"
+            message = f"This is a friendly reminder that your interview for the position of <strong>{job_title}</strong> is starting soon."
+        elif email_type == "rescheduled":
+            subject = f"Interview Rescheduled: {job_title}"
+            heading = "Interview Rescheduled"
+            message = f"Your interview for the position of <strong>{job_title}</strong> has been rescheduled. Please note the updated date and time below."
+        else:
+            subject = f"Interview Scheduled: {job_title}"
+            heading = "Interview Scheduled!"
+            message = f"Your interview has been scheduled for the position of <strong>{job_title}</strong>."
+
         # Build CTA button HTML only if meeting_url is provided
         cta_html = ""
         if meeting_url:
@@ -48,7 +61,7 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Interview Scheduled</title>
+    <title>{heading}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif;">
     <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
@@ -64,7 +77,7 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
 
                             <!-- Header -->
                             <h2 style="margin:0 0 25px 0; color:#020291; font-size:24px; font-weight:700;">
-                                Interview Scheduled!
+                                {heading}
                             </h2>
 
                             <p style="margin:0 0 12px 0; color:#374151; font-size:15px;">
@@ -72,8 +85,7 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
                             </p>
 
                             <p style="margin:0 0 25px 0; color:#374151; font-size:15px;">
-                                Your interview has been scheduled for the position of
-                                <strong>{job_title}</strong>.
+                                {message}
                             </p>
 
                             <!-- Info Box -->

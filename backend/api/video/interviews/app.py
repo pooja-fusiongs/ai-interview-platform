@@ -11,7 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, st
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import sys
 import os
@@ -29,6 +29,8 @@ from models import (
     UserRole,
     InterviewSession,
     InterviewAnswer,
+    InterviewQuestion,
+    InterviewRating,
 )
 from schemas import (
     VideoInterviewCreate,
@@ -133,6 +135,26 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
             else:
                 print(f"[DEBUG] No session data found for interview {vi.id}")
 
+        # Fetch recruiter rating data from InterviewRating / JobApplication
+        recruiter_score = None
+        rated_questions = None
+        total_questions = None
+        if db and application:
+            from sqlalchemy import func as sa_func
+            total_q = db.query(sa_func.count(InterviewQuestion.id)).filter(
+                InterviewQuestion.job_id == vi.job_id,
+                InterviewQuestion.candidate_id == application.id,
+            ).scalar() or 0
+            rated_q = db.query(sa_func.count(InterviewRating.id)).join(
+                InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
+            ).filter(
+                InterviewQuestion.candidate_id == application.id,
+            ).scalar() or 0
+            if rated_q > 0:
+                total_questions = total_q
+                rated_questions = rated_q
+                recruiter_score = application.overall_score
+
         print(f"[DEBUG] Creating VideoInterviewResponse for interview {vi.id}")
         response = VideoInterviewResponse(
             id=vi.id,
@@ -162,6 +184,9 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
             per_question_scores=per_question_scores,
             interview_session_id=interview_session_id,
             questions_approved=questions_approved,
+            recruiter_score=recruiter_score,
+            rated_questions=rated_questions,
+            total_questions=total_questions,
         )
         
         print(f"[DEBUG] Successfully built response for interview {vi.id}")
@@ -319,8 +344,12 @@ def schedule_video_interview(
 
         # Send email notification to candidate
         try:
-            interview_date = body.scheduled_at.strftime("%B %d, %Y")
-            interview_time = body.scheduled_at.strftime("%I:%M %p")
+            # Convert UTC to IST for email display
+            from datetime import timezone as tz_mod
+            ist_offset = timedelta(hours=5, minutes=30)
+            scheduled_ist = body.scheduled_at.astimezone(tz_mod(ist_offset)) if body.scheduled_at.tzinfo else (body.scheduled_at + ist_offset)
+            interview_date = scheduled_ist.strftime("%B %d, %Y")
+            interview_time = scheduled_ist.strftime("%I:%M %p") + " IST"
 
             # Use video-room URL instead of Zoom meeting URL
             frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
@@ -608,9 +637,18 @@ def update_video_interview(
     db: Session = Depends(get_db),
 ):
     """Update a video interview schedule or status. Recruiter/Admin only."""
+    print(f"[update_interview] video_id={video_id}, body={body.dict()}")
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # Detect reschedule: new scheduled_at + status reset to scheduled
+    is_reschedule = (
+        body.scheduled_at is not None
+        and body.status is not None
+        and body.status.lower() == "scheduled"
+    )
+    print(f"[update_interview] is_reschedule={is_reschedule}, status={body.status}, scheduled_at={body.scheduled_at}")
 
     if body.status is not None:
         vi.status = body.status
@@ -621,8 +659,60 @@ def update_video_interview(
     if body.notes is not None:
         vi.notes = body.notes
 
+    # On reschedule, reset stale interview state
+    if is_reschedule:
+        vi.started_at = None
+        vi.ended_at = None
+        vi.candidate_joined_at = None
+        vi.recording_url = None
+        vi.transcript = None
+        vi.transcript_generated_at = None
+        vi.session_id = None
+        vi.reminder_sent_at = None  # Reset so new reminder is sent
+        print(f"[reschedule] Interview {video_id} rescheduled to {body.scheduled_at}")
+
     db.commit()
     db.refresh(vi)
+
+    # Send reschedule email to candidate
+    if is_reschedule:
+        print(f"[reschedule] Attempting to send email. candidate_id={vi.candidate_id}, has_candidate={vi.candidate is not None}")
+        # Re-fetch candidate to avoid lazy-load issues after commit
+        candidate_user = db.query(User).filter(User.id == vi.candidate_id).first() if vi.candidate_id else None
+        job = db.query(Job).filter(Job.id == vi.job_id).first() if vi.job_id else None
+        if candidate_user and candidate_user.email:
+            try:
+                candidate_email = candidate_user.email
+                candidate_name = candidate_user.full_name or candidate_user.username or "Candidate"
+                job_title = job.title if job else "Interview"
+                # Convert UTC to IST for email display
+                from datetime import timezone as tz_mod
+                ist_offset = timedelta(hours=5, minutes=30)
+                scheduled_ist = vi.scheduled_at.astimezone(tz_mod(ist_offset)) if vi.scheduled_at.tzinfo else (vi.scheduled_at + ist_offset)
+                interview_date = scheduled_ist.strftime("%A, %B %d, %Y") if vi.scheduled_at else ""
+                interview_time = (scheduled_ist.strftime("%I:%M %p") + " IST") if vi.scheduled_at else ""
+
+                frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
+                candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
+                meeting_url = f"{frontend_url}/video-room/{vi.id}?token={candidate_token}"
+
+                send_interview_notification(
+                    candidate_email=candidate_email,
+                    candidate_name=candidate_name,
+                    job_title=job_title,
+                    interview_date=interview_date,
+                    interview_time=interview_time,
+                    meeting_url=meeting_url,
+                    email_type="rescheduled",
+                )
+                print(f"📧 Reschedule notification sent to {candidate_email}")
+            except Exception as e:
+                print(f"⚠️ Failed to send reschedule email: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"⚠️ [reschedule] No candidate email found for interview {video_id}")
+
     return _build_response(vi, db)
 
 
@@ -1952,10 +2042,16 @@ def get_ai_interview_questions(
             detail="No approved questions found for this interview. Please approve questions in Manage Candidates first."
         )
 
+    # Derive application_id from actual questions to ensure consistency with rating endpoint
+    # (fallback query may return questions belonging to a different candidate)
+    actual_application_id = questions[0].candidate_id if questions else None
+    if not actual_application_id and application:
+        actual_application_id = application.id
+
     return {
         "video_interview_id": vi.id,
         "job_id": vi.job_id,
-        "application_id": application.id if application else None,
+        "application_id": actual_application_id,
         "job_title": vi.job.title if vi.job else None,
         "candidate_name": vi.candidate.full_name or vi.candidate.username if vi.candidate else None,
         "questions": [

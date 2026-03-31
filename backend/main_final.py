@@ -116,6 +116,7 @@ def run_migrations():
                 ("fraud_analyses", "face_detection_details", "TEXT"),
                 ("interview_answers", "question_text_override", "TEXT"),
                 ("video_interviews", "recording_data", "BYTEA"),
+                ("video_interviews", "reminder_sent_at", "TIMESTAMP WITH TIME ZONE"),
             ]
             with engine.begin() as conn:
                 for table, column, col_type in expected_columns:
@@ -152,6 +153,96 @@ def run_migrations():
 
     # Run in background thread so server starts immediately
     threading.Thread(target=_migrate, daemon=True).start()
+
+
+@app.on_event("startup")
+def start_interview_reminder_scheduler():
+    """Background thread that sends reminder emails 15 min before interview."""
+    import threading, time
+    from datetime import datetime, timezone, timedelta
+
+    def _reminder_loop():
+        time.sleep(30)  # Wait for DB to be ready
+        print("🔔 Interview reminder scheduler started (checks every 5 min)")
+
+        while True:
+            try:
+                from database import SessionLocal
+                from models import VideoInterview, User, Job
+                from services.email_service import send_interview_notification
+                from api.video.interviews.app import generate_candidate_token
+
+                db = SessionLocal()
+                now = datetime.now(timezone.utc)
+                window_start = now + timedelta(minutes=10)
+                window_end = now + timedelta(minutes=20)
+
+                # Find interviews starting in 10-20 min that haven't had a reminder sent
+                upcoming = db.query(VideoInterview).filter(
+                    VideoInterview.status == "scheduled",
+                    VideoInterview.scheduled_at >= window_start,
+                    VideoInterview.scheduled_at <= window_end,
+                    VideoInterview.reminder_sent_at.is_(None),
+                ).all()
+
+                for vi in upcoming:
+                    try:
+                        candidate = db.query(User).filter(User.id == vi.candidate_id).first()
+                        recruiter = db.query(User).filter(User.id == vi.interviewer_id).first() if vi.interviewer_id else None
+                        job = db.query(Job).filter(Job.id == vi.job_id).first()
+                        if not candidate or not candidate.email:
+                            continue
+
+                        ist_offset = timedelta(hours=5, minutes=30)
+                        scheduled_ist = vi.scheduled_at.astimezone(timezone(ist_offset)) if vi.scheduled_at.tzinfo else (vi.scheduled_at + ist_offset)
+                        interview_date_str = scheduled_ist.strftime("%A, %B %d, %Y")
+                        interview_time_str = scheduled_ist.strftime("%I:%M %p") + " IST"
+                        job_title = job.title if job else "Interview"
+
+                        frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
+                        candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
+                        meeting_url = f"{frontend_url}/video-room/{vi.id}?token={candidate_token}"
+
+                        # Send reminder to candidate
+                        send_interview_notification(
+                            candidate_email=candidate.email,
+                            candidate_name=candidate.full_name or candidate.username or "Candidate",
+                            job_title=job_title,
+                            interview_date=interview_date_str,
+                            interview_time=interview_time_str,
+                            meeting_url=meeting_url,
+                            email_type="reminder",
+                        )
+                        print(f"🔔 Candidate reminder sent to {candidate.email} for interview #{vi.id}")
+
+                        # Send reminder to recruiter/interviewer
+                        if recruiter and recruiter.email:
+                            recruiter_meeting_url = f"{frontend_url}/video-room/{vi.id}"
+                            candidate_name = candidate.full_name or candidate.username or "Candidate"
+                            send_interview_notification(
+                                candidate_email=recruiter.email,
+                                candidate_name=recruiter.full_name or recruiter.username or "Recruiter",
+                                job_title=f"{job_title} — Candidate: {candidate_name}",
+                                interview_date=interview_date_str,
+                                interview_time=interview_time_str,
+                                meeting_url=recruiter_meeting_url,
+                                email_type="reminder",
+                            )
+                            print(f"🔔 Recruiter reminder sent to {recruiter.email} for interview #{vi.id}")
+
+                        vi.reminder_sent_at = now
+                        db.commit()
+                    except Exception as e:
+                        print(f"⚠️ Reminder failed for interview #{vi.id}: {e}")
+
+                db.close()
+            except Exception as e:
+                print(f"⚠️ Reminder scheduler error: {e}")
+
+            time.sleep(300)  # Check every 5 minutes
+
+    threading.Thread(target=_reminder_loop, daemon=True).start()
+
 
 @app.get("/health")
 def health_check():

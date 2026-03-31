@@ -560,6 +560,7 @@ class VideoInterview(Base):
     transcript_error = Column(Text, nullable=True)  # Error details if transcription failed
     agent_dispatched = Column(Boolean, default=False)  # Track if AI agent was dispatched
     candidate_joined_at = Column(DateTime(timezone=True), nullable=True)  # Track when candidate actually joined
+    reminder_sent_at = Column(DateTime(timezone=True), nullable=True)  # Track when reminder email was sent
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

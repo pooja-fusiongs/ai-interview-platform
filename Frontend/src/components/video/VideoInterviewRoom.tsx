@@ -41,8 +41,18 @@ const InterviewRecorder: React.FC<{
   mediaRecorderRef: React.MutableRefObject<MediaRecorder | null>;
   recordedChunksRef: React.MutableRefObject<Blob[]>;
   onRecordingChange: (recording: boolean) => void;
-}> = ({ shouldRecord, mediaRecorderRef, recordedChunksRef, onRecordingChange }) => {
+  onRemoteParticipantJoined?: () => void;
+}> = ({ shouldRecord, mediaRecorderRef, recordedChunksRef, onRecordingChange, onRemoteParticipantJoined }) => {
   const remoteParticipants = useRemoteParticipants();
+  const remoteJoinedRef = useRef(false);
+
+  // Track when remote participant joins
+  useEffect(() => {
+    if (remoteParticipants.length > 0 && !remoteJoinedRef.current) {
+      remoteJoinedRef.current = true;
+      onRemoteParticipantJoined?.();
+    }
+  }, [remoteParticipants.length]);
   const allTracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: false },
@@ -511,6 +521,7 @@ const VideoInterviewRoom: React.FC = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionRatings, setQuestionRatings] = useState<Record<number, number>>({});
+  const questionRatingsRef = useRef<Record<number, number>>({});
   const [savingRating, setSavingRating] = useState<number | null>(null);
   const ratingQueueRef = useRef<Array<{ questionId: number; rating: number }>>([]);
   const isProcessingRatingRef = useRef(false);
@@ -549,7 +560,21 @@ const VideoInterviewRoom: React.FC = () => {
         if (!isGuest && !isCandidateLink && user?.role !== 'candidate') {
           fetchQuestions();
         }
-        if (data.status === 'in_progress') {
+        const s = (data.status || '').toLowerCase();
+
+        // Terminal states — don't start anything, redirect to detail page
+        if (['completed', 'cancelled', 'no_show'].includes(s)) {
+          toast(
+            s === 'no_show' ? 'Interview expired — candidate did not join'
+              : s === 'cancelled' ? 'This interview was cancelled'
+              : 'This interview is already completed',
+            { icon: 'ℹ️', duration: 3000 }
+          );
+          setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
+          return;
+        }
+
+        if (s === 'in_progress') {
           setIsActive(true);
           if (data.started_at) {
             // Ensure timestamp is parsed as UTC (append 'Z' if no timezone info)
@@ -563,7 +588,7 @@ const VideoInterviewRoom: React.FC = () => {
             // If elapsed time is unreasonably large (>24 hours), reset to 0
             setElapsed(diff > 86400 ? 0 : Math.max(0, diff));
           }
-        } else if (data.status === 'waiting') {
+        } else if (s === 'waiting') {
           // Interview is waiting for candidate - start grace period check
           startGracePeriodCheck();
         }
@@ -581,6 +606,77 @@ const VideoInterviewRoom: React.FC = () => {
       cleanupVideoCall();
     };
   }, [videoId]);
+
+  // Proactive token refresh — silently renew token before it expires during interview
+  useEffect(() => {
+    if (isGuest) return; // Guest tokens don't need refresh
+
+    const REFRESH_BEFORE_SECONDS = 5 * 60; // Refresh 5 min before expiry
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const getTokenExpiry = (): number | null => {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.exp ? payload.exp * 1000 : null; // Convert to ms
+      } catch {
+        return null;
+      }
+    };
+
+    const scheduleRefresh = () => {
+      const expiry = getTokenExpiry();
+      if (!expiry) return;
+
+      const now = Date.now();
+      const msUntilRefresh = expiry - now - (REFRESH_BEFORE_SECONDS * 1000);
+
+      // If already past refresh time but token not expired yet, refresh immediately
+      // If token already expired, the 401 interceptor will handle it
+      const delay = Math.max(msUntilRefresh, 0);
+
+      if (expiry <= now) return; // Token already expired, let interceptor handle
+
+      refreshTimer = setTimeout(async () => {
+        try {
+          const currentToken = localStorage.getItem('token');
+          if (!currentToken) return;
+
+          const resp = await fetch(
+            `${import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com'}/api/auth/refresh`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${currentToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.access_token) {
+              localStorage.setItem('token', data.access_token);
+              console.log('🔄 Token silently refreshed during interview');
+              // Schedule the next refresh for the new token
+              scheduleRefresh();
+            }
+          } else {
+            console.warn('⚠️ Token refresh returned non-OK status:', resp.status);
+          }
+        } catch (err) {
+          console.warn('⚠️ Silent token refresh failed:', err);
+        }
+      }, delay);
+    };
+
+    scheduleRefresh();
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [isGuest]);
 
   const fetchQuestions = async () => {
     try {
@@ -605,16 +701,17 @@ const VideoInterviewRoom: React.FC = () => {
       const { questionId, rating } = ratingQueueRef.current.shift()!;
       setSavingRating(questionId);
       try {
-        const existingRating = questionRatings[questionId];
-        if (existingRating) {
-          await ratingService.updateRating(interviewJobId, applicationId, questionId, { rating });
-        } else {
-          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
-        }
+        // Always use POST — backend handles upsert (creates or updates existing rating)
+        await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+        questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
         setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
       } catch (err: any) {
-        toast.error('Failed to save rating');
-        console.error('Rating error:', err);
+        // Don't show error for cancelled/aborted requests (e.g., rapid clicks or navigation)
+        const isCancel = err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError' || err?.message?.includes('canceled');
+        if (!isCancel) {
+          toast.error('Failed to save rating');
+          console.error('Rating error:', err);
+        }
       }
     }
 
@@ -627,7 +724,7 @@ const VideoInterviewRoom: React.FC = () => {
       toast.error('Unable to save rating — interview data missing');
       return;
     }
-    // Update UI immediately for fast feedback
+    // Update UI immediately for fast feedback (ref updated only after successful save)
     setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
     // Replace any pending rating for same question in queue
     ratingQueueRef.current = ratingQueueRef.current.filter(r => r.questionId !== questionId);
@@ -974,7 +1071,9 @@ const VideoInterviewRoom: React.FC = () => {
     cleanupVideoCall();
 
     // 4) Upload recording BEFORE calling /end (so backend has recording for transcription)
-    if (recordingBlob) {
+    //    Skip upload if candidate never joined — no useful content to transcribe
+    const candidateJoined = maxParticipantsRef.current >= 2;
+    if (recordingBlob && candidateJoined) {
       try {
         const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
         console.log(`🎬 [handleEnd] Uploading recording: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB...`);
@@ -983,6 +1082,8 @@ const VideoInterviewRoom: React.FC = () => {
       } catch (err) {
         console.error('❌ [handleEnd] Recording upload failed:', err);
       }
+    } else if (recordingBlob && !candidateJoined) {
+      console.log('⏭️ [handleEnd] Skipping recording upload — candidate never joined (maxParticipants=1)');
     } else {
       console.error('❌ [handleEnd] NO recording blob to upload! Possible causes: recording never started, mic not available, or MediaRecorder failed.');
     }
@@ -1567,6 +1668,10 @@ const VideoInterviewRoom: React.FC = () => {
                           mediaRecorderRef={mediaRecorderRef}
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
+                          onRemoteParticipantJoined={() => {
+                            maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 2);
+                            console.log('👥 Remote participant joined — maxParticipants updated to 2');
+                          }}
                         />
                         {/* Both sides send their own local mic for high-quality transcription */}
                         <TranscriptionCapture

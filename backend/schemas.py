@@ -696,6 +696,10 @@ class VideoInterviewResponse(BaseModel):
     per_question_scores: Optional[List[dict]] = None
     interview_session_id: Optional[int] = None  # ID to navigate to Results page
     questions_approved: bool = True
+    # Recruiter rating fields (from InterviewRating / JobApplication)
+    recruiter_score: Optional[float] = None
+    rated_questions: Optional[int] = None
+    total_questions: Optional[int] = None
 
     class Config:
         from_attributes = True

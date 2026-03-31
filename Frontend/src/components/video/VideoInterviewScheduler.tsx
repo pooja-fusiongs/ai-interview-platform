@@ -28,8 +28,12 @@ import {
   Skeleton,
   useMediaQuery,
   useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import { Visibility, PlayArrow, Cancel, Refresh, ArrowBack } from '@mui/icons-material';
+import { Visibility, PlayArrow, Cancel, Refresh, ArrowBack, Search, EventRepeat } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker';
@@ -39,6 +43,7 @@ import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
 import { jobService } from '../../services/jobService';
 import { candidateService } from '../../services/candidateService';
+import toast from 'react-hot-toast';
 
 // Normalized interface for jobs (internal use)
 interface Job {
@@ -78,8 +83,19 @@ const DURATION_OPTIONS = [
   { value: 60, label: '60 min', description: 'Technical deep-dive' },
 ];
 
+// Check if a scheduled interview has expired (30 min past scheduled time)
+const isInterviewExpired = (row: any): boolean => {
+  if (!row.scheduled_at) return false;
+  const s = (row.status || '').toLowerCase();
+  if (s !== 'scheduled') return false;
+  const scheduledTime = new Date(row.scheduled_at).getTime();
+  const expiryTime = scheduledTime + (30 * 60 * 1000); // 30 min after scheduled time
+  return Date.now() > expiryTime;
+};
+
 const getStatusColor = (status: string): 'primary' | 'warning' | 'success' | 'error' | 'default' => {
   const s = status.toLowerCase();
+  if (s === 'expired') return 'error';
   if (s === 'scheduled') return 'primary';
   if (s === 'in_progress') return 'warning';
   if (s === 'completed') return 'success';
@@ -103,10 +119,12 @@ const VideoInterviewScheduler: React.FC = () => {
 
   // ========== List State ==========
   const [interviews, setInterviews] = useState<any[]>([]);
+  const [hasAnyInterviews, setHasAnyInterviews] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // ========== Form State ==========
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -153,12 +171,14 @@ const VideoInterviewScheduler: React.FC = () => {
       setLoadingList(true);
       setListError('');
       const data = await videoInterviewService.getInterviews();
+      const allInterviews = data || [];
       // Only show scheduled interviews (other statuses are shown on Video Interviews page)
-      const scheduledOnly = (data || []).filter((i: any) => {
+      const scheduledOnly = allInterviews.filter((i: any) => {
         const s = (i.status || '').toLowerCase();
         return s === 'scheduled';
       });
       setInterviews(scheduledOnly);
+      setHasAnyInterviews(allInterviews.length > 0);
     } catch (err: any) {
       setListError(err.message || 'Failed to load interviews.');
     } finally {
@@ -181,14 +201,74 @@ const VideoInterviewScheduler: React.FC = () => {
     }
   };
 
-  // Sort by scheduled_at descending
-  const sortedInterviews = [...interviews].sort((a, b) => {
-    const dateA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
-    const dateB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
-    return dateB - dateA;
-  });
+  // ========== Reschedule ==========
+  const [rescheduleId, setRescheduleId] = useState<number | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<Dayjs | null>(null);
+  const [rescheduleTime, setRescheduleTime] = useState<Dayjs | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
 
-  const paginatedInterviews = sortedInterviews.slice(
+  const handleRescheduleOpen = (row: any) => {
+    setRescheduleId(row.id);
+    // Default to tomorrow, next full hour
+    const nextHour = dayjs().add(1, 'hour').minute(0).second(0);
+    setRescheduleDate(nextHour);
+    setRescheduleTime(nextHour);
+  };
+
+  const getRescheduleError = (): string | null => {
+    if (!rescheduleDate || !rescheduleTime) return null;
+    const combined = rescheduleDate
+      .hour(rescheduleTime.hour())
+      .minute(rescheduleTime.minute());
+    if (combined.isBefore(dayjs())) return 'Selected time is in the past';
+    return null;
+  };
+
+  const handleRescheduleSubmit = async () => {
+    if (!rescheduleId || !rescheduleDate || !rescheduleTime) return;
+    const combined = rescheduleDate
+      .hour(rescheduleTime.hour())
+      .minute(rescheduleTime.minute())
+      .second(0);
+    if (combined.isBefore(dayjs())) {
+      toast.error('Please select a future date and time');
+      return;
+    }
+    setRescheduling(true);
+    try {
+      await videoInterviewService.updateInterview(rescheduleId, {
+        scheduled_at: combined.toISOString(),
+        status: 'scheduled',
+      });
+      setRescheduleId(null);
+      toast.success('Interview rescheduled successfully');
+      fetchInterviews();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to reschedule interview');
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+  // Filter by search and sort by scheduled_at descending
+  const filteredInterviews = useMemo(() => {
+    let result = [...interviews];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((i) =>
+        (i.job_title || '').toLowerCase().includes(q) ||
+        (i.candidate_name || '').toLowerCase().includes(q)
+      );
+    }
+    result.sort((a, b) => {
+      const dateA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
+      const dateB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
+      return dateB - dateA;
+    });
+    return result;
+  }, [interviews, searchQuery]);
+
+  const paginatedInterviews = filteredInterviews.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage
   );
@@ -468,6 +548,29 @@ const VideoInterviewScheduler: React.FC = () => {
                 </Box>
               </Box>
               <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search sx={{ color: '#94a3b8', fontSize: 20 }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{
+                    width: { xs: 150, sm: 200, md: 240 },
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '10px',
+                      backgroundColor: '#fff',
+                      height: 40,
+                      '&:hover fieldset': { borderColor: '#020291' },
+                      '&.Mui-focused fieldset': { borderColor: '#020291' },
+                    },
+                  }}
+                />
                 <Tooltip title="Refresh">
                   <IconButton
                     onClick={fetchInterviews}
@@ -507,6 +610,9 @@ const VideoInterviewScheduler: React.FC = () => {
 
             {listError && <Alert severity="error" sx={{ mb: 2 }}>{listError}</Alert>}
 
+
+
+
             {/* Interview List */}
             {loadingList ? (
               <Paper sx={{ width: '100%', overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
@@ -545,22 +651,36 @@ const VideoInterviewScheduler: React.FC = () => {
                 {paginatedInterviews.length === 0 ? (
                   <Paper sx={{ p: 4, textAlign: 'center', borderRadius: '12px' }}>
                     <Box sx={{ mb: 2 }}>
-                      <i className="fas fa-calendar-plus" style={{ fontSize: '48px', color: '#cbd5e1' }} />
+                      <i className={searchQuery ? "fas fa-search" : hasAnyInterviews ? "fas fa-calendar-check" : "fas fa-calendar-plus"} style={{ fontSize: '48px', color: '#cbd5e1' }} />
                     </Box>
-                    <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 2 }}>No scheduled interviews yet</Typography>
-                    <Button
-                      variant="contained"
-                      onClick={() => setViewMode('form')}
-                      sx={{
-                        background: '#020291',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        borderRadius: '8px',
-                        '&:hover': { background: '#06109E' },
-                      }}
-                    >
-                      Schedule Your First Interview
-                    </Button>
+                    <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 2 }}>
+                      {searchQuery
+                        ? 'No interviews match your search'
+                        : hasAnyInterviews ? 'No upcoming scheduled interviews' : 'No scheduled interviews yet'}
+                    </Typography>
+                    {searchQuery ? (
+                      <Button
+                        variant="outlined"
+                        onClick={() => { setSearchQuery(''); setPage(0); }}
+                        sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px', borderColor: '#020291', color: '#020291' }}
+                      >
+                        Clear Search
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="contained"
+                        onClick={() => setViewMode('form')}
+                        sx={{
+                          background: '#020291',
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          '&:hover': { background: '#06109E' },
+                        }}
+                      >
+                        {hasAnyInterviews ? 'Schedule New Interview' : 'Schedule Your First Interview'}
+                      </Button>
+                    )}
                   </Paper>
                 ) : (
                   paginatedInterviews.map((row) => (
@@ -587,7 +707,11 @@ const VideoInterviewScheduler: React.FC = () => {
                               {row.candidate_name || 'N/A'}
                             </Typography>
                           </Box>
-                          <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" sx={{ ml: 1 }} />
+                          <Chip
+                            label={isInterviewExpired(row) ? 'Expired' : getStatusLabel(row.status)}
+                            color={isInterviewExpired(row) ? 'error' : getStatusColor(row.status)}
+                            size="small" sx={{ ml: 1 }}
+                          />
                         </Box>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
                           <Box>
@@ -610,18 +734,30 @@ const VideoInterviewScheduler: React.FC = () => {
                               <Visibility fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
-                            <span>
+                          {isInterviewExpired(row) ? (
+                            <Tooltip title="Reschedule Interview">
                               <IconButton
-                                size="small" color="success"
-                                onClick={() => navigate(`/video-room/${row.id}`)}
-                                disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
-                                sx={{ backgroundColor: '#f0fdf4', '&:hover': { backgroundColor: '#dcfce7' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                                size="small"
+                                onClick={() => handleRescheduleOpen(row)}
+                                sx={{ backgroundColor: '#fffbeb', color: '#f59e0b', '&:hover': { backgroundColor: '#fef3c7' } }}
                               >
-                                <PlayArrow fontSize="small" />
+                                <EventRepeat fontSize="small" />
                               </IconButton>
-                            </span>
-                          </Tooltip>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="Start Interview">
+                              <span>
+                                <IconButton
+                                  size="small" color="success"
+                                  onClick={() => navigate(`/video-room/${row.id}`)}
+                                  disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                  sx={{ backgroundColor: '#f0fdf4', '&:hover': { backgroundColor: '#dcfce7' }, '&.Mui-disabled': { backgroundColor: '#f8fafc' } }}
+                                >
+                                  <PlayArrow fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Cancel">
                             <span>
                               <IconButton
@@ -639,12 +775,12 @@ const VideoInterviewScheduler: React.FC = () => {
                     </Card>
                   ))
                 )}
-                {sortedInterviews.length > 0 && (
+                {filteredInterviews.length > 0 && (
                   <Paper sx={{ borderRadius: '12px', overflow: 'hidden' }}>
                     <TablePagination
                       rowsPerPageOptions={[5, 10, 25]}
                       component="div"
-                      count={sortedInterviews.length}
+                      count={filteredInterviews.length}
                       rowsPerPage={rowsPerPage}
                       page={page}
                       onPageChange={(_, newPage) => setPage(newPage)}
@@ -681,22 +817,36 @@ const VideoInterviewScheduler: React.FC = () => {
                         <TableRow>
                           <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                             <Box sx={{ mb: 2 }}>
-                              <i className="fas fa-calendar-plus" style={{ fontSize: '48px', color: '#cbd5e1' }} />
+                              <i className={searchQuery ? "fas fa-search" : hasAnyInterviews ? "fas fa-calendar-check" : "fas fa-calendar-plus"} style={{ fontSize: '48px', color: '#cbd5e1' }} />
                             </Box>
-                            <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 2 }}>No scheduled interviews yet</Typography>
-                            <Button
-                              variant="contained"
-                              onClick={() => setViewMode('form')}
-                              sx={{
-                                background: '#020291',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                borderRadius: '8px',
-                                '&:hover': { background: '#06109E' },
-                              }}
-                            >
-                              Schedule Your First Interview
-                            </Button>
+                            <Typography sx={{ color: '#64748b', fontSize: '15px', mb: 2 }}>
+                              {searchQuery
+                                ? 'No interviews match your search'
+                                : hasAnyInterviews ? 'No upcoming scheduled interviews' : 'No scheduled interviews yet'}
+                            </Typography>
+                            {searchQuery ? (
+                              <Button
+                                variant="outlined"
+                                onClick={() => { setSearchQuery(''); setPage(0); }}
+                                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px', borderColor: '#020291', color: '#020291' }}
+                              >
+                                Clear Search
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="contained"
+                                onClick={() => setViewMode('form')}
+                                sx={{
+                                  background: '#020291',
+                                  textTransform: 'none',
+                                  fontWeight: 600,
+                                  borderRadius: '8px',
+                                  '&:hover': { background: '#06109E' },
+                                }}
+                              >
+                                {hasAnyInterviews ? 'Schedule New Interview' : 'Schedule Your First Interview'}
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -717,7 +867,11 @@ const VideoInterviewScheduler: React.FC = () => {
                               </Typography>
                             </TableCell>
                             <TableCell>
-                              <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" />
+                              <Chip
+                                label={isInterviewExpired(row) ? 'Expired' : getStatusLabel(row.status)}
+                                color={isInterviewExpired(row) ? 'error' : getStatusColor(row.status)}
+                                size="small"
+                              />
                             </TableCell>
                             <TableCell>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
                             <TableCell>{row.duration_minutes} min</TableCell>
@@ -728,17 +882,29 @@ const VideoInterviewScheduler: React.FC = () => {
                                     <Visibility fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title={row.status === 'completed' ? 'Interview Completed' : row.status === 'cancelled' ? 'Interview Cancelled' : 'Start Interview'}>
-                                  <span>
+                                {isInterviewExpired(row) ? (
+                                  <Tooltip title="Reschedule Interview">
                                     <IconButton
-                                      size="small" color="success"
-                                      onClick={() => navigate(`/video-room/${row.id}`)}
-                                      disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                      size="small"
+                                      sx={{ color: '#f59e0b' }}
+                                      onClick={() => handleRescheduleOpen(row)}
                                     >
-                                      <PlayArrow fontSize="small" />
+                                      <EventRepeat fontSize="small" />
                                     </IconButton>
-                                  </span>
-                                </Tooltip>
+                                  </Tooltip>
+                                ) : (
+                                  <Tooltip title="Start Interview">
+                                    <span>
+                                      <IconButton
+                                        size="small" color="success"
+                                        onClick={() => navigate(`/video-room/${row.id}`)}
+                                        disabled={['cancelled', 'completed', 'no_show'].includes(row.status.toLowerCase())}
+                                      >
+                                        <PlayArrow fontSize="small" />
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                )}
                                 <Tooltip title="Cancel">
                                   <span>
                                     <IconButton
@@ -758,11 +924,11 @@ const VideoInterviewScheduler: React.FC = () => {
                     </TableBody>
                   </Table>
                 </TableContainer>
-                {sortedInterviews.length > 0 && (
+                {filteredInterviews.length > 0 && (
                   <TablePagination
                     rowsPerPageOptions={[5, 10, 25, 50]}
                     component="div"
-                    count={sortedInterviews.length}
+                    count={filteredInterviews.length}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_, newPage) => setPage(newPage)}
@@ -1261,6 +1427,85 @@ const VideoInterviewScheduler: React.FC = () => {
           </Alert>
         </Snackbar>
       </Box>
+
+      {/* Reschedule Dialog */}
+      <Dialog
+        open={rescheduleId !== null}
+        onClose={() => !rescheduling && setRescheduleId(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '16px', p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <EventRepeat sx={{ color: '#f59e0b' }} />
+            Reschedule Interview
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3 }}>
+            This interview has expired. Pick a new date and time to reschedule.
+          </Typography>
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <MobileDatePicker
+                label="New Date"
+                value={rescheduleDate}
+                onChange={(val) => setRescheduleDate(val)}
+                minDate={dayjs()}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    size: 'small',
+                    sx: { '& .MuiOutlinedInput-root': { borderRadius: '10px' } },
+                  },
+                }}
+              />
+              <MobileTimePicker
+                label="New Time"
+                value={rescheduleTime}
+                onChange={(val) => setRescheduleTime(val)}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    size: 'small',
+                    sx: { '& .MuiOutlinedInput-root': { borderRadius: '10px' } },
+                  },
+                }}
+              />
+            </Box>
+          </LocalizationProvider>
+          {getRescheduleError() && (
+            <Typography sx={{ color: '#ef4444', fontSize: '13px', mt: 1.5 }}>
+              {getRescheduleError()}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setRescheduleId(null)}
+            disabled={rescheduling}
+            sx={{ textTransform: 'none', color: '#64748b', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleRescheduleSubmit}
+            disabled={!rescheduleDate || !rescheduleTime || rescheduling || !!getRescheduleError()}
+            startIcon={rescheduling ? <CircularProgress size={16} color="inherit" /> : <EventRepeat />}
+            sx={{
+              background: '#020291',
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: '10px',
+              '&:hover': { background: '#06109E' },
+            }}
+          >
+            {rescheduling ? 'Rescheduling...' : 'Reschedule'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Navigation>
   );
 };

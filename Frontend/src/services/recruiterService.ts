@@ -95,7 +95,8 @@ export const recruiterService = {
   submitTranscript: async (jobId: number, applicationId: number, transcriptText: string): Promise<TranscriptResult> => {
     const response = await apiClient.post(
       `/api/recruiter/job/${jobId}/candidate/${applicationId}/transcript`,
-      { transcript_text: transcriptText }
+      { transcript_text: transcriptText },
+      { timeout: 180000 }, // 3 min — LLM scoring
     );
     return response.data;
   },
