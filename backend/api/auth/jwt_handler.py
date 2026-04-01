@@ -103,9 +103,16 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 def get_current_user(token_data: TokenData = Depends(verify_token), db: Session = Depends(get_db)):
     """
-    Get current user from database using token data
+    Get current user from database using token data.
+    Uses user_id (primary key) for fast indexed lookup instead of username string scan.
     """
-    user = db.query(User).filter(User.username == token_data.username).first()
+    user = None
+    # Prefer lookup by id (primary key = instant) over username (string column)
+    if token_data.user_id:
+        user = db.query(User).filter(User.id == token_data.user_id).first()
+    if user is None:
+        # Fallback to username for old tokens that may not have user_id
+        user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -117,21 +124,11 @@ def get_current_user(token_data: TokenData = Depends(verify_token), db: Session 
 def get_current_active_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get current active user (role-based access ready).
-    Also updates last_activity so online status stays accurate.
+    Activity tracking moved to dedicated /api/auth/activity endpoint to avoid
+    adding a DB write (commit) on EVERY authenticated request.
     """
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-
-    # Auto-update activity: only write to DB if stale (>5 min) to reduce DB writes
-    try:
-        now = datetime.utcnow()
-        if not current_user.last_activity or (now - current_user.last_activity).total_seconds() > 300:
-            current_user.last_activity = now
-            current_user.is_online = True
-            db.commit()
-    except Exception:
-        pass  # Non-critical, don't break the request
-
     return current_user
 
 def require_role(required_role: UserRole):

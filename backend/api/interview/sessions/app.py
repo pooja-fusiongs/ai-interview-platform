@@ -485,24 +485,18 @@ def list_interviews(
         # or sessions where they are the candidate (test analysis)
         from sqlalchemy import or_
         from models import VideoInterview
-        # Find interview IDs where this recruiter was the interviewer
-        interviewer_vi_session_ids = [
-            vi.session_id for vi in
-            db.query(VideoInterview.session_id).filter(
-                VideoInterview.interviewer_id == current_user.id,
-                VideoInterview.session_id.isnot(None),
-            ).all()
-        ]
-        conditions = [
-            InterviewSession.candidate_id == current_user.id,
-        ]
-        if interviewer_vi_session_ids:
-            conditions.append(InterviewSession.id.in_(interviewer_vi_session_ids))
+
+        # Use a subquery instead of fetching IDs into Python (1 query instead of 2)
+        interviewer_subq = db.query(VideoInterview.session_id).filter(
+            VideoInterview.interviewer_id == current_user.id,
+            VideoInterview.session_id.isnot(None),
+        ).subquery()
 
         query = query.outerjoin(Job, InterviewSession.job_id == Job.id).filter(
             or_(
                 Job.created_by == current_user.id,
-                *conditions,
+                InterviewSession.candidate_id == current_user.id,
+                InterviewSession.id.in_(interviewer_subq),
             )
         )
     sessions = query.order_by(InterviewSession.started_at.desc()).all()

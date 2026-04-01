@@ -646,9 +646,10 @@ def get_question_sets(
         candidates = db.query(JobApplication).filter(JobApplication.id.in_(candidate_ids)).all()
         candidate_map = {c.id: c for c in candidates}
 
-        # Bulk fetch all questions
+        # Bulk fetch questions scoped to both job AND candidate (much smaller result set)
         all_questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id.in_(job_ids)
+            InterviewQuestion.job_id.in_(job_ids),
+            InterviewQuestion.candidate_id.in_(candidate_ids)
         ).all()
 
         # Group questions by (job_id, candidate_id)
@@ -658,6 +659,12 @@ def get_question_sets(
             if key not in questions_map:
                 questions_map[key] = []
             questions_map[key].append(q)
+
+        # Bulk fetch all candidate resumes (avoid N+1 query inside loop)
+        all_resumes = db.query(CandidateResume).filter(
+            CandidateResume.candidate_id.in_(candidate_ids)
+        ).all() if candidate_ids else []
+        resume_map = {r.candidate_id: r for r in all_resumes}
 
         result = []
         for session in sessions:
@@ -694,8 +701,8 @@ def get_question_sets(
                 except Exception:
                     pass
             if candidate:
-                # Try candidate resume skills
-                resume = db.query(CandidateResume).filter(CandidateResume.candidate_id == candidate.id).first() if candidate else None
+                # Use pre-fetched resume (no extra DB query)
+                resume = resume_map.get(candidate.id)
                 if resume and resume.skills:
                     try:
                         resume_skills = _json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills
@@ -766,6 +773,12 @@ def get_question_sets_test(db: Session = Depends(get_db)):
         key = (q.job_id, q.candidate_id)
         questions_map.setdefault(key, []).append(q)
 
+    # Bulk fetch resumes (avoid N+1 inside loop)
+    all_resumes_test = db.query(CandidateResume).filter(
+        CandidateResume.candidate_id.in_(candidate_ids)
+    ).all() if candidate_ids else []
+    resume_map_test = {r.candidate_id: r for r in all_resumes_test}
+
     result = []
     for session in sessions:
         questions = questions_map.get((session.job_id, session.candidate_id), [])
@@ -795,7 +808,7 @@ def get_question_sets_test(db: Session = Depends(get_db)):
             except Exception:
                 pass
         if candidate:
-            resume = db.query(CandidateResume).filter(CandidateResume.candidate_id == candidate.id).first() if candidate else None
+            resume = resume_map_test.get(candidate.id)
             if resume and resume.skills:
                 try:
                     resume_skills = _json.loads(resume.skills) if isinstance(resume.skills, str) else resume.skills

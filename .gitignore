@@ -19,6 +19,14 @@ nul
 
 # Production env
 .env.production
+.env.yaml
+
+# GCP
+cloud-sql-proxy.exe
+cloud-sql-proxy
+
+# Screenshots
+*.png
 
 # Claude Code
 .claude/

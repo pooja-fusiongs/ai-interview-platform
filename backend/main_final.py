@@ -152,13 +152,26 @@ def run_migrations():
             perf_indexes = [
                 "CREATE INDEX IF NOT EXISTS idx_job_applications_email ON job_applications(applicant_email)",
                 "CREATE INDEX IF NOT EXISTS idx_job_applications_job_id ON job_applications(job_id)",
+                "CREATE INDEX IF NOT EXISTS idx_job_applications_status ON job_applications(status)",
                 "CREATE INDEX IF NOT EXISTS idx_video_interviews_status ON video_interviews(status)",
                 "CREATE INDEX IF NOT EXISTS idx_video_interviews_scheduled ON video_interviews(scheduled_at)",
                 "CREATE INDEX IF NOT EXISTS idx_video_interviews_candidate ON video_interviews(candidate_id)",
                 "CREATE INDEX IF NOT EXISTS idx_video_interviews_interviewer ON video_interviews(interviewer_id)",
+                "CREATE INDEX IF NOT EXISTS idx_video_interviews_session ON video_interviews(session_id)",
                 "CREATE INDEX IF NOT EXISTS idx_interview_questions_candidate ON interview_questions(candidate_id)",
                 "CREATE INDEX IF NOT EXISTS idx_interview_questions_job ON interview_questions(job_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_questions_approved ON interview_questions(job_id, is_approved)",
                 "CREATE INDEX IF NOT EXISTS idx_interview_sessions_candidate ON interview_sessions(candidate_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_sessions_job ON interview_sessions(job_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_sessions_app ON interview_sessions(application_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_answers_session ON interview_answers(session_id)",
+                "CREATE INDEX IF NOT EXISTS idx_question_gen_sessions_job ON question_generation_sessions(job_id)",
+                "CREATE INDEX IF NOT EXISTS idx_question_gen_sessions_candidate ON question_generation_sessions(candidate_id)",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_is_active ON jobs(is_active)",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_created_by ON jobs(created_by)",
+                "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
+                "CREATE INDEX IF NOT EXISTS idx_fraud_analyses_vi ON fraud_analyses(video_interview_id)",
             ]
             for idx_sql in perf_indexes:
                 try:
@@ -614,8 +627,8 @@ def search_jobs(
 
 @app.get("/api/jobs", response_model=List[JobResponse])
 def read_jobs(
-    skip: int = 0, 
-    limit: int = 100, 
+    skip: int = 0,
+    limit: int = 100,
     status: str = None,
     company: str = None,
     job_type: str = None,
@@ -624,11 +637,16 @@ def read_jobs(
 ):
     """Fetch jobs from YOUR database ONLY"""
     try:
-        
-        # Build query with filters (eager-load applications for application_count)
+        # Check cache for unfiltered requests (dashboard default)
+        cache_key = f"jobs:{skip}:{limit}:{status}:{company}:{job_type}:{experience_level}"
+        cached = cache_get(cache_key, 30)  # 30s cache
+        if cached is not None:
+            return cached
+
+        # Use subquery for application_count instead of eager-loading full applications
         from sqlalchemy.orm import selectinload
         query = db.query(Job).options(selectinload(Job.applications)).filter(Job.is_active == True)
-        
+
         if status:
             query = query.filter(Job.status == status)
         if company:
@@ -637,11 +655,12 @@ def read_jobs(
             query = query.filter(Job.job_type == job_type)
         if experience_level:
             query = query.filter(Job.experience_level == experience_level)
-        
+
         # Sort newest first, then apply pagination
         jobs = query.order_by(Job.created_at.desc()).offset(skip).limit(limit).all()
+        cache_set(cache_key, jobs)
         return jobs
-        
+
     except Exception as e:
         print(f"❌ Error fetching jobs: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -808,7 +827,7 @@ from services.resume_parser import parse_resume as _parse_resume_full
 
 
 @app.post("/api/job/apply-with-resume")
-async def apply_for_job_with_resume(
+def apply_for_job_with_resume(
     job_id: int = Form(...),
     applicant_name: str = Form(...),
     applicant_email: str = Form(...),
@@ -871,7 +890,7 @@ async def apply_for_job_with_resume(
             unique_name = f"{new_application.id}_{uuid.uuid4().hex[:8]}.{ext}"
             file_path = os.path.join(UPLOAD_DIR, unique_name)
 
-            content = await resume.read()
+            content = resume.file.read()
             with open(file_path, "wb") as f:
                 f.write(content)
 
@@ -1445,10 +1464,27 @@ def update_user_activity(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Update current user's activity timestamp"""
+    """Update current user's activity timestamp (debounced — skips DB write if updated within 2 min)"""
     try:
         from datetime import datetime, timezone
-        current_user.last_activity = datetime.now(timezone.utc)
+
+        now = datetime.now(timezone.utc)
+
+        # Skip DB write if activity was updated recently (within 2 min)
+        if current_user.last_activity:
+            last = current_user.last_activity
+            if last.tzinfo is None:
+                from datetime import timezone as tz
+                last = last.replace(tzinfo=tz.utc)
+            if (now - last).total_seconds() < 120:
+                return {
+                    "success": True,
+                    "message": "Activity already fresh",
+                    "isOnline": True,
+                    "lastActivity": last.isoformat()
+                }
+
+        current_user.last_activity = now
         current_user.is_online = True
         db.commit()
 

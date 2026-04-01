@@ -342,32 +342,41 @@ def schedule_video_interview(
         db.commit()
         db.refresh(vi)
 
-        # Send email notification to candidate
+        # Send email notification to candidate (in background — don't block API response)
+        import threading
         try:
-            # Convert UTC to IST for email display
             from datetime import timezone as tz_mod
             ist_offset = timedelta(hours=5, minutes=30)
             scheduled_ist = body.scheduled_at.astimezone(tz_mod(ist_offset)) if body.scheduled_at.tzinfo else (body.scheduled_at + ist_offset)
             interview_date = scheduled_ist.strftime("%B %d, %Y")
             interview_time = scheduled_ist.strftime("%I:%M %p") + " IST"
 
-            # Use video-room URL instead of Zoom meeting URL
             frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
             candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
             meeting_url = f"{frontend_url}/video-room/{vi.id}?token={candidate_token}"
             print(f"📧 Candidate email link: {meeting_url}")
 
-            send_interview_notification(
-                candidate_email=candidate_email_for_notification,
-                candidate_name=candidate_name_for_email,
-                job_title=job.title,
-                interview_date=interview_date,
-                interview_time=interview_time,
-                meeting_url=meeting_url
-            )
-            print(f"📧 Interview notification sent to {candidate_email_for_notification}")
+            _email_to = candidate_email_for_notification
+            _email_name = candidate_name_for_email
+            _email_job = job.title
+
+            def _send_email_bg():
+                try:
+                    send_interview_notification(
+                        candidate_email=_email_to,
+                        candidate_name=_email_name,
+                        job_title=_email_job,
+                        interview_date=interview_date,
+                        interview_time=interview_time,
+                        meeting_url=meeting_url
+                    )
+                    print(f"📧 Interview notification sent to {_email_to}")
+                except Exception as e:
+                    print(f"⚠️ Background: Failed to send email: {e}")
+
+            threading.Thread(target=_send_email_bg, daemon=True).start()
         except Exception as e:
-            print(f"⚠️ Failed to send email notification: {e}")
+            print(f"⚠️ Failed to prepare email notification: {e}")
 
         # Check questions status for this candidate (after interview is created)
         from models import InterviewQuestion
@@ -383,21 +392,29 @@ def schedule_video_interview(
         ).all()
 
         if len(existing_questions) == 0:
-            # No questions exist - auto-generate them
-            print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating...")
-            try:
-                generator = get_question_generator()
-                result = generator.generate_questions(
-                    db=db,
-                    job_id=body.job_id,
-                    candidate_id=candidate_id_for_questions,
-                    total_questions=10
-                )
-                print(f"✅ Auto-generated {result['total_questions']} questions for video interview")
-            except Exception as e:
-                print(f"⚠️ Failed to auto-generate questions: {e}")
-                import traceback
-                traceback.print_exc()
+            # No questions exist - auto-generate in background (don't block the API response)
+            print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating in background...")
+            import threading
+            _bg_job_id = body.job_id
+            _bg_candidate_id = candidate_id_for_questions
+
+            def _generate_questions_bg():
+                try:
+                    from database import get_safe_db
+                    bg_db = get_safe_db()
+                    generator = get_question_generator()
+                    result = generator.generate_questions(
+                        db=bg_db,
+                        job_id=_bg_job_id,
+                        candidate_id=_bg_candidate_id,
+                        total_questions=10
+                    )
+                    print(f"✅ Background: Auto-generated {result['total_questions']} questions for video interview")
+                    bg_db.close()
+                except Exception as e:
+                    print(f"⚠️ Background: Failed to auto-generate questions: {e}")
+
+            threading.Thread(target=_generate_questions_bg, daemon=True).start()
             questions_approved = False
         else:
             # Questions exist - check if they are approved
@@ -454,12 +471,15 @@ def list_video_interviews(
             query = query.filter(VideoInterview.interviewer_id == current_user.id)
             print(f"[DEBUG] Filtering for interviewer_id: {current_user.id}")
 
-        # Total count for pagination (before applying offset/limit)
-        total_count = query.count()
-        response.headers["X-Total-Count"] = str(total_count)
-
+        # Fetch data first, then count only if paginating (saves 1 DB round-trip)
         interviews = query.order_by(VideoInterview.scheduled_at.desc()).offset(skip).limit(limit).all()
-        print(f"[DEBUG] Found {len(interviews)} interviews (total: {total_count}, skip={skip}, limit={limit})")
+
+        # Only run count query if the result set is full (meaning there may be more)
+        if len(interviews) < limit:
+            total_count = skip + len(interviews)
+        else:
+            total_count = query.count()
+        response.headers["X-Total-Count"] = str(total_count)
         
         # Optimize: Fetch all fraud analyses in one query
         interview_ids = [vi.id for vi in interviews]

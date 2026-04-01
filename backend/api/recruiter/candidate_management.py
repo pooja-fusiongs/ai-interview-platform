@@ -718,9 +718,17 @@ def get_job_results(
         InterviewSession.status == InterviewSessionStatus.SCORED
     ).all()
 
+    if not sessions:
+        return []
+
+    # Bulk fetch all applications in ONE query (fixes N+1)
+    app_ids = list(set(s.application_id for s in sessions if s.application_id))
+    apps = db.query(JobApplication).filter(JobApplication.id.in_(app_ids)).all() if app_ids else []
+    app_map = {a.id: a for a in apps}
+
     results = []
     for s in sessions:
-        app = db.query(JobApplication).filter(JobApplication.id == s.application_id).first()
+        app = app_map.get(s.application_id)
         results.append({
             "session_id": s.id,
             "candidate_name": app.applicant_name if app else "Unknown",
