@@ -105,13 +105,15 @@ const Results = () => {
       const qs = a.score != null ? (a.score / 10).toFixed(1) : '—'
       const chipBg = a.score != null ? (a.score >= 70 ? '#EEFBF4' : a.score >= 40 ? '#FFF8E8' : '#FFF0F0') : '#F0F2FF'
       const chipC = a.score != null ? (a.score >= 70 ? '#1B7D48' : a.score >= 40 ? '#9B6700' : '#C42B2B') : '#7880C8'
+      const hasAnswer = a.answer_text && !a.answer_text.toLowerCase().includes('not found') && !a.answer_text.startsWith('[')
       return `<tr style="border-bottom:1px solid #F3F4FA;">
         <td style="padding:6px 10px;vertical-align:top;width:30px;">
           <div style="width:22px;height:22px;border-radius:6px;background:#F0F2FF;text-align:center;line-height:22px;font-size:9px;font-weight:600;color:#6C74C4;font-family:monospace;">${String(i + 1).padStart(2, '0')}</div>
         </td>
         <td style="padding:6px 4px;vertical-align:top;">
-          <div style="font-size:9px;font-weight:500;line-height:1.45;color:#1C1F3A;margin-bottom:${a.feedback ? '2px' : '0'};">${a.question_text || ''}</div>
-          ${a.feedback ? `<div style="font-size:8px;color:#9699B8;line-height:1.4;font-style:italic;border-left:2px solid #E4E7F8;padding-left:6px;">${a.feedback}</div>` : ''}
+          <div style="font-size:9px;font-weight:500;line-height:1.45;color:#1C1F3A;margin-bottom:2px;">${a.question_text || ''}</div>
+          ${hasAnswer ? `<div style="font-size:8px;color:#374151;line-height:1.5;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:4px 6px;margin:3px 0;"><span style="font-size:7px;font-weight:600;color:#991b1b;text-transform:uppercase;">Candidate's Answer:</span><br/>${a.answer_text}</div>` : ''}
+          ${a.feedback ? `<div style="font-size:8px;color:#9699B8;line-height:1.4;font-style:italic;border-left:2px solid #E4E7F8;padding-left:6px;margin-top:2px;">${a.feedback}</div>` : ''}
         </td>
         <td style="padding:6px 10px;vertical-align:top;text-align:center;width:40px;">
           <div style="width:34px;height:20px;border-radius:6px;background:${chipBg};text-align:center;line-height:20px;font-size:9px;font-weight:600;color:${chipC};font-family:monospace;">${qs}</div>
@@ -141,7 +143,7 @@ const Results = () => {
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;"><tr>${statBox('Relevance', relP, statColor(relP))}${statBox('Completeness', compP, statColor(compP))}${statBox('Accuracy', accP, statColor(accP))}${statBox('Clarity', clarP, statColor(clarP))}</tr></table>
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;"><tr>
 <td style="width:50%;vertical-align:top;padding-right:4px;"><div style="background:#EEFBF4;border:1px solid #B6EDD2;border-radius:8px;padding:8px 10px;"><table cellpadding="0" cellspacing="0"><tr><td style="vertical-align:middle;padding-right:5px;"><div style="width:14px;height:14px;border-radius:50%;background:#1B7D48;color:#fff;text-align:center;line-height:14px;font-size:7px;font-weight:700;">&#10003;</div></td><td><div style="font-size:9px;font-weight:600;color:#1B7D48;">Strengths</div></td></tr></table><div style="font-size:8px;line-height:1.5;color:#555870;margin-top:4px;">${s.strengths || 'No specific strengths identified.'}</div></div></td>
-<td style="width:50%;vertical-align:top;padding-left:4px;"><div style="background:#FFFAEC;border:1px solid #F5E0A0;border-radius:8px;padding:8px 10px;"><table cellpadding="0" cellspacing="0"><tr><td style="vertical-align:middle;padding-right:5px;"><div style="width:14px;height:14px;border-radius:50%;background:#C98A00;color:#fff;text-align:center;line-height:14px;font-size:7px;font-weight:700;">!</div></td><td><div style="font-size:9px;font-weight:600;color:#9B6700;">Areas for Improvement</div></td></tr></table><div style="font-size:8px;line-height:1.5;color:#555870;margin-top:4px;">${s.weaknesses || 'No specific weaknesses identified.'}</div></div></td>
+<td style="width:50%;vertical-align:top;padding-left:4px;"><div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;"><table cellpadding="0" cellspacing="0"><tr><td style="vertical-align:middle;padding-right:5px;"><div style="width:14px;height:14px;border-radius:50%;background:#dc2626;color:#fff;text-align:center;line-height:14px;font-size:7px;font-weight:700;">!</div></td><td><div style="font-size:9px;font-weight:600;color:#991b1b;">Areas for Improvement</div></td></tr></table><div style="font-size:8px;line-height:1.5;color:#b91c1c;margin-top:4px;">${s.weaknesses || 'No specific weaknesses identified.'}</div></div></td>
 </tr></table>
 <div style="font-size:7px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#9699B8;margin:2px 0 6px;">Question-wise Assessment</div>
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;border:1px solid #E8EAF5;border-collapse:separate;">

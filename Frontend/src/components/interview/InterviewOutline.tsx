@@ -74,6 +74,7 @@ const InterviewOutline: React.FC = () => {
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editedAnswer, setEditedAnswer] = useState<string>('');
+  const [originalAnswer, setOriginalAnswer] = useState<string>('');
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -128,7 +129,7 @@ const InterviewOutline: React.FC = () => {
             setLoading(true);
             const response = await questionGenerationService.getQuestionSets();
             const sets = response.data;
-            const currentSet = sets.find((set: QuestionSet) => set.id === setId);
+            const currentSet = sets.find((set: QuestionSet) => String(set.id) === String(setId));
 
             if (currentSet) {
                 // Fetch detailed questions for this candidate
@@ -355,6 +356,7 @@ const InterviewOutline: React.FC = () => {
     const handleEditAnswer = (questionId: string, currentAnswer: string) => {
         setEditingQuestionId(questionId);
         setEditedAnswer(currentAnswer);
+        setOriginalAnswer(currentAnswer);
     };
 
     const handleSaveAnswer = async (questionId: string) => {
@@ -939,7 +941,8 @@ const InterviewOutline: React.FC = () => {
                                                         />
                                                         <Box sx={{ display: 'flex', gap: 1 }}>
                                                             <Button variant="contained" size="small" onClick={() => handleSaveAnswer(question.id)}
-                                                                sx={{ backgroundColor: '#10b981', color: 'white', '&:hover': { backgroundColor: '#059669' } }}>
+                                                                disabled={editedAnswer.trim() === originalAnswer.trim() || !editedAnswer.trim()}
+                                                                sx={{ backgroundColor: '#10b981', color: 'white', '&:hover': { backgroundColor: '#059669' }, '&:disabled': { opacity: 0.5, backgroundColor: '#d1d5db', color: '#9ca3af' } }}>
                                                                 Save
                                                             </Button>
                                                             <Button variant="outlined" size="small" onClick={handleCancelEdit}

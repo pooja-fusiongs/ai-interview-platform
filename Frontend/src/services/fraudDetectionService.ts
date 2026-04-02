@@ -2,7 +2,7 @@ import apiClient from './api';
 
 export const fraudDetectionService = {
   triggerAnalysis: async (videoInterviewId: number) => {
-    const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/analyze`);
+    const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/analyze`, {}, { timeout: 180000 });
     return response.data;
   },
   getAnalysis: async (videoInterviewId: number) => {

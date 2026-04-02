@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Chip, CircularProgress, Alert, IconButton, LinearProgress
+  Box, Typography, Chip, CircularProgress, Alert, IconButton, LinearProgress, Button
 } from '@mui/material';
 import {
   ArrowBack,
@@ -210,34 +210,78 @@ const FraudAnalysisPanel: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    const fetchOrTriggerAnalysis = async () => {
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    const fetchAnalysis = async () => {
       try {
-        // First try to get existing analysis
         const data = await fraudDetectionService.getAnalysis(Number(videoId));
-        setAnalysis(data);
-        setLoading(false);
-      } catch (err: any) {
-        // If 404, trigger new analysis
-        if (err.response?.status === 404 || err.message?.includes('404')) {
+        if (data.analysis_status === 'processing') {
+          // Analysis in progress — poll every 5 seconds
           setAnalyzing(true);
-          try {
-            // Trigger fraud analysis
-            const newAnalysis = await fraudDetectionService.triggerAnalysis(Number(videoId));
-            setAnalysis(newAnalysis);
-          } catch (triggerErr: any) {
-            setError(triggerErr.response?.data?.detail || triggerErr.message || 'Failed to trigger analysis.');
-          } finally {
-            setAnalyzing(false);
-            setLoading(false);
-          }
+          setLoading(false);
+          pollInterval = setInterval(async () => {
+            try {
+              const updated = await fraudDetectionService.getAnalysis(Number(videoId));
+              if (updated.analysis_status === 'completed') {
+                if (pollInterval) clearInterval(pollInterval);
+                setAnalysis(updated);
+                setAnalyzing(false);
+              } else if (updated.analysis_status === 'failed') {
+                if (pollInterval) clearInterval(pollInterval);
+                setError('Fraud analysis failed. Please try again.');
+                setAnalyzing(false);
+              }
+            } catch { /* keep polling */ }
+          }, 5000);
         } else {
-          setError(err.response?.data?.detail || err.message || 'Failed to load analysis.');
+          setAnalysis(data);
           setLoading(false);
         }
+      } catch (err: any) {
+        if (err.response?.status === 404 || err.message?.includes('404')) {
+          setAnalysis(null);
+        } else {
+          setError(err.response?.data?.detail || err.message || 'Failed to load analysis.');
+        }
+        setLoading(false);
       }
     };
-    if (videoId) fetchOrTriggerAnalysis();
+    if (videoId) fetchAnalysis();
+    return () => { if (pollInterval) clearInterval(pollInterval); };
   }, [videoId]);
+
+  const handleTriggerAnalysis = async () => {
+    setAnalyzing(true);
+    setError('');
+    try {
+      const result = await fraudDetectionService.triggerAnalysis(Number(videoId));
+      if (result.analysis_status === 'completed') {
+        setAnalysis(result);
+        setAnalyzing(false);
+      } else {
+        // Processing in background — poll for completion
+        const poll = setInterval(async () => {
+          try {
+            const data = await fraudDetectionService.getAnalysis(Number(videoId));
+            if (data.analysis_status === 'completed') {
+              clearInterval(poll);
+              setAnalysis(data);
+              setAnalyzing(false);
+            } else if (data.analysis_status === 'failed') {
+              clearInterval(poll);
+              setError('Fraud analysis failed. Please try again.');
+              setAnalyzing(false);
+            }
+          } catch { /* keep polling */ }
+        }, 5000);
+        // Stop polling after 3 minutes
+        setTimeout(() => { clearInterval(poll); }, 180000);
+      }
+    } catch (triggerErr: any) {
+      const detail = triggerErr.response?.data?.detail || triggerErr.message || 'Failed to run analysis.';
+      setError(detail);
+      setAnalyzing(false);
+    }
+  };
 
   if (loading || analyzing) {
     return (
@@ -331,7 +375,54 @@ const FraudAnalysisPanel: React.FC = () => {
           </Alert>
         )}
 
-        {analysis && (
+        {!analysis ? (
+          <Box sx={{
+            background: 'white',
+            borderRadius: '20px',
+            border: '1px solid #e2e8f0',
+            padding: '48px 32px',
+            textAlign: 'center',
+            maxWidth: 520,
+            margin: '40px auto'
+          }}>
+            <Box sx={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: '#f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 24px'
+            }}>
+              <Security sx={{ color: '#94a3b8', fontSize: 40 }} />
+            </Box>
+            <Typography sx={{ fontSize: '20px', fontWeight: 700, color: '#1e293b', mb: 1 }}>
+              No Fraud Analysis Available
+            </Typography>
+            <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3, lineHeight: 1.6 }}>
+              Fraud analysis is only available for completed interviews with a recording.
+              If this interview has been completed, you can manually trigger the analysis below.
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={handleTriggerAnalysis}
+              disabled={analyzing}
+              startIcon={<Security />}
+              sx={{
+                background: '#020291',
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 4,
+                py: 1.5,
+                '&:hover': { background: '#01016d' }
+              }}
+            >
+              Run Fraud Analysis
+            </Button>
+          </Box>
+        ) : (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '350px 1fr' }, gap: 3 }}>
             {/* Left Sidebar - Overall Score */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -648,3 +739,4 @@ const FraudAnalysisPanel: React.FC = () => {
 };
 
 export default FraudAnalysisPanel;
+

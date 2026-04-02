@@ -32,6 +32,7 @@ from models import (
     InterviewAnswer,
     InterviewQuestion,
     InterviewRating,
+    QuestionGenerationSession,
 )
 from schemas import (
     VideoInterviewCreate,
@@ -61,102 +62,83 @@ def generate_candidate_token(interview_id: int, candidate_id: int) -> str:
 
 def _build_response(vi: VideoInterview, db: Session = None, questions_approved: bool = True) -> VideoInterviewResponse:
     """Build a VideoInterviewResponse from an ORM object with joined names."""
-    print(f"[DEBUG] Building response for interview {vi.id}")
-    
     try:
+        # Extract names from already-loaded relationships (no extra queries)
         candidate_name = None
-        application = None
-
-        # Try to get name from JobApplication first (more accurate)
-        if db and vi.candidate:
-            print(f"[DEBUG] Looking for application for job_id={vi.job_id}, email={vi.candidate.email}")
-            application = db.query(JobApplication).filter(
-                JobApplication.job_id == vi.job_id,
-                JobApplication.applicant_email == vi.candidate.email
-            ).first()
-            if application:
-                candidate_name = application.applicant_name
-                print(f"[DEBUG] Found candidate name from application: {candidate_name}")
-
-        # Fallback to User table
-        if not candidate_name and vi.candidate:
+        if vi.candidate:
             candidate_name = vi.candidate.full_name or vi.candidate.username
-            print(f"[DEBUG] Using fallback candidate name: {candidate_name}")
-
         interviewer_name = None
         if vi.interviewer:
             interviewer_name = vi.interviewer.full_name or vi.interviewer.username
-
         job_title = vi.job.title if vi.job else None
         interview_type = vi.job.interview_type if vi.job else "Both"
-        print(f"[DEBUG] Job title: {job_title}, Interview type: {interview_type}")
 
-        # Fetch score data from InterviewSession
+        # Batch-fetch all related data in minimal queries
+        application = None
         overall_score = None
         recommendation = None
         strengths = None
         weaknesses = None
         per_question_scores = None
         interview_session_id = None
-
-        if db:
-            print(f"[DEBUG] Looking for interview session data")
-            
-            session = None
-            if vi.session_id is not None:
-                session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
-
-            if session and session.overall_score is not None:
-                print(f"[DEBUG] Found session data for interview {vi.id}")
-                interview_session_id = session.id  # Store session ID for Results page navigation
-                overall_score = session.overall_score
-                recommendation = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation) if session.recommendation else None
-                strengths = session.strengths
-                weaknesses = session.weaknesses
-
-                # Fetch per-question scores
-                answers = db.query(InterviewAnswer).filter(
-                    InterviewAnswer.session_id == session.id
-                ).all()
-
-                if answers:
-                    per_question_scores = [
-                        {
-                            "question_id": ans.question_id,
-                            "score": ans.score,
-                            "relevance_score": ans.relevance_score,
-                            "completeness_score": ans.completeness_score,
-                            "accuracy_score": ans.accuracy_score,
-                            "clarity_score": ans.clarity_score,
-                            "feedback": ans.feedback,
-                            "extracted_answer": ans.answer_text
-                        }
-                        for ans in answers
-                    ]
-            else:
-                print(f"[DEBUG] No session data found for interview {vi.id}")
-
-        # Fetch recruiter rating data from InterviewRating / JobApplication
+        question_session_id = None
         recruiter_score = None
         rated_questions = None
         total_questions = None
-        if db and application:
-            from sqlalchemy import func as sa_func
-            total_q = db.query(sa_func.count(InterviewQuestion.id)).filter(
-                InterviewQuestion.job_id == vi.job_id,
-                InterviewQuestion.candidate_id == application.id,
-            ).scalar() or 0
-            rated_q = db.query(sa_func.count(InterviewRating.id)).join(
-                InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
-            ).filter(
-                InterviewQuestion.candidate_id == application.id,
-            ).scalar() or 0
-            if rated_q > 0:
-                total_questions = total_q
-                rated_questions = rated_q
-                recruiter_score = application.overall_score
 
-        print(f"[DEBUG] Creating VideoInterviewResponse for interview {vi.id}")
+        if db:
+            # Query 1: Get application (needed for question/rating lookups)
+            if vi.candidate:
+                application = db.query(JobApplication).filter(
+                    JobApplication.job_id == vi.job_id,
+                    JobApplication.applicant_email == vi.candidate.email
+                ).first()
+                if application:
+                    candidate_name = application.applicant_name
+
+            # Query 2: Session + answers in one go (if session exists)
+            if vi.session_id is not None:
+                session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
+                if session and session.overall_score is not None:
+                    interview_session_id = session.id
+                    overall_score = session.overall_score
+                    recommendation = session.recommendation.value if hasattr(session.recommendation, "value") else str(session.recommendation) if session.recommendation else None
+                    strengths = session.strengths
+                    weaknesses = session.weaknesses
+                    answers = db.query(InterviewAnswer).filter(InterviewAnswer.session_id == session.id).all()
+                    if answers:
+                        per_question_scores = [{
+                            "question_id": a.question_id, "score": a.score,
+                            "relevance_score": a.relevance_score, "completeness_score": a.completeness_score,
+                            "accuracy_score": a.accuracy_score, "clarity_score": a.clarity_score,
+                            "feedback": a.feedback, "extracted_answer": a.answer_text
+                        } for a in answers]
+
+            # Query 3: Question session + rating counts (combined for application)
+            if application:
+                from sqlalchemy import func as sa_func
+                q_session = db.query(QuestionGenerationSession).filter(
+                    QuestionGenerationSession.job_id == vi.job_id,
+                    QuestionGenerationSession.candidate_id == application.id,
+                ).order_by(QuestionGenerationSession.created_at.desc()).first()
+                if q_session:
+                    question_session_id = q_session.id
+
+                # Combined count query
+                total_q = db.query(sa_func.count(InterviewQuestion.id)).filter(
+                    InterviewQuestion.job_id == vi.job_id,
+                    InterviewQuestion.candidate_id == application.id,
+                ).scalar() or 0
+                if total_q > 0:
+                    rated_q = db.query(sa_func.count(InterviewRating.id)).join(
+                        InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
+                    ).filter(
+                        InterviewQuestion.candidate_id == application.id,
+                    ).scalar() or 0
+                    if rated_q > 0:
+                        total_questions = total_q
+                        rated_questions = rated_q
+                        recruiter_score = application.overall_score
         response = VideoInterviewResponse(
             id=vi.id,
             session_id=vi.session_id,
@@ -185,12 +167,12 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
             per_question_scores=per_question_scores,
             interview_session_id=interview_session_id,
             questions_approved=questions_approved,
+            question_session_id=question_session_id,
             recruiter_score=recruiter_score,
             rated_questions=rated_questions,
             total_questions=total_questions,
         )
         
-        print(f"[DEBUG] Successfully built response for interview {vi.id}")
         return response
         
     except Exception as e:
@@ -340,6 +322,11 @@ def schedule_video_interview(
             vi.zoom_passcode = zoom_data["passcode"]
 
         db.add(vi)
+
+        # Update JobApplication status to "Interview Scheduled"
+        if application and application.status in ("Applied", "Reviewed", "Questions Generated"):
+            application.status = "Interview Scheduled"
+
         db.commit()
         db.refresh(vi)
 
@@ -395,7 +382,7 @@ def schedule_video_interview(
         ).all()
 
         if len(existing_questions) == 0:
-            # No questions exist - auto-generate in background (don't block the API response)
+            # No questions exist - generate in background (don't block API response)
             print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating in background...")
             import threading
             _bg_job_id = body.job_id
@@ -412,13 +399,13 @@ def schedule_video_interview(
                         candidate_id=_bg_candidate_id,
                         total_questions=10
                     )
-                    print(f"✅ Background: Auto-generated {result['total_questions']} questions for video interview")
+                    print(f"✅ Background: Auto-generated {result.get('total_questions', 0)} questions for video interview")
                     bg_db.close()
                 except Exception as e:
                     print(f"⚠️ Background: Failed to auto-generate questions: {e}")
 
             threading.Thread(target=_generate_questions_bg, daemon=True).start()
-            questions_approved = False
+            questions_approved = True  # Questions are auto-approved when generated
         else:
             # Questions exist - check if they are approved
             approved_count = sum(1 for q in existing_questions if q.is_approved)
@@ -1696,16 +1683,11 @@ def end_video_interview(
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
 
-    # Mark ALL fraud analyses as completed when interview ends
-    pending_fas = db.query(FraudAnalysis).filter(
+    # Batch-update fraud analyses to completed (single query, no loop)
+    db.query(FraudAnalysis).filter(
         FraudAnalysis.video_interview_id == video_id,
         FraudAnalysis.analysis_status == "pending"
-    ).all()
-    for fa in pending_fas:
-        fa.analysis_status = "completed"
-        fa.analyzed_at = datetime.now(timezone.utc)
-    if pending_fas:
-        print(f"[end_interview] {len(pending_fas)} fraud analysis record(s) marked as completed")
+    ).update({"analysis_status": "completed", "analyzed_at": datetime.now(timezone.utc)}, synchronize_session=False)
 
     print(f"[end_interview] recording_url={vi.recording_url}")
 
@@ -1740,37 +1722,28 @@ def end_video_interview(
     else:
         print(f"[end_interview] InterviewSession already exists (id={vi.session_id}), skipping creation")
 
+    # Build transcript from real-time chunks before commit (same transaction)
+    try:
+        chunks = db.query(TranscriptChunk).filter(
+            TranscriptChunk.video_interview_id == vi.id,
+            TranscriptChunk.is_final == True
+        ).order_by(TranscriptChunk.sequence_number).all()
+
+        if chunks and len(chunks) >= 2:
+            lines = [f"{(c.speaker or 'Speaker').capitalize()}: {c.text}" for c in chunks]
+            start_str = (vi.started_at or vi.scheduled_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+            end_str = (vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+            vi.transcript = f"[Interview Start: {start_str}]\n\n" + "\n".join(lines) + f"\n\n[Interview End: {end_str}]"
+            vi.transcript_source = "realtime"
+            vi.transcript_generated_at = datetime.now(timezone.utc)
+    except Exception as e:
+        print(f"[end_interview] Real-time transcript build failed: {e}")
+
+    # Single commit for all changes
     db.commit()
     db.refresh(vi)
 
-    # Build transcript from real-time chunks FIRST (instant)
-    if not vi.transcript or vi.transcript_source == "realtime":
-        try:
-            chunks = db.query(TranscriptChunk).filter(
-                TranscriptChunk.video_interview_id == vi.id,
-                TranscriptChunk.is_final == True
-            ).order_by(TranscriptChunk.sequence_number).all()
-
-            if chunks and len(chunks) >= 2:
-                lines = []
-                for c in chunks:
-                    speaker = c.speaker.capitalize() if c.speaker else "Speaker"
-                    lines.append(f"{speaker}: {c.text}")
-                realtime_text = "\n".join(lines)
-
-                start_str = (vi.started_at or vi.scheduled_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
-                end_str = (vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
-                vi.transcript = f"[Interview Start: {start_str}]\n\n{realtime_text}\n\n[Interview End: {end_str}]"
-                vi.transcript_source = "realtime"
-                vi.transcript_generated_at = datetime.now(timezone.utc)
-                db.commit()
-                print(f"[end_interview] Built transcript from {len(chunks)} real-time chunks (instant)")
-            else:
-                print(f"[end_interview] Only {len(chunks) if chunks else 0} real-time chunks")
-        except Exception as e:
-            print(f"[end_interview] Real-time transcript build failed: {e}")
-
-    # Fallback: slow recording-based transcription only if no transcript yet
+    # Background: recording-based transcription if no transcript
     if not vi.transcript:
         _start_background_transcription_task(
             vi_id=vi.id,

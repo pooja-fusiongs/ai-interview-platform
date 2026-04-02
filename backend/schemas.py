@@ -202,7 +202,7 @@ class CandidateProfileResponse(BaseModel):
 
 # Job Application Schemas
 class JobApplicationBase(BaseModel):
-    job_id: int
+    job_id: Optional[int] = None
     applicant_name: str
     applicant_email: str
     applicant_phone: Optional[str] = None
@@ -697,6 +697,7 @@ class VideoInterviewResponse(BaseModel):
     per_question_scores: Optional[List[dict]] = None
     interview_session_id: Optional[int] = None  # ID to navigate to Results page
     questions_approved: bool = True
+    question_session_id: Optional[int] = None
     # Recruiter rating fields (from InterviewRating / JobApplication)
     recruiter_score: Optional[float] = None
     rated_questions: Optional[int] = None

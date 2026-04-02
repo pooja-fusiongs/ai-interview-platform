@@ -423,20 +423,13 @@ const VideoInterviewScheduler: React.FC = () => {
       });
 
       toast.dismiss('schedule-loading');
-      if (result.questions_approved === false) {
-        toast.success('Interview scheduled! Redirecting to approve questions...', { duration: 2500 });
-        setTimeout(() => {
-          navigate(`/interview-outline/${result.question_session_id}?from=schedule-interview&jobId=${selectedJob!.id}&jobTitle=${encodeURIComponent(selectedJob!.title)}&interviewId=${result.id}`);
-        }, 2500);
-      } else {
-        toast.success('Interview scheduled successfully!');
-        setSuccess(result);
-        setTimeout(() => {
-          resetForm();
-          setViewMode('list');
-          fetchInterviews();
-        }, 1500);
-      }
+      toast.success('Interview scheduled successfully!');
+      setSuccess(result);
+      setTimeout(() => {
+        resetForm();
+        setViewMode('list');
+        fetchInterviews();
+      }, 1500);
     } catch (err: any) {
       toast.dismiss('schedule-loading');
       const errorMsg = err.message || 'Failed to schedule interview. Please try again.';

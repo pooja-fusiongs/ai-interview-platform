@@ -140,6 +140,18 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({})
   const [addFormTouched, setAddFormTouched] = useState<Record<string, boolean>>({})
 
+  const [deletingCandidateId, setDeletingCandidateId] = useState<number | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; candidate: any | null }>({ open: false, candidate: null })
+
+  // Edit job state
+  const [editJobOpen, setEditJobOpen] = useState(false)
+  const [editJobSaving, setEditJobSaving] = useState(false)
+  const [editJobForm, setEditJobForm] = useState({
+    title: '', company: '', description: '', experience_level: '', job_type: '', location: '', salary_range: ''
+  })
+  const [editJobSkills, setEditJobSkills] = useState<Array<{ skill: string; weightage: number }>>([])
+  const [editJobFile, setEditJobFile] = useState<File | null>(null)
+
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -194,8 +206,94 @@ const JobDetails: React.FC<JobDetailsProps> = ({
     fetchCandidates()
   }, [selectedJob?.id])
 
-  // Generate questions for a candidate
+  // Edit job handlers
+  const handleOpenEditJob = () => {
+    // Parse existing skills into array format
+    let parsedSkills: Array<{ skill: string; weightage: number }> = []
+    if (selectedJob.skills_required) {
+      try {
+        const raw = typeof selectedJob.skills_required === 'string' ? JSON.parse(selectedJob.skills_required) : selectedJob.skills_required
+        if (Array.isArray(raw)) {
+          parsedSkills = raw.map((s: any) => {
+            if (typeof s === 'string') return { skill: s, weightage: 0 }
+            if (typeof s === 'object' && s.skill) return { skill: s.skill, weightage: s.weightage || 0 }
+            return { skill: String(s), weightage: 0 }
+          })
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    setEditJobSkills(parsedSkills)
+    setEditJobFile(null)
+    setEditJobForm({
+      title: selectedJob.title || '',
+      company: selectedJob.company || '',
+      description: selectedJob.fullDescription || selectedJob.description || '',
+      experience_level: selectedJob.experience_level || selectedJob.experience_years_required?.toString() || '',
+      job_type: selectedJob.job_type || '',
+      location: selectedJob.location || '',
+      salary_range: selectedJob.salary_range || '',
+    })
+    setEditJobOpen(true)
+  }
 
+  const handleSaveEditJob = async () => {
+    if (!editJobForm.title.trim()) { hotToast.error('Job title is required'); return }
+    setEditJobSaving(true)
+    try {
+      const validSkills = editJobSkills.filter(s => s.skill.trim())
+      const payload: Record<string, any> = {
+        title: editJobForm.title.trim(),
+        company: editJobForm.company.trim(),
+        description: editJobForm.description.trim(),
+        experience_level: editJobForm.experience_level,
+        skills_required: JSON.stringify(validSkills.length > 0 ? validSkills.map(s => s.skill.trim()) : []),
+        skills_weightage: validSkills.length > 0 ? JSON.stringify(validSkills) : null,
+      }
+
+      if (editJobFile) {
+        // Use FormData for file upload
+        const fd = new FormData()
+        Object.entries(payload).forEach(([key, val]) => {
+          if (val !== null && val !== undefined) fd.append(key, String(val))
+        })
+        fd.append('description_file', editJobFile)
+        await apiClient.put(`/api/jobs/${selectedJob.id}`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+        })
+      } else {
+        await jobService.updateJob(selectedJob.id, payload)
+      }
+
+      // Update local state
+      Object.assign(selectedJob, payload)
+      selectedJob.fullDescription = payload.description
+      hotToast.success('Job updated successfully')
+      setEditJobOpen(false)
+    } catch (err: any) {
+      hotToast.error(err.response?.data?.detail || 'Failed to update job')
+    } finally {
+      setEditJobSaving(false)
+    }
+  }
+
+  // Delete candidate from this position
+  const handleDeleteCandidate = async () => {
+    const candidate = deleteConfirm.candidate
+    if (!candidate) return
+    setDeleteConfirm({ open: false, candidate: null })
+    setDeletingCandidateId(candidate.id)
+    try {
+      await apiClient.delete(`/api/candidates/${candidate.id}`)
+      setCandidates(prev => prev.filter(c => c.id !== candidate.id))
+      hotToast.success(`${candidate.applicant_name} has been deleted`)
+    } catch (error) {
+      console.error('Error deleting candidate:', error)
+      hotToast.error('Failed to delete candidate')
+    } finally {
+      setDeletingCandidateId(null)
+    }
+  }
 
   const handleScheduleInterview = async () => {
     if (!schedulingCandidate || !selectedJob) return
@@ -203,43 +301,35 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       hotToast.error('Please select date and time')
       return
     }
+    // Save reference before clearing dialog state
+    const candidateRef = schedulingCandidate
     setScheduling(true)
     try {
       const scheduledAt = `${scheduleForm.date}T${scheduleForm.time}:00`
-      const result = await recruiterService.scheduleInterview(selectedJob.id, schedulingCandidate.id, scheduledAt, parseInt(scheduleForm.duration_minutes))
+      const result = await recruiterService.scheduleInterview(selectedJob.id, candidateRef.id, scheduledAt, parseInt(scheduleForm.duration_minutes))
       hotToast.success('Interview scheduled! Questions generated and email sent to candidate.', { duration: 4000 })
       setScheduleDialogOpen(false)
       setSchedulingCandidate(null)
       setScheduleForm({ date: '', time: '', duration_minutes: '30' })
-      // Refresh question sets and video IDs
-      const response = await apiClient.get('/api/interview/question-sets')
-      const sets = response.data || []
-      const mapping: Record<number, string> = { ...candidateQuestionSets }
-      for (const qs of sets) {
-        if (qs.job_id === selectedJob.id && qs.application_id) {
-          mapping[qs.application_id] = qs.id
-        }
+
+      // Immediately update video ID and status so UI reflects instantly
+      if (result.id) {
+        setCandidateVideoIds(prev => ({ ...prev, [candidateRef.id]: result.id }))
       }
-      setCandidateQuestionSets(mapping)
+      setCandidates((prev: any[]) => prev.map(c => c.id === candidateRef.id ? { ...c, status: 'Interview Scheduled' } : c))
+
+      // Refresh question sets in background
       try {
-        const viRes = await apiClient.get('/api/video/interviews')
-        const interviews = viRes.data || []
-        const vMapping: Record<number, number> = { ...candidateVideoIds }
-        for (const vi of interviews) {
-          if (vi.job_id === selectedJob.id) {
-            let matched = vi.application_id ? candidates.find((c: any) => c.id === vi.application_id) : null
-            if (!matched && vi.candidate_email) {
-              matched = candidates.find((c: any) =>
-                c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
-              )
-            }
-            if (matched) vMapping[matched.id] = vi.id
+        const response = await apiClient.get('/api/interview/question-sets')
+        const sets = response.data || []
+        const mapping: Record<number, string> = { ...candidateQuestionSets }
+        for (const qs of sets) {
+          if (qs.job_id === selectedJob.id && qs.application_id) {
+            mapping[qs.application_id] = qs.id
           }
         }
-        if (result.id) vMapping[schedulingCandidate.id] = result.id
-        setCandidateVideoIds(vMapping)
-      } catch (e) { console.error('Failed to refetch video interviews:', e) }
-      setCandidates((prev: any[]) => prev.map(c => c.id === schedulingCandidate.id ? { ...c, status: 'Interview Scheduled' } : c))
+        setCandidateQuestionSets(mapping)
+      } catch (e) { console.error('Failed to refetch question sets:', e) }
     } catch (err: any) {
       hotToast.error(err.response?.data?.detail || 'Failed to schedule interview')
     } finally {
@@ -441,7 +531,8 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       }
     }
     if (selectedJob?.id && !candidatesLoading) fetchSimilarCandidates()
-  }, [selectedJob?.id, candidatesLoading, candidates])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJob?.id, candidatesLoading])
 
   // Helper functions
   const getExperienceLevel = (job: any) => job.experience_level || job.experienceLevel || 'Not specified'
@@ -649,7 +740,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
           </Box>
           {(user?.role === 'recruiter' || user?.role === 'admin') && (
             <Button
-              onClick={() => navigate(`/recruiter-candidates?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)}
+              onClick={handleOpenEditJob}
               variant="outlined"
               sx={{
                 textTransform: 'none', fontWeight: 600, fontSize: '13px',
@@ -1124,9 +1215,13 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                       <Button className="job-action-btn" onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
                                         <i className="fas fa-eye" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Review</span>
                                       </Button>
-                                      {candidateVideoIds[candidate.id] && (
+                                      {candidateVideoIds[candidate.id] ? (
                                         <Button className="job-action-btn" onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
                                           <i className="fas fa-video" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Interview</span>
+                                        </Button>
+                                      ) : (
+                                        <Button className="job-action-btn" onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }} size="small" variant="outlined" sx={btnSx('#16a34a', '#16a34a', '#16a34a')}>
+                                          <i className="fas fa-calendar-plus" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Schedule</span>
                                         </Button>
                                       )}
                                     </>
@@ -1144,6 +1239,23 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                   </Button>
                                 )
                               })()}
+                              <Tooltip title="Delete candidate" arrow>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => setDeleteConfirm({ open: true, candidate })}
+                                  disabled={deletingCandidateId === candidate.id}
+                                  sx={{
+                                    width: 28, height: 28,
+                                    color: '#94a3b8',
+                                    '&:hover': { color: '#dc2626', background: '#fef2f2' }
+                                  }}
+                                >
+                                  {deletingCandidateId === candidate.id
+                                    ? <CircularProgress size={14} />
+                                    : <i className="fas fa-trash-alt" style={{ fontSize: 11 }}></i>
+                                  }
+                                </IconButton>
+                              </Tooltip>
                             </Box>
                           </td>
                         </tr>
@@ -1259,9 +1371,13 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                               <Button onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
                                 <i className="fas fa-eye" style={{ marginRight: 4, fontSize: 10 }}></i>Review
                               </Button>
-                              {candidateVideoIds[candidate.id] && (
+                              {candidateVideoIds[candidate.id] ? (
                                 <Button onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
                                   <i className="fas fa-video" style={{ marginRight: 4, fontSize: 10 }}></i>Interview
+                                </Button>
+                              ) : (
+                                <Button onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }} size="small" variant="outlined" sx={btnSx('#16a34a', '#16a34a', '#16a34a')}>
+                                  <i className="fas fa-calendar-plus" style={{ marginRight: 4, fontSize: 10 }}></i>Schedule
                                 </Button>
                               )}
                             </>
@@ -1277,6 +1393,23 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                           </Button>
                         )
                       })()}
+                      <Tooltip title="Delete candidate" arrow>
+                        <IconButton
+                          size="small"
+                          onClick={() => setDeleteConfirm({ open: true, candidate })}
+                          disabled={deletingCandidateId === candidate.id}
+                          sx={{
+                            width: 28, height: 28,
+                            color: '#94a3b8',
+                            '&:hover': { color: '#dc2626', background: '#fef2f2' }
+                          }}
+                        >
+                          {deletingCandidateId === candidate.id
+                            ? <CircularProgress size={14} />
+                            : <i className="fas fa-trash-alt" style={{ fontSize: 11 }}></i>
+                          }
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   </Box>
                 )
@@ -1571,15 +1704,35 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{c.name}</Typography>
                       <Typography sx={{ fontSize: '11px', color: '#64748b' }}>{c.email}</Typography>
+                      {c.currentPosition && (
+                        <Typography sx={{ fontSize: '11px', color: '#020291', fontWeight: 500 }}>
+                          <i className="fas fa-briefcase" style={{ fontSize: 9, marginRight: 4 }} />{c.currentPosition}
+                        </Typography>
+                      )}
+                      {c.appliedJobs?.length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                          {c.appliedJobs.slice(0, 2).map((j: any, i: number) => (
+                            <Chip key={i} label={j.title || 'Unassigned'} size="small"
+                              sx={{ fontSize: '9px', height: '18px', background: '#f1f5f9', color: '#64748b', '& .MuiChip-label': { px: 0.8 } }} />
+                          ))}
+                          {c.appliedJobs.length > 2 && (
+                            <Chip label={`+${c.appliedJobs.length - 2}`} size="small"
+                              sx={{ fontSize: '9px', height: '18px', background: '#f1f5f9', color: '#94a3b8', '& .MuiChip-label': { px: 0.5 } }} />
+                          )}
+                        </Box>
+                      )}
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
                       {c.experience && c.experience !== 'N/A' && (
                         <Typography sx={{ fontSize: '11px', color: '#64748b' }}>{c.experience}</Typography>
                       )}
                       {c.skills?.length > 0 && (
-                        <Typography sx={{ fontSize: '10px', color: '#94a3b8', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {c.skills.slice(0, 3).join(', ')}
-                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end', mt: 0.5 }}>
+                          {c.skills.slice(0, 3).map((skill: string, i: number) => (
+                            <Chip key={i} label={skill} size="small"
+                              sx={{ fontSize: '9px', height: '18px', background: '#EEF0FF', color: '#020291', '& .MuiChip-label': { px: 0.8 } }} />
+                          ))}
+                        </Box>
                       )}
                     </Box>
                     <i className="fas fa-plus-circle" style={{ fontSize: 16, color: '#020291' }} />
@@ -1901,6 +2054,232 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             )}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Edit Job Dialog — matches Create Job form exactly */}
+      <Dialog open={editJobOpen} onClose={() => !editJobSaving && setEditJobOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+            <Box sx={{
+              width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#020291', color: 'white'
+            }}>
+              <i className="fas fa-pen" style={{ fontSize: 14 }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>Edit Position</Typography>
+              <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Update job details</Typography>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px', mt: 1 }}>
+            {/* Title + Company */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '16px' }}>
+              <Box>
+                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                  Job Title <span style={{ color: '#ef4444' }}>*</span>
+                </Typography>
+                <TextField fullWidth placeholder="e.g. Senior Frontend Engineer" value={editJobForm.title}
+                  onChange={e => setEditJobForm(prev => ({ ...prev, title: e.target.value }))}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', '& fieldset': { borderColor: '#e2e8f0' } }, '& .MuiOutlinedInput-input': { padding: '12px 16px', fontSize: '14px' } }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                  Company <span style={{ color: '#ef4444' }}>*</span>
+                </Typography>
+                <TextField fullWidth placeholder="e.g. Fusion Global Solutions" value={editJobForm.company}
+                  onChange={e => setEditJobForm(prev => ({ ...prev, company: e.target.value }))}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', '& fieldset': { borderColor: '#e2e8f0' } }, '& .MuiOutlinedInput-input': { padding: '12px 16px', fontSize: '14px' } }} />
+              </Box>
+            </Box>
+
+            {/* Required Experience */}
+            <Box>
+              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                Required Experience (years)
+              </Typography>
+              <TextField fullWidth type="number" value={editJobForm.experience_level}
+                onChange={e => setEditJobForm(prev => ({ ...prev, experience_level: e.target.value }))}
+                slotProps={{ htmlInput: { min: 0, max: 50 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', '& fieldset': { borderColor: '#e2e8f0' } }, '& .MuiOutlinedInput-input': { padding: '12px 16px', fontSize: '14px' } }} />
+            </Box>
+
+            {/* Job Description */}
+            <Box>
+              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                Job Description
+              </Typography>
+              <TextField fullWidth multiline rows={4}
+                placeholder="Describe the role, responsibilities, skills required..."
+                value={editJobForm.description}
+                onChange={e => setEditJobForm(prev => ({ ...prev, description: e.target.value }))}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', '& fieldset': { borderColor: '#e2e8f0' } }, '& .MuiOutlinedInput-input': { padding: '12px 16px', fontSize: '14px', lineHeight: 1.6 } }} />
+            </Box>
+
+            {/* Skill Weightage */}
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px' }}>
+                <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                  Skill Weightage (optional)
+                </Typography>
+                <Button
+                  onClick={() => setEditJobSkills(prev => [...prev, { skill: '', weightage: 0 }])}
+                  sx={{
+                    textTransform: 'none', fontSize: '13px', fontWeight: 600, color: '#020291',
+                    minWidth: 'auto', p: '4px 8px',
+                    '&:hover': { background: 'rgba(2,2,145,0.06)' },
+                  }}
+                >
+                  + Add skill
+                </Button>
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {editJobSkills.map((row, idx) => (
+                  <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 36px', gap: '8px', alignItems: 'center' }}>
+                    <TextField
+                      size="small" placeholder="Skill name"
+                      value={row.skill}
+                      onChange={e => {
+                        const next = [...editJobSkills]; next[idx].skill = e.target.value; setEditJobSkills(next)
+                      }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', '& fieldset': { borderColor: '#e2e8f0' } } }}
+                    />
+                    <TextField
+                      size="small" type="number" placeholder="%"
+                      value={row.weightage}
+                      onChange={e => {
+                        const next = [...editJobSkills]; next[idx].weightage = Number(e.target.value); setEditJobSkills(next)
+                      }}
+                      slotProps={{ htmlInput: { min: 0, max: 100 } }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', '& fieldset': { borderColor: '#e2e8f0' } } }}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={() => setEditJobSkills(prev => prev.filter((_, i) => i !== idx))}
+                      sx={{ color: '#94a3b8', '&:hover': { color: '#ef4444' } }}
+                    >
+                      <i className="fas fa-trash-alt" style={{ fontSize: 14 }}></i>
+                    </IconButton>
+                  </Box>
+                ))}
+                {editJobSkills.length > 0 && (
+                  <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                    Total: {editJobSkills.filter(s => s.skill.trim() && s.weightage > 0).reduce((a, c) => a + c.weightage, 0)}%
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+
+            {/* Upload JD */}
+            <Box>
+              <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                Or upload a JD file
+              </Typography>
+              {editJobFile ? (
+                <Box sx={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  p: '12px 16px', borderRadius: '8px',
+                  background: '#EEF0FF', border: '1px solid #BBC3FF',
+                }}>
+                  <i className="fas fa-file-alt" style={{ color: '#020291', fontSize: 14 }}></i>
+                  <Typography sx={{ fontSize: '13px', color: '#1e293b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {editJobFile.name}
+                  </Typography>
+                  <IconButton size="small" onClick={() => setEditJobFile(null)} sx={{ color: '#64748b' }}>
+                    <i className="fas fa-times" style={{ fontSize: 12 }}></i>
+                  </IconButton>
+                </Box>
+              ) : (
+                <Box
+                  onClick={() => document.getElementById('edit-job-jd-upload')?.click()}
+                  sx={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    gap: '6px', p: '28px 16px', borderRadius: '8px',
+                    border: '2px dashed #d1d5db', cursor: 'pointer',
+                    '&:hover': { borderColor: '#020291', background: 'rgba(2,2,145,0.02)' },
+                  }}
+                >
+                  <i className="fas fa-cloud-upload-alt" style={{ fontSize: 20, color: '#94a3b8' }}></i>
+                  <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Click to upload</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>.pdf, .docx, .txt</Typography>
+                  <input
+                    id="edit-job-jd-upload"
+                    type="file"
+                    accept=".pdf,.docx,.txt,.doc"
+                    onChange={e => setEditJobFile(e.target.files?.[0] || null)}
+                    style={{ display: 'none' }}
+                  />
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+          <Button onClick={() => setEditJobOpen(false)} disabled={editJobSaving} sx={{
+            color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px',
+            '&:hover': { background: '#f1f5f9' }
+          }}>Cancel</Button>
+          <Button onClick={handleSaveEditJob} disabled={editJobSaving}
+            sx={{
+              background: '#020291', color: 'white', borderRadius: '10px', textTransform: 'none',
+              fontWeight: 600, px: 3, height: '40px', boxShadow: 'none',
+              '&:hover': { background: '#01016d', boxShadow: 'none' },
+              '&:disabled': { opacity: 0.6, color: 'white', background: '#020291' }
+            }}>
+            {editJobSaving ? <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Saving...</> : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, candidate: null })}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '16px', overflow: 'hidden' } }}
+      >
+        <Box sx={{ textAlign: 'center', p: 4 }}>
+          <Box sx={{
+            width: 56, height: 56, borderRadius: '50%', background: '#fef2f2',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 16px'
+          }}>
+            <i className="fas fa-trash-alt" style={{ fontSize: 22, color: '#dc2626' }}></i>
+          </Box>
+          <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', mb: 1 }}>
+            Delete Candidate
+          </Typography>
+          <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3, lineHeight: 1.6 }}>
+            Are you sure you want to delete <strong>{deleteConfirm.candidate?.applicant_name}</strong> from this position? This action cannot be undone.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center' }}>
+            <Button
+              onClick={() => setDeleteConfirm({ open: false, candidate: null })}
+              variant="outlined"
+              sx={{
+                textTransform: 'none', fontWeight: 600, borderRadius: '10px',
+                px: 3, borderColor: '#e2e8f0', color: '#64748b',
+                '&:hover': { borderColor: '#cbd5e1', background: '#f8fafc' }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteCandidate}
+              variant="contained"
+              sx={{
+                textTransform: 'none', fontWeight: 600, borderRadius: '10px',
+                px: 3, background: '#dc2626', boxShadow: 'none',
+                '&:hover': { background: '#b91c1c', boxShadow: 'none' }
+              }}
+            >
+              Delete
+            </Button>
+          </Box>
+        </Box>
       </Dialog>
 
       {/* Toast */}

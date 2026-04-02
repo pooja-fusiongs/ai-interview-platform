@@ -33,7 +33,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from database import engine, get_db
-from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, InterviewQuestionVersion, InterviewRating, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis, ATSCandidateMapping, PostHireFeedback, TranscriptChunk
+from models import Base, User, Job, JobApplication, CandidateResume, UserRole, InterviewSession, InterviewAnswer, QuestionGenerationSession, QuestionGenerationMode, InterviewSessionStatus, InterviewQuestion, InterviewQuestionVersion, InterviewRating, QuestionDifficulty, QuestionType, VideoInterview, FraudAnalysis, ATSCandidateMapping, PostHireFeedback, TranscriptChunk, MovementTimeline
 from schemas import (
     JobCreate, JobUpdate, JobResponse,
     CandidateProfileResponse
@@ -187,6 +187,15 @@ def run_migrations():
             from sqlalchemy import text as _t
             with engine.begin() as conn:
                 conn.execute(_t("ALTER TABLE interview_answers ALTER COLUMN question_id DROP NOT NULL"))
+        except Exception:
+            pass
+
+        # Make job_id nullable on job_applications & candidate_resumes (allow candidates without position)
+        try:
+            from sqlalchemy import text as _t_job
+            with engine.begin() as conn:
+                conn.execute(_t_job("ALTER TABLE job_applications ALTER COLUMN job_id DROP NOT NULL"))
+                conn.execute(_t_job("ALTER TABLE candidate_resumes ALTER COLUMN job_id DROP NOT NULL"))
         except Exception:
             pass
 
@@ -989,6 +998,7 @@ def get_candidates(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """Get all candidates from JobApplications (deduplicated by email)."""
@@ -1091,7 +1101,7 @@ def get_candidates(
                 app_id_to_q_session[qs.candidate_id] = qs
 
         # 4. Jobs (for titles)
-        job_ids = list(set(app.job_id for app in all_applications))
+        job_ids = list(set(app.job_id for app in all_applications if app.job_id is not None))
         all_jobs = db.query(Job).filter(Job.id.in_(job_ids)).all() if job_ids else []
         job_id_to_title = {j.id: j.title for j in all_jobs}
 
@@ -1117,7 +1127,7 @@ def get_candidates(
             # Collect all job titles this candidate applied to
             applied_jobs = []
             for a in apps:
-                title = job_id_to_title.get(a.job_id, "Unknown")
+                title = job_id_to_title.get(a.job_id, "Unassigned") if a.job_id else "Unassigned"
                 applied_jobs.append({"job_id": a.job_id, "title": title, "status": a.status, "application_id": a.id})
 
             # Collect skills from all resumes
@@ -1226,6 +1236,7 @@ def get_candidates_by_job(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """Get candidates filtered by job_id (returns JobApplication records)."""
@@ -1270,6 +1281,7 @@ def get_candidates_by_job(
 @app.patch("/api/candidates/{candidate_id}/toggle-status")
 def toggle_candidate_status(
     candidate_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Toggle candidate active/inactive status."""
@@ -1306,87 +1318,152 @@ def toggle_candidate_status(
             return {"id": candidate_id, "email": email, "is_active": True}
 
 
+@app.post("/api/candidates/add")
+def add_candidate_without_job(
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(""),
+    location: str = Form(""),
+    linkedin_url: str = Form(""),
+    notice_period: str = Form(""),
+    current_ctc: str = Form(""),
+    expected_ctc: str = Form(""),
+    experience_years: str = Form("0"),
+    current_position: str = Form(""),
+    resume: Optional[UploadFile] = File(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Add a candidate to the candidate pool without assigning to a position."""
+    try:
+        # Check if candidate with this email already exists (no job)
+        existing = db.query(JobApplication).filter(
+            func.lower(JobApplication.applicant_email) == email.lower(),
+            JobApplication.job_id.is_(None),
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Candidate with this email already exists in the candidate pool")
+
+        exp = 0
+        try:
+            exp = int(experience_years) if experience_years else 0
+        except ValueError:
+            pass
+
+        application = JobApplication(
+            job_id=None,
+            applicant_name=name.strip(),
+            applicant_email=email.strip().lower(),
+            applicant_phone=phone.strip() if phone else None,
+            location=location.strip() if location else None,
+            linkedin_url=linkedin_url.strip() if linkedin_url else None,
+            experience_years=exp,
+            current_position=current_position.strip() if current_position else None,
+            expected_salary=expected_ctc.strip() if expected_ctc else None,
+            status="Applied",
+        )
+        db.add(application)
+        db.flush()
+
+        # Handle resume upload
+        if resume and resume.filename:
+            import hashlib
+            content = resume.file.read()
+            resume.file.seek(0)
+            file_hash = hashlib.md5(content[:4096]).hexdigest()[:12]
+            ext = os.path.splitext(resume.filename)[1]
+            upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "resumes")
+            os.makedirs(upload_dir, exist_ok=True)
+            filename = f"candidate_{application.id}_{file_hash}{ext}"
+            filepath = os.path.join(upload_dir, filename)
+            with open(filepath, "wb") as f:
+                f.write(content)
+
+            candidate_resume = CandidateResume(
+                candidate_id=application.id,
+                job_id=None,
+                original_filename=resume.filename,
+                resume_path=f"/uploads/resumes/{filename}",
+                file_size=len(content),
+            )
+            db.add(candidate_resume)
+
+        db.commit()
+        db.refresh(application)
+        return {
+            "success": True,
+            "id": application.id,
+            "message": f"Candidate {name} added to pool successfully",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Error adding candidate: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/api/candidates/{candidate_id}")
 def delete_candidate(
     candidate_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Delete a candidate and all their job applications by email."""
+    """Delete a candidate application and all related data using minimal queries."""
     try:
-        # Find the primary application
+        # Single query: get application + user in one go
         primary_app = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
         if not primary_app:
             raise HTTPException(status_code=404, detail="Candidate not found")
 
         email = primary_app.applicant_email.lower()
-
-        # Find the user account by email (for user-linked records)
         candidate_user = db.query(User).filter(func.lower(User.email) == email).first()
+        user_id = candidate_user.id if candidate_user else None
 
-        # Get all application IDs for this email
-        app_ids = [
-            a.id for a in db.query(JobApplication.id).filter(
-                func.lower(JobApplication.applicant_email) == email
-            ).all()
-        ]
+        # Use subqueries instead of fetching IDs into Python — single round-trip per delete
+        app_ids_sq = db.query(JobApplication.id).filter(
+            func.lower(JobApplication.applicant_email) == email
+        ).subquery()
 
-        # === Step 1: Get all question IDs for these applications ===
-        question_ids = [
-            q.id for q in db.query(InterviewQuestion.id).filter(
-                InterviewQuestion.candidate_id.in_(app_ids)
-            ).all()
-        ]
+        question_ids_sq = db.query(InterviewQuestion.id).filter(
+            InterviewQuestion.candidate_id.in_(db.query(app_ids_sq))
+        ).subquery()
 
-        # === Step 2: Delete all records that FK to interview_questions ===
-        if question_ids:
-            db.query(InterviewRating).filter(InterviewRating.question_id.in_(question_ids)).delete(synchronize_session=False)
-            db.query(InterviewQuestionVersion).filter(InterviewQuestionVersion.question_id.in_(question_ids)).delete(synchronize_session=False)
-            # InterviewAnswer also FKs to interview_questions
-            db.query(InterviewAnswer).filter(InterviewAnswer.question_id.in_(question_ids)).delete(synchronize_session=False)
+        # Build session_ids subquery (application-linked + user-linked)
+        session_filter = InterviewSession.application_id.in_(db.query(app_ids_sq))
+        if user_id:
+            session_filter = or_(session_filter, InterviewSession.candidate_id == user_id)
+        session_ids_sq = db.query(InterviewSession.id).filter(session_filter).subquery()
 
-        # === Step 3: Get all session IDs (via application_id or user) ===
-        session_ids = [
-            s.id for s in db.query(InterviewSession.id).filter(
-                InterviewSession.application_id.in_(app_ids)
-            ).all()
-        ]
-        if candidate_user:
-            user_session_ids = [
-                s.id for s in db.query(InterviewSession.id).filter(
-                    InterviewSession.candidate_id == candidate_user.id
-                ).all()
-            ]
-            session_ids = list(set(session_ids + user_session_ids))
+        # === Delete in FK-safe order using subqueries (no Python round-trips) ===
 
-        # Delete remaining answers by session_id (in case some weren't caught by question_id)
-        if session_ids:
-            db.query(InterviewAnswer).filter(InterviewAnswer.session_id.in_(session_ids)).delete(synchronize_session=False)
+        # Question-linked records
+        db.query(InterviewRating).filter(InterviewRating.question_id.in_(db.query(question_ids_sq))).delete(synchronize_session=False)
+        db.query(InterviewQuestionVersion).filter(InterviewQuestionVersion.question_id.in_(db.query(question_ids_sq))).delete(synchronize_session=False)
+        db.query(InterviewAnswer).filter(
+            (InterviewAnswer.question_id.in_(db.query(question_ids_sq))) |
+            (InterviewAnswer.session_id.in_(db.query(session_ids_sq)))
+        ).delete(synchronize_session=False)
 
-        # === Step 4: Delete user-linked records (FK to users.id) ===
-        if candidate_user:
-            # Get video interview IDs to delete fraud analyses
-            video_ids = [
-                v.id for v in db.query(VideoInterview.id).filter(
-                    VideoInterview.candidate_id == candidate_user.id
-                ).all()
-            ]
-            if video_ids:
-                db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id.in_(video_ids)).delete(synchronize_session=False)
+        # User-linked records
+        if user_id:
+            video_ids_sq = db.query(VideoInterview.id).filter(VideoInterview.candidate_id == user_id).subquery()
+            db.query(MovementTimeline).filter(MovementTimeline.video_interview_id.in_(db.query(video_ids_sq))).delete(synchronize_session=False)
+            db.query(TranscriptChunk).filter(TranscriptChunk.video_interview_id.in_(db.query(video_ids_sq))).delete(synchronize_session=False)
+            db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id.in_(db.query(video_ids_sq))).delete(synchronize_session=False)
+            db.query(VideoInterview).filter(VideoInterview.candidate_id == user_id).delete(synchronize_session=False)
+            db.query(PostHireFeedback).filter(PostHireFeedback.candidate_id == user_id).delete(synchronize_session=False)
 
-            db.query(VideoInterview).filter(VideoInterview.candidate_id == candidate_user.id).delete(synchronize_session=False)
-            db.query(PostHireFeedback).filter(PostHireFeedback.candidate_id == candidate_user.id).delete(synchronize_session=False)
-            db.query(InterviewSession).filter(InterviewSession.candidate_id == candidate_user.id).delete(synchronize_session=False)
+        # Session + application-linked records
+        db.query(InterviewSession).filter(session_filter).delete(synchronize_session=False)
+        db.query(InterviewQuestion).filter(InterviewQuestion.candidate_id.in_(db.query(app_ids_sq))).delete(synchronize_session=False)
+        db.query(QuestionGenerationSession).filter(QuestionGenerationSession.candidate_id.in_(db.query(app_ids_sq))).delete(synchronize_session=False)
+        db.query(CandidateResume).filter(CandidateResume.candidate_id.in_(db.query(app_ids_sq))).delete(synchronize_session=False)
+        db.query(ATSCandidateMapping).filter(ATSCandidateMapping.local_application_id.in_(db.query(app_ids_sq))).delete(synchronize_session=False)
 
-        # === Step 5: Delete application-linked records ===
-        db.query(InterviewSession).filter(InterviewSession.application_id.in_(app_ids)).delete(synchronize_session=False)
-        db.query(InterviewQuestion).filter(InterviewQuestion.candidate_id.in_(app_ids)).delete(synchronize_session=False)
-        db.query(QuestionGenerationSession).filter(QuestionGenerationSession.candidate_id.in_(app_ids)).delete(synchronize_session=False)
-        db.query(CandidateResume).filter(CandidateResume.candidate_id.in_(app_ids)).delete(synchronize_session=False)
-        db.query(ATSCandidateMapping).filter(ATSCandidateMapping.local_application_id.in_(app_ids)).delete(synchronize_session=False)
-
-        # === Step 6: Delete the applications themselves ===
+        # Delete the applications themselves
         deleted = db.query(JobApplication).filter(
-            JobApplication.id.in_(app_ids)
+            JobApplication.id.in_(db.query(app_ids_sq))
         ).delete(synchronize_session=False)
 
         db.commit()
@@ -1403,6 +1480,7 @@ def delete_candidate(
 @app.get("/api/candidates/{candidate_id}/interviews")
 def get_candidate_interviews(
     candidate_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """Get all interview sessions and applications for a candidate."""
@@ -1447,6 +1525,7 @@ def get_candidate_interviews(
 @app.post("/api/candidates/{candidate_id}/activity")
 def update_candidate_activity(
     candidate_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """Update candidate's last activity timestamp"""
@@ -1719,7 +1798,7 @@ def update_candidate_profile(
         )
 
 @app.get("/api/candidates/online-status")
-def get_candidates_online_status(db: Session = Depends(get_db)):
+def get_candidates_online_status(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Get real-time online status for all candidates"""
     try:
         from datetime import datetime, timedelta, timezone

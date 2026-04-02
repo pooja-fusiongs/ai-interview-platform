@@ -30,6 +30,7 @@ import {
   FormControl,
   Select,
   MenuItem,
+  Skeleton,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -426,12 +427,46 @@ const ExpertReview: React.FC = () => {
           </Box>
         )}
 
-        {/* Loading State */}
+        {/* Loading State - Skeleton */}
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
-            <CircularProgress size={32} sx={{ color: '#020291' }} />
-            <Typography sx={{ ml: 2, color: '#666' }}>Loading question sets...</Typography>
-          </Box>
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: '#fafafa' }}>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Experience</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Candidate</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem', display: { xs: 'none', lg: 'table-cell' } }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem', display: { xs: 'none', lg: 'table-cell' } }}>Location</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Skills</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#666', fontSize: '0.875rem' }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton variant="text" width={60} /></TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Skeleton variant="circular" width={36} height={36} />
+                          <Box>
+                            <Skeleton variant="text" width={100} />
+                            <Skeleton variant="text" width={80} sx={{ fontSize: '12px' }} />
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}><Skeleton variant="text" width={150} /></TableCell>
+                      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}><Skeleton variant="text" width={80} /></TableCell>
+                      <TableCell><Skeleton variant="text" width={200} /></TableCell>
+                      <TableCell><Skeleton variant="rounded" width={70} height={24} sx={{ borderRadius: '12px' }} /></TableCell>
+                      <TableCell><Skeleton variant="circular" width={32} height={32} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
         ) : paginatedData.length === 0 ? (
           <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
             <Typography color="textSecondary">No question sets found</Typography>

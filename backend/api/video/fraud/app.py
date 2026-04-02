@@ -538,7 +538,7 @@ def trigger_fraud_analysis(
     db: Session = Depends(get_db),
 ):
     """
-    Trigger a simulated fraud analysis for a video interview.
+    Trigger fraud analysis for a completed video interview with a recording.
     Creates a new FraudAnalysis record or updates an existing one.
     Recruiter/Admin only.
     """
@@ -553,129 +553,147 @@ def trigger_fraud_analysis(
             status_code=404, detail="Video interview not found"
         )
 
-    # Resolve recording file path and run real analysis (falls back to simulator)
-    recording_path = None
-    if vi.recording_url:
-        base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-        recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
-        recording_path = os.path.normpath(recording_path)
-    results = _get_run_real_analysis()(video_interview_id, recording_path)
+    # Only allow analysis for completed interviews with a recording
+    vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
+    if vi_status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Fraud analysis is only available for completed interviews"
+        )
 
-    # Upsert: check for existing record
-    existing = (
-        db.query(FraudAnalysis)
-        .filter(FraudAnalysis.video_interview_id == video_interview_id)
-        .first()
-    )
+    if not vi.recording_url:
+        raise HTTPException(
+            status_code=400,
+            detail="No recording available for this interview. Fraud analysis requires a recording."
+        )
 
-    if existing:
-        existing.voice_consistency_score = results["voice_consistency_score"]
-        existing.voice_consistency_details = results["voice_consistency_details"]
-        existing.lip_sync_score = results["lip_sync_score"]
-        existing.lip_sync_details = results["lip_sync_details"]
-        existing.body_movement_score = results["body_movement_score"]
-        existing.body_movement_details = results["body_movement_details"]
-
-        # Merge flags: keep existing face detection flags, add new analysis flags
-        new_flags = []
-        try:
-            new_flags = json.loads(results["flags"]) if results["flags"] else []
-        except (json.JSONDecodeError, TypeError):
-            new_flags = []
-        existing_realtime_flags = []
-        if existing.flags:
-            try:
-                existing_realtime_flags = [
-                    f for f in json.loads(existing.flags)
-                    if f.get("flag_type") in ("face_not_visible", "multiple_faces", "lip_sync_mismatch", "voice_pattern_change")
-                ]
-            except (json.JSONDecodeError, TypeError):
-                existing_realtime_flags = []
-        all_flags = new_flags + existing_realtime_flags
-        existing.flags = json.dumps(all_flags)
-        existing.flag_count = len(all_flags)
-
-        # Update face_detection_score from recording analysis (eye_contact_pct)
-        # If no real-time face data exists (0 or None), use recording-based eye contact
-        try:
-            body_details = json.loads(results["body_movement_details"]) if results["body_movement_details"] else {}
-            recording_face_score = body_details.get("eye_contact_pct")
-            if recording_face_score is not None:
-                if existing.face_detection_score is None or existing.face_detection_score == 0:
-                    # No real-time data — use recording analysis
-                    existing.face_detection_score = round(recording_face_score, 3)
-                else:
-                    # Real-time data exists — use worst of both
-                    existing.face_detection_score = round(min(existing.face_detection_score, recording_face_score), 3)
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-        # Recalculate overall trust score including real-time scores if available
-        # Use worst of: analysis scores vs real-time scores
-        lip_score = results["lip_sync_score"]
-        if existing.lip_sync_score is not None and lip_score is not None:
-            lip_score = min(lip_score, existing.lip_sync_score)
-        elif existing.lip_sync_score is not None:
-            lip_score = existing.lip_sync_score
-        existing.lip_sync_score = round(lip_score, 3) if lip_score is not None else None
-
-        voice_score = results["voice_consistency_score"]
-        if existing.voice_consistency_score is not None and voice_score is not None:
-            voice_score = min(voice_score, existing.voice_consistency_score)
-        elif existing.voice_consistency_score is not None:
-            voice_score = existing.voice_consistency_score
-        existing.voice_consistency_score = round(voice_score, 3) if voice_score is not None else None
-
-        scores = [s for s in [
-            voice_score,
-            lip_score,
-            results["body_movement_score"],
-            existing.face_detection_score,
-        ] if s is not None]
-        existing.overall_trust_score = round(sum(scores) / len(scores), 3) if scores else results["overall_trust_score"]
-
-        existing.analysis_status = "completed"
-        existing.analyzed_at = results["analyzed_at"]
+    # Create a pending fraud analysis record immediately so GET returns it
+    existing = db.query(FraudAnalysis).filter(
+        FraudAnalysis.video_interview_id == video_interview_id
+    ).first()
+    if not existing:
+        existing = FraudAnalysis(
+            video_interview_id=video_interview_id,
+            analysis_status="processing",
+        )
+        db.add(existing)
         db.commit()
         db.refresh(existing)
-        fraud = existing
-    else:
-        fraud = FraudAnalysis(
-            video_interview_id=video_interview_id,
-            voice_consistency_score=results["voice_consistency_score"],
-            voice_consistency_details=results["voice_consistency_details"],
-            lip_sync_score=results["lip_sync_score"],
-            lip_sync_details=results["lip_sync_details"],
-            body_movement_score=results["body_movement_score"],
-            body_movement_details=results["body_movement_details"],
-            overall_trust_score=results["overall_trust_score"],
-            flags=results["flags"],
-            flag_count=results["flag_count"],
-            analysis_status="completed",
-            analyzed_at=results["analyzed_at"],
+    elif existing.analysis_status == "completed":
+        # Already analyzed — return existing result
+        return FraudAnalysisResponse(
+            id=existing.id,
+            video_interview_id=existing.video_interview_id,
+            voice_consistency_score=existing.voice_consistency_score,
+            voice_consistency_details=existing.voice_consistency_details,
+            lip_sync_score=existing.lip_sync_score,
+            lip_sync_details=existing.lip_sync_details,
+            body_movement_score=existing.body_movement_score,
+            body_movement_details=existing.body_movement_details,
+            face_detection_score=existing.face_detection_score,
+            face_detection_details=existing.face_detection_details,
+            overall_trust_score=existing.overall_trust_score,
+            flags=existing.flags,
+            flag_count=existing.flag_count,
+            analysis_status=existing.analysis_status,
+            consent_granted=existing.consent_granted,
+            analyzed_at=existing.analyzed_at,
         )
-        db.add(fraud)
+    else:
+        existing.analysis_status = "processing"
         db.commit()
-        db.refresh(fraud)
 
+    # Run heavy analysis in background thread
+    _recording_url = vi.recording_url
+    _vi_id = video_interview_id
+    import threading
+    def _bg_fraud_analysis():
+        try:
+            from database import SessionLocal
+            bg_db = SessionLocal()
+            import tempfile, requests
+
+            # Download recording if remote URL
+            recording_path = None
+            temp_file = None
+            if _recording_url.startswith("http://") or _recording_url.startswith("https://"):
+                print(f"[fraud-bg] Downloading recording from {_recording_url[:80]}...")
+                resp = requests.get(_recording_url, timeout=120)
+                resp.raise_for_status()
+                ext = ".webm" if ".webm" in _recording_url else ".mp4"
+                temp_file = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+                temp_file.write(resp.content)
+                temp_file.close()
+                recording_path = temp_file.name
+                print(f"[fraud-bg] Downloaded {len(resp.content)} bytes")
+            else:
+                base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+                recording_path = os.path.join(base_dir, _recording_url.lstrip("/"))
+                recording_path = os.path.normpath(recording_path)
+
+            results = _get_run_real_analysis()(_vi_id, recording_path)
+
+            # Cleanup temp
+            if temp_file:
+                try: os.unlink(temp_file.name)
+                except OSError: pass
+
+            # Update DB with results
+            fa = bg_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == _vi_id).first()
+            if fa and results and not (isinstance(results, dict) and "_error" in results):
+                fa.voice_consistency_score = results["voice_consistency_score"]
+                fa.voice_consistency_details = results["voice_consistency_details"]
+                fa.lip_sync_score = results["lip_sync_score"]
+                fa.lip_sync_details = results["lip_sync_details"]
+                fa.body_movement_score = results["body_movement_score"]
+                fa.body_movement_details = results["body_movement_details"]
+                fa.overall_trust_score = results["overall_trust_score"]
+                fa.flags = results["flags"]
+                fa.flag_count = results["flag_count"]
+                fa.analysis_status = "completed"
+                fa.analyzed_at = results["analyzed_at"]
+                bg_db.commit()
+                print(f"[fraud-bg] Analysis complete for VI {_vi_id}: trust={results['overall_trust_score']}")
+            elif fa:
+                fa.analysis_status = "failed"
+                bg_db.commit()
+                print(f"[fraud-bg] Analysis failed for VI {_vi_id}: {results}")
+            bg_db.close()
+        except Exception as e:
+            print(f"[fraud-bg] Error: {e}")
+            try:
+                from database import SessionLocal
+                err_db = SessionLocal()
+                fa = err_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == _vi_id).first()
+                if fa:
+                    fa.analysis_status = "failed"
+                    err_db.commit()
+                err_db.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=_bg_fraud_analysis, daemon=True).start()
+
+    # Return immediately with "processing" status
     return FraudAnalysisResponse(
-        id=fraud.id,
-        video_interview_id=fraud.video_interview_id,
-        voice_consistency_score=fraud.voice_consistency_score,
-        voice_consistency_details=fraud.voice_consistency_details,
-        lip_sync_score=fraud.lip_sync_score,
-        lip_sync_details=fraud.lip_sync_details,
-        body_movement_score=fraud.body_movement_score,
-        body_movement_details=fraud.body_movement_details,
-        face_detection_score=fraud.face_detection_score,
-        face_detection_details=fraud.face_detection_details,
-        overall_trust_score=fraud.overall_trust_score,
-        flags=fraud.flags,
-        flag_count=fraud.flag_count,
-        analysis_status=fraud.analysis_status,
-        consent_granted=fraud.consent_granted,
-        analyzed_at=fraud.analyzed_at,
+        id=existing.id,
+        video_interview_id=existing.video_interview_id,
+        voice_consistency_score=existing.voice_consistency_score,
+        voice_consistency_details=existing.voice_consistency_details,
+        lip_sync_score=existing.lip_sync_score,
+        lip_sync_details=existing.lip_sync_details,
+        body_movement_score=existing.body_movement_score,
+        body_movement_details=existing.body_movement_details,
+        face_detection_score=existing.face_detection_score,
+        face_detection_details=existing.face_detection_details,
+        overall_trust_score=existing.overall_trust_score,
+        flags=existing.flags,
+        flag_count=existing.flag_count,
+        analysis_status=existing.analysis_status,
+        consent_granted=existing.consent_granted,
+        analyzed_at=existing.analyzed_at,
     )
+
 
 
 # ---------------------------------------------------------------------------
@@ -712,10 +730,32 @@ def fraud_dashboard(
             )
             for vi in unanalyzed:
                 try:
-                    base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-                    recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
-                    recording_path = os.path.normpath(recording_path)
+                    recording_path = None
+                    temp_file = None
+                    if vi.recording_url.startswith("http://") or vi.recording_url.startswith("https://"):
+                        import tempfile, requests
+                        try:
+                            resp = requests.get(vi.recording_url, timeout=60)
+                            resp.raise_for_status()
+                            ext = ".webm" if ".webm" in vi.recording_url else ".mp4"
+                            temp_file = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+                            temp_file.write(resp.content)
+                            temp_file.close()
+                            recording_path = temp_file.name
+                        except Exception as dl_err:
+                            print(f"[BG] Failed to download recording for VI {vi.id}: {dl_err}")
+                            continue
+                    else:
+                        base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+                        recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
+                        recording_path = os.path.normpath(recording_path)
                     results = _get_run_real_analysis()(vi.id, recording_path)
+                    if temp_file:
+                        try: os.unlink(temp_file.name)
+                        except OSError: pass
+                    if results is None:
+                        print(f"[BG] Skipping VI {vi.id} — real analysis unavailable")
+                        continue
                     fraud = FraudAnalysis(
                         video_interview_id=vi.id,
                         voice_consistency_score=results["voice_consistency_score"],

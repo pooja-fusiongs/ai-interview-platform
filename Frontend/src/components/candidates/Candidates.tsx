@@ -33,10 +33,12 @@ import {
   FormControl,
   Tooltip,
   TablePagination,
-  Skeleton
+  Skeleton,
+  CircularProgress
 } from '@mui/material'
 import Navigation from '../layout/Sidebar'
 import { CloudUpload as CloudUploadIcon } from '@mui/icons-material'
+import { recruiterService } from '../../services/recruiterService'
 
 const pastelColors = [
   '#6C7A89', '#7E8C8D', '#5B7FA5', '#6B8E7B', '#8B7B8E',
@@ -89,6 +91,17 @@ const Candidates = () => {
   const [, setCandidateInterviews] = useState<any[]>([])
   const [candidateQuestionSessions, setCandidateQuestionSessions] = useState<Record<number, string>>({})
 
+  // Add candidate state
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [addSubmitting, setAddSubmitting] = useState(false)
+  const [addForm, setAddForm] = useState({
+    name: '', email: '', phone: '', location: '', linkedin: '',
+    notice_period: '', current_ctc: '', expected_ctc: '',
+    experience_years: '',
+    resume: null as File | null
+  })
+  const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({})
+
   // Fetch candidates from API
   const fetchCandidates = async () => {
     try {
@@ -134,6 +147,54 @@ const Candidates = () => {
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
+    }
+  }
+
+  // Add candidate handlers
+  const resetAddForm = () => {
+    setAddForm({ name: '', email: '', phone: '', location: '', linkedin: '', notice_period: '', current_ctc: '', expected_ctc: '', experience_years: '', resume: null })
+    setAddFormErrors({})
+  }
+
+  const handleOpenAddDialog = () => {
+    resetAddForm()
+    setIsAddOpen(true)
+  }
+
+  const handleAddCandidate = async () => {
+    const errors: Record<string, string> = {}
+    if (!addForm.name.trim()) errors.name = 'Name is required'
+    if (!addForm.email.trim()) errors.email = 'Email is required'
+    else if (!/\S+@\S+\.\S+/.test(addForm.email)) errors.email = 'Invalid email'
+    setAddFormErrors(errors)
+    if (Object.values(errors).some(e => e)) return
+
+    setAddSubmitting(true)
+    try {
+      const fd = new FormData()
+      fd.append('name', addForm.name)
+      fd.append('email', addForm.email)
+      fd.append('phone', addForm.phone)
+      fd.append('location', addForm.location)
+      fd.append('linkedin_url', addForm.linkedin)
+      fd.append('notice_period', addForm.notice_period)
+      fd.append('current_ctc', addForm.current_ctc)
+      fd.append('expected_ctc', addForm.expected_ctc)
+      fd.append('experience_years', addForm.experience_years || '0')
+      fd.append('current_position', '')
+      if (addForm.resume) fd.append('resume', addForm.resume)
+
+      await apiClient.post('/api/candidates/add', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      toast.success('Candidate added successfully')
+      setIsAddOpen(false)
+      resetAddForm()
+      fetchCandidates()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to add candidate')
+    } finally {
+      setAddSubmitting(false)
     }
   }
 
@@ -559,6 +620,20 @@ const Candidates = () => {
             <IconButton onClick={handleOpenFilter} size="small" sx={{ color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', '&:hover': { color: '#020291' } }}>
               <i className="fas fa-filter" style={{ fontSize: '13px' }}></i>
             </IconButton>
+            <Button
+              onClick={handleOpenAddDialog}
+              variant="contained"
+              size="small"
+              startIcon={<i className="fas fa-user-plus" style={{ fontSize: 12 }} />}
+              sx={{
+                background: '#020291', textTransform: 'none', fontWeight: 600,
+                fontSize: '13px', borderRadius: '8px', px: 2, height: '34px',
+                boxShadow: 'none',
+                '&:hover': { background: '#01016d', boxShadow: 'none' }
+              }}
+            >
+              Add Candidate
+            </Button>
           </Box>
         </Box>
 
@@ -704,9 +779,9 @@ const Candidates = () => {
                                 }
                               }}
                               sx={{
-                                color: candidate.is_active === false ? '#059669' : '#f59e0b',
+                                color: candidate.is_active === false ? 'red' : '#059669',
                                 '&:hover': {
-                                  color: candidate.is_active === false ? '#047857' : '#d97706',
+                                  color: candidate.is_active === false ? 'red' : '#059669',
                                   background: candidate.is_active === false ? 'rgba(5,150,105,0.08)' : 'rgba(245,158,11,0.08)',
                                 },
                               }}
@@ -1850,6 +1925,134 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
             <Button onClick={handleSaveEdit} disabled={editSaving}
               sx={{ background: '#020291', color: 'white', borderRadius: '10px', textTransform: 'none', fontWeight: 600, px: 3, height: '40px', '&:hover': { background: '#06109E' }, '&:disabled': { opacity: 0.6, color: 'white' } }}>
               {editSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Add Candidate Dialog */}
+        <Dialog open={isAddOpen} onClose={() => { setIsAddOpen(false); resetAddForm() }} maxWidth="sm" fullWidth
+          PaperProps={{ sx: { borderRadius: '16px' } }}>
+          <DialogTitle sx={{ fontWeight: 700, color: '#1e293b', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              <Box sx={{
+                width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: '#020291', color: 'white'
+              }}>
+                <i className="fas fa-user-plus" />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '18px', fontWeight: 700 }}>Add New Candidate</Typography>
+                <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Add to candidate pool — assign to a position later</Typography>
+              </Box>
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ pt: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              {/* Name + Email */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                    Full Name <span style={{ color: '#ef4444' }}>*</span>
+                  </Typography>
+                  <TextField fullWidth placeholder="Jane Smith" value={addForm.name}
+                    onChange={e => setAddForm(prev => ({ ...prev, name: e.target.value }))}
+                    error={!!addFormErrors.name}
+                    helperText={addFormErrors.name}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>
+                    Email <span style={{ color: '#ef4444' }}>*</span>
+                  </Typography>
+                  <TextField fullWidth placeholder="jane@example.com" type="email" value={addForm.email}
+                    onChange={e => setAddForm(prev => ({ ...prev, email: e.target.value }))}
+                    error={!!addFormErrors.email}
+                    helperText={addFormErrors.email}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+
+              {/* Resume Upload */}
+              <Box>
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Resume</Typography>
+                <Box sx={{
+                  border: '2px dashed #cbd5e1', borderRadius: '12px', p: 2, textAlign: 'center',
+                  background: addForm.resume ? '#f0fdf4' : '#f8fafc',
+                  cursor: 'pointer', transition: 'all 0.2s',
+                  '&:hover': { borderColor: '#020291', background: addForm.resume ? '#f0fdf4' : '#EEF0FF' }
+                }}
+                  onClick={() => document.getElementById('add-candidate-resume')?.click()}>
+                  <input id="add-candidate-resume" type="file" hidden accept=".pdf,.doc,.docx,.txt"
+                    onChange={e => setAddForm(prev => ({ ...prev, resume: e.target.files?.[0] || null }))} />
+                  {addForm.resume ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                      <i className="fas fa-check-circle" style={{ fontSize: 16, color: '#16a34a' }} />
+                      <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#16a34a' }}>{addForm.resume.name}</Typography>
+                      <IconButton size="small" onClick={e => { e.stopPropagation(); setAddForm(prev => ({ ...prev, resume: null })) }}
+                        sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
+                        <i className="fas fa-times" style={{ fontSize: 10 }} />
+                      </IconButton>
+                    </Box>
+                  ) : (
+                    <Box>
+                      <i className="fas fa-cloud-upload-alt" style={{ fontSize: 18, color: '#94a3b8', marginBottom: 4 }} />
+                      <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Click to upload resume</Typography>
+                      <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>.pdf, .docx, .txt</Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+
+              {/* Optional Fields */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ height: '1px', flex: 1, background: '#e2e8f0' }} />
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Optional</Typography>
+                <Box sx={{ height: '1px', flex: 1, background: '#e2e8f0' }} />
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Experience (Years)</Typography>
+                  <TextField fullWidth placeholder="3" type="number" value={addForm.experience_years}
+                    onChange={e => setAddForm(prev => ({ ...prev, experience_years: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Phone</Typography>
+                  <TextField fullWidth placeholder="9876543210" value={addForm.phone}
+                    onChange={e => setAddForm(prev => ({ ...prev, phone: e.target.value }))}
+                    inputProps={{ maxLength: 10 }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Location</Typography>
+                  <TextField fullWidth placeholder="Bangalore, India" value={addForm.location}
+                    onChange={e => setAddForm(prev => ({ ...prev, location: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>LinkedIn</Typography>
+                  <TextField fullWidth placeholder="https://linkedin.com/in/..." value={addForm.linkedin}
+                    onChange={e => setAddForm(prev => ({ ...prev, linkedin: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                </Box>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+            <Button onClick={() => { setIsAddOpen(false); resetAddForm() }} sx={{
+              color: '#64748b', textTransform: 'none', px: 3, height: '40px', borderRadius: '10px',
+              '&:hover': { background: '#f1f5f9' }
+            }}>Cancel</Button>
+            <Button onClick={handleAddCandidate} disabled={addSubmitting}
+              sx={{
+                background: '#020291', color: 'white', borderRadius: '10px', textTransform: 'none',
+                fontWeight: 600, px: 3, height: '40px', boxShadow: 'none',
+                '&:hover': { background: '#01016d', boxShadow: 'none' },
+                '&:disabled': { opacity: 0.6, color: 'white', background: '#020291' }
+              }}>
+              {addSubmitting ? <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Adding...</> : <>Add Candidate <i className="fas fa-arrow-right" style={{ marginLeft: 8, fontSize: 12 }} /></>}
             </Button>
           </DialogActions>
         </Dialog>

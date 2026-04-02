@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { jobService } from '../../services/jobService'
-import { 
-  Box, 
-  Typography, 
-  Button, 
-  Card, 
+import {
+  Box,
+  Typography,
+  Button,
+  Card,
   Chip,
   TextField,
   InputAdornment,
@@ -16,7 +16,8 @@ import {
   // InputLabel,
   Select,
   MenuItem,
-  IconButton
+  IconButton,
+  Skeleton
 } from '@mui/material'
 import Navigation from '../layout/Sidebar'
 import JobCreationForm from './JobCreationForm'
@@ -32,28 +33,21 @@ const Jobs = () => {
   const [selectedJob, setSelectedJob] = useState(null)
   const [showJobDetails, setShowJobDetails] = useState(false)
   const [openFilterDialog, setOpenFilterDialog] = useState(false)
-  const [allJobs, setAllJobs] = useState<any[]>([]) // Store all jobs with proper type
-  const [filteredJobs, setFilteredJobs] = useState<any[]>([]) // Store filtered jobs with proper type
+  const [allJobs, setAllJobs] = useState<any[]>([])
+  const [filteredJobs, setFilteredJobs] = useState<any[]>([])
+  const [jobsLoading, setJobsLoading] = useState(true)
   
   // Filter states — applied filters (used for actual filtering)
   const [filters, setFilters] = useState({
-    jobType: '',
     experienceLevel: '',
-    location: '',
     status: '',
     company: '',
-    workMode: '',
-    salaryRange: '',
   })
   // Draft filters — temporary state inside the filter dialog (only applied on button click)
   const [draftFilters, setDraftFilters] = useState({
-    jobType: '',
     experienceLevel: '',
-    location: '',
     status: '',
     company: '',
-    workMode: '',
-    salaryRange: '',
   })
   
   const { user } = useAuth()
@@ -84,32 +78,24 @@ const Jobs = () => {
       )
     }
 
-    // Apply other filters (case-insensitive matching)
-    if (filters.jobType) {
-      filtered = filtered.filter((job: any) =>
-        getJobType(job).toLowerCase() === filters.jobType.toLowerCase()
-      )
-    }
-
+    // Apply filters (case-insensitive matching)
     if (filters.experienceLevel) {
       filtered = filtered.filter((job: any) => {
         const jobExp = getExperienceLevel(job).toLowerCase()
         const filterExp = filters.experienceLevel.toLowerCase()
-        // Exact match first
         if (jobExp === filterExp) return true
-        // Map filter values to API data patterns
-        if (filterExp === 'entry level' && (jobExp.includes('0-1') || jobExp.includes('entry') || jobExp.includes('fresher'))) return true
-        if (filterExp === '<5 yrs' && (jobExp.includes('0-1') || jobExp.includes('1-3') || jobExp.includes('2-4') || jobExp.includes('3-5'))) return true
-        if (filterExp === '5-10 yrs' && (jobExp.includes('5-8') || jobExp.includes('5-10') || jobExp.includes('6-8') || jobExp.includes('7-10'))) return true
-        if (filterExp === '10+ yrs' && (jobExp.includes('10+') || jobExp.includes('10-') || jobExp.includes('15'))) return true
+        if (filterExp === 'entry level' && (jobExp.includes('0-1') || jobExp.includes('entry') || jobExp.includes('fresher') || jobExp === '0' || jobExp === '1')) return true
+        if (filterExp === '<5 yrs') {
+          const num = parseInt(jobExp); return !isNaN(num) && num < 5
+        }
+        if (filterExp === '5-10 yrs') {
+          const num = parseInt(jobExp); return !isNaN(num) && num >= 5 && num <= 10
+        }
+        if (filterExp === '10+ yrs') {
+          const num = parseInt(jobExp); return !isNaN(num) && num > 10
+        }
         return false
       })
-    }
-
-    if (filters.location) {
-      filtered = filtered.filter((job: any) =>
-        (job.location || '').toLowerCase().includes(filters.location.toLowerCase())
-      )
     }
 
     if (filters.status) {
@@ -124,17 +110,11 @@ const Jobs = () => {
       )
     }
 
-    if (filters.workMode) {
-      filtered = filtered.filter((job: any) => {
-        const jobMode = (job.workMode || job.work_mode || '').toLowerCase()
-        return jobMode.includes(filters.workMode.toLowerCase())
-      })
-    }
-
     setFilteredJobs(filtered)
   }
 
   const loadJobsFromAPI = async () => {
+    setJobsLoading(true)
     try {
       const jobs = await jobService.getJobs()
       console.log('🔍 Raw API response:', jobs)
@@ -197,10 +177,11 @@ const Jobs = () => {
       setFilteredJobs(apiJobs) // Initially show all jobs
     } catch (error) {
       console.error('❌ Error loading jobs from API:', error)
-      // Keep static jobs as fallback
-      const staticJobs = jobs // Use the static jobs array
+      const staticJobs = jobs
       setAllJobs(staticJobs)
       setFilteredJobs(staticJobs)
+    } finally {
+      setJobsLoading(false)
     }
   }
 
@@ -306,13 +287,9 @@ const Jobs = () => {
 
   const handleClearFilters = () => {
     const empty = {
-      jobType: '',
       experienceLevel: '',
-      location: '',
       status: '',
       company: '',
-      workMode: '',
-      salaryRange: '',
     }
     setDraftFilters(empty)
     setFilters(empty)
@@ -608,7 +585,32 @@ const Jobs = () => {
         )}
 
         {/* Jobs Grid - 3 per row */}
-        {filteredJobs.length === 0 && (searchQuery.trim() || getActiveFilterCount() > 0) ? (
+        {jobsLoading ? (
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" }, gap: { xs: "12px", sm: "16px" } }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} sx={{ padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                  <Skeleton variant="circular" width={44} height={44} />
+                  <Box sx={{ flex: 1 }}>
+                    <Skeleton variant="text" width="70%" height={22} />
+                    <Skeleton variant="text" width="40%" height={16} />
+                  </Box>
+                </Box>
+                <Skeleton variant="text" width="50%" height={16} sx={{ mb: 1 }} />
+                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                  <Skeleton variant="rounded" width={65} height={22} sx={{ borderRadius: '12px' }} />
+                  <Skeleton variant="rounded" width={50} height={22} sx={{ borderRadius: '12px' }} />
+                  <Skeleton variant="rounded" width={55} height={22} sx={{ borderRadius: '12px' }} />
+                </Box>
+                <Skeleton variant="text" width="90%" height={14} />
+                <Skeleton variant="text" width="60%" height={14} sx={{ mb: 2 }} />
+                <Skeleton variant="text" width="40%" height={16} sx={{ mb: 0.5 }} />
+                <Skeleton variant="text" width="30%" height={14} sx={{ mb: 2 }} />
+                <Skeleton variant="rounded" width="100%" height={36} sx={{ borderRadius: '8px' }} />
+              </Card>
+            ))}
+          </Box>
+        ) : filteredJobs.length === 0 && (searchQuery.trim() || getActiveFilterCount() > 0) ? (
           <Box sx={{ 
             gridColumn: '1 / -1', 
             textAlign: 'center', 
@@ -890,7 +892,7 @@ const Jobs = () => {
               )}
               <Chip
                 label="Clear all"
-                onClick={() => setDraftFilters({ jobType: '', experienceLevel: '', location: '', status: '', company: '', workMode: '', salaryRange: '' })}
+                onClick={() => setDraftFilters({ experienceLevel: '', status: '', company: '' })}
                 size="small"
                 variant="outlined"
                 sx={{
@@ -909,7 +911,7 @@ const Jobs = () => {
           <DialogContent sx={{ padding: '0 !important' }}>
             <Box sx={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-              {/* Row 1: Job Type + Experience Level */}
+              {/* Row 1: Experience */}
               <Box>
                 <Typography sx={{
                   fontSize: '13px',
@@ -923,143 +925,35 @@ const Jobs = () => {
                   gap: '8px'
                 }}>
                   <i className="fas fa-briefcase" style={{ color: '#1A22E0', fontSize: '12px' }}></i>
-                  Job Basics
+                  Experience
                 </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <FormControl fullWidth size="small">
-                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                      Job Type
-                    </Typography>
-                    <Select
-                      value={draftFilters.jobType}
-                      onChange={(e) => handleFilterChange('jobType', e.target.value)}
-                      displayEmpty
-                      sx={{
-                        borderRadius: '10px',
-                        backgroundColor: '#f8fafc',
-                        fontSize: '13px',
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
-                      }}
-                    >
-                      <MenuItem value="">All Types</MenuItem>
-                      <MenuItem value="Full-Time">Full-Time</MenuItem>
-                      <MenuItem value="Part-Time">Part-Time</MenuItem>
-                      <MenuItem value="Contract">Contract</MenuItem>
-                      <MenuItem value="Internship">Internship</MenuItem>
-                    </Select>
-                  </FormControl>
-
-                  <FormControl fullWidth size="small">
-                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                      Experience
-                    </Typography>
-                    <Select
-                      value={draftFilters.experienceLevel}
-                      onChange={(e) => handleFilterChange('experienceLevel', e.target.value)}
-                      displayEmpty
-                      sx={{
-                        borderRadius: '10px',
-                        backgroundColor: '#f8fafc',
-                        fontSize: '13px',
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
-                      }}
-                    >
-                      <MenuItem value="">All Levels</MenuItem>
-                      <MenuItem value="Entry Level">Entry Level</MenuItem>
-                      <MenuItem value="<5 yrs">&lt;5 years</MenuItem>
-                      <MenuItem value="5-10 yrs">5-10 years</MenuItem>
-                      <MenuItem value="10+ yrs">10+ years</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
+                <FormControl fullWidth size="small">
+                  <Select
+                    value={draftFilters.experienceLevel}
+                    onChange={(e) => handleFilterChange('experienceLevel', e.target.value)}
+                    displayEmpty
+                    sx={{
+                      borderRadius: '10px',
+                      backgroundColor: '#f8fafc',
+                      fontSize: '13px',
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
+                    }}
+                  >
+                    <MenuItem value="">All Levels</MenuItem>
+                    <MenuItem value="Entry Level">Entry Level (0-1 yrs)</MenuItem>
+                    <MenuItem value="<5 yrs">&lt;5 years</MenuItem>
+                    <MenuItem value="5-10 yrs">5-10 years</MenuItem>
+                    <MenuItem value="10+ yrs">10+ years</MenuItem>
+                  </Select>
+                </FormControl>
               </Box>
 
               {/* Divider */}
               <Box sx={{ height: '1px', backgroundColor: '#f1f5f9' }} />
 
-              {/* Row 2: Work Mode + Location */}
-              <Box>
-                <Typography sx={{
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: '#475569',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <i className="fas fa-map-marker-alt" style={{ color: '#10b981', fontSize: '12px' }}></i>
-                  Work Environment
-                </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <FormControl fullWidth size="small">
-                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                      Work Mode
-                    </Typography>
-                    <Select
-                      value={draftFilters.workMode}
-                      onChange={(e) => handleFilterChange('workMode', e.target.value)}
-                      displayEmpty
-                      sx={{
-                        borderRadius: '10px',
-                        backgroundColor: '#f8fafc',
-                        fontSize: '13px',
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
-                      }}
-                    >
-                      <MenuItem value="">All Modes</MenuItem>
-                      <MenuItem value="Remote">Remote</MenuItem>
-                      <MenuItem value="On-site">On-site</MenuItem>
-                      <MenuItem value="Hybrid">Hybrid</MenuItem>
-                    </Select>
-                  </FormControl>
-
-                  <Box>
-                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                      Location
-                    </Typography>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      placeholder="City or location..."
-                      value={draftFilters.location}
-                      onChange={(e) => handleFilterChange('location', e.target.value)}
-                      slotProps={{
-                        input: {
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <i className="fas fa-search" style={{ color: '#cbd5e1', fontSize: '12px' }}></i>
-                            </InputAdornment>
-                          ),
-                        }
-                      }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: '10px',
-                          backgroundColor: '#f8fafc',
-                          fontSize: '13px',
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
-                        },
-                      }}
-                    />
-                  </Box>
-                </Box>
-              </Box>
-
-              {/* Divider */}
-              <Box sx={{ height: '1px', backgroundColor: '#f1f5f9' }} />
-
-              {/* Row 3: Status + Department */}
+              {/* Row 2: Status + Company */}
               <Box>
                 <Typography sx={{
                   fontSize: '13px',

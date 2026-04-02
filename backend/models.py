@@ -123,7 +123,7 @@ class JobApplication(Base):
     __tablename__ = "job_applications"
 
     id = Column(Integer, primary_key=True, index=True)
-    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True)
     applicant_name = Column(String, nullable=False)
     applicant_email = Column(String, nullable=False, index=True)
     applicant_phone = Column(String, nullable=True)
@@ -171,7 +171,7 @@ class CandidateResume(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     candidate_id = Column(Integer, ForeignKey("job_applications.id"), nullable=False)
-    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True)
     resume_path = Column(String, nullable=False)
     original_filename = Column(String, nullable=False)
     file_size = Column(Integer, nullable=True)

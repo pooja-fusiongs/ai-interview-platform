@@ -90,7 +90,8 @@ def _check_deps():
         from pydub import AudioSegment  # noqa: F401
         _ensure_ffmpeg_path()
         return True
-    except ImportError:
+    except (ImportError, Exception) as e:
+        print(f"[biometric] Dependency check failed: {e}")
         return False
 
 
@@ -559,15 +560,13 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
     """
     # Guard: deps available?
     if not _check_deps():
-        print("[biometric] Dependencies missing, falling back to simulator")
-        from services.fraud_simulator import run_full_simulated_analysis
-        return run_full_simulated_analysis(video_interview_id)
+        print("[biometric] Dependencies missing, cannot perform real analysis")
+        return {"_error": "dependencies_missing"}
 
     # Guard: file exists?
     if not recording_path or not os.path.isfile(recording_path):
-        print(f"[biometric] Recording not found: {recording_path}, falling back")
-        from services.fraud_simulator import run_full_simulated_analysis
-        return run_full_simulated_analysis(video_interview_id)
+        print(f"[biometric] Recording not found: {recording_path} (exists={os.path.isfile(recording_path) if recording_path else False})")
+        return {"_error": "file_not_found", "path": recording_path}
 
     try:
         # Extract audio to temp wav (using ffmpeg directly, bypasses ffprobe requirement)
@@ -630,11 +629,12 @@ def run_real_analysis(video_interview_id: int, recording_path: str) -> Dict[str,
         }
 
     except Exception as e:
-        print(f"[biometric] Real analysis failed ({type(e).__name__}: {e}), falling back to simulator")
+        print(f"[biometric] Real analysis failed ({type(e).__name__}: {e})")
+        import traceback
+        traceback.print_exc()
         # Cleanup temp if it exists
         try:
             os.unlink(tmp_audio.name)
         except Exception:
             pass
-        from services.fraud_simulator import run_full_simulated_analysis
-        return run_full_simulated_analysis(video_interview_id)
+        return {"_error": "analysis_failed", "detail": str(e)}

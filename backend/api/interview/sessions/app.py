@@ -499,7 +499,9 @@ def list_interviews(
                 InterviewSession.id.in_(interviewer_subq),
             )
         )
+    # Only show sessions that have been completed or have answers (not empty/in-progress)
     sessions = query.order_by(InterviewSession.started_at.desc()).all()
+    sessions = [s for s in sessions if s.status in ("completed", InterviewSessionStatus.COMPLETED) or (s.answers and len(s.answers) > 0) or s.overall_score is not None]
 
     if not sessions:
         return []
