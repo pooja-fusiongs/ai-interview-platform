@@ -493,6 +493,7 @@ class InterviewSummaryResponse(BaseModel):
     overall_score: Optional[int] = None
     ai_score: Optional[float] = None
     final_score: Optional[float] = None
+    has_transcript: bool = False
     report_card: Optional[InterviewReportCard] = None
     questions: List[dict] = []
 
@@ -721,6 +722,7 @@ class VideoInterviewListResponse(BaseModel):
     job_id: Optional[int] = None
     candidate_id: Optional[int] = None
     candidate_email: Optional[str] = None
+    application_id: Optional[int] = None
     job_title: str
     candidate_name: str
     status: str

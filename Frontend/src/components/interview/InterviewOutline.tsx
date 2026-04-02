@@ -1062,7 +1062,8 @@ const InterviewOutline: React.FC = () => {
                     )}
 
 
-                    {/* Transcript Section (from client merge) */}
+                    {/* Transcript Section — only show if transcript not yet submitted */}
+                    {!ratingSummary?.has_transcript && !ratingSummary?.report_card && (
                     <Box sx={{ mt: 4, p: 3, backgroundColor: '#fafbfc', border: '1px solid #e5e7eb', borderRadius: 2 }}>
                         <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', mb: 1, fontSize: '1rem' }}>
                             Interview Transcript
@@ -1138,6 +1139,7 @@ const InterviewOutline: React.FC = () => {
                             {transcriptLoading && <CircularProgress size={20} />}
                         </Box>
                     </Box>
+                    )}
 
                     {/* Report Card (from client merge) */}
                     {ratingSummary?.report_card && (

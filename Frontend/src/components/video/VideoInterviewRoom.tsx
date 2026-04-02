@@ -805,6 +805,16 @@ const VideoInterviewRoom: React.FC = () => {
 
     const checkGrace = async () => {
       try {
+        // Safety: if candidate already joined (detected via LiveKit), skip grace period check
+        if (maxParticipantsRef.current >= 2) {
+          if (graceCheckIntervalRef.current) {
+            clearInterval(graceCheckIntervalRef.current);
+            graceCheckIntervalRef.current = null;
+            setGracePeriodTimer(null);
+          }
+          return;
+        }
+
         const response = await videoInterviewService.checkGracePeriod(Number(videoId), 10); // 10 minutes grace
 
         if (response.grace_period_expired) {
@@ -1075,20 +1085,22 @@ const VideoInterviewRoom: React.FC = () => {
   };
 
   const handleEnd = async () => {
-    // Prevent double execution but allow retry after 30s timeout
+    // Prevent double execution but allow retry after 10s timeout
     if (endingRef.current) {
       console.warn('handleEnd already in progress');
+      toast('Ending interview... please wait', { icon: '⏳', id: 'ending-wait' });
       return;
     }
     endingRef.current = true;
-    // Safety: reset after 30s in case end flow hangs
-    setTimeout(() => { endingRef.current = false; }, 30000);
+    // Safety: reset after 10s in case end flow hangs (so button becomes clickable again)
+    const safetyTimer = setTimeout(() => { endingRef.current = false; }, 10000);
 
     console.log(`\n========== 🔴 END INTERVIEW FLOW START ==========`);
     console.log(`📊 State: isActive=${isActive}, callJoined=${callJoined}, isRecording=${isRecording}, isGuest=${isGuest}`);
     console.log(`📊 Recorder: exists=${!!mediaRecorderRef.current}, state=${mediaRecorderRef.current?.state || 'N/A'}, chunks=${recordedChunksRef.current.length}`);
     console.log(`📊 Participants: maxParticipants=${maxParticipantsRef.current}`);
 
+    try {
     // 1) INSTANT UI update — stop video/recording immediately
     setIsActive(false);
     setCallJoined(false);
@@ -1188,6 +1200,11 @@ const VideoInterviewRoom: React.FC = () => {
     // 8) Navigate to detail page (recruiter only, only if interview completed — not no_show)
     if (!isGuest && candidateEverJoined) {
       setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
+    }
+    } finally {
+      // Always unlock the end button so it can be clicked again if something failed
+      clearTimeout(safetyTimer);
+      endingRef.current = false;
     }
   };
 
@@ -1723,11 +1740,14 @@ const VideoInterviewRoom: React.FC = () => {
                         }}
                         onError={(error: Error) => {
                           console.error('LiveKit error:', error);
-                          toast.error(`Video error: ${error.message || 'Connection issue detected'}`);
+                          // Avoid duplicate toasts for device errors (already handled by onMediaDeviceFailure)
+                          if (!error.message?.includes('video source') && !error.message?.includes('device')) {
+                            toast.error(`Video error: ${error.message || 'Connection issue detected'}`);
+                          }
                         }}
                         onMediaDeviceFailure={(failure: any) => {
                           console.error('Media device failure:', failure);
-                          toast.error('Camera or microphone failed. Please check your device permissions and refresh.');
+                          toast.error('Camera or microphone failed. Close other apps using camera (Teams, Zoom) and refresh.', { id: 'media-device-error', duration: 6000 });
                         }}
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}
                       >
@@ -1739,6 +1759,13 @@ const VideoInterviewRoom: React.FC = () => {
                           onRemoteParticipantJoined={() => {
                             maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 2);
                             console.log('👥 Remote participant joined — maxParticipants updated to 2');
+                            // Stop grace period timer — candidate has joined, no need to check for no_show
+                            if (graceCheckIntervalRef.current) {
+                              clearInterval(graceCheckIntervalRef.current);
+                              graceCheckIntervalRef.current = null;
+                              setGracePeriodTimer(null);
+                              console.log('⏱️ Grace period timer cleared — candidate joined');
+                            }
                           }}
                         />
                         {/* Both sides send their own local mic for high-quality transcription */}

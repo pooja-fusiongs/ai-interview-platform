@@ -35,7 +35,7 @@ const Jobs = () => {
   const [allJobs, setAllJobs] = useState<any[]>([]) // Store all jobs with proper type
   const [filteredJobs, setFilteredJobs] = useState<any[]>([]) // Store filtered jobs with proper type
   
-  // Filter states
+  // Filter states — applied filters (used for actual filtering)
   const [filters, setFilters] = useState({
     jobType: '',
     experienceLevel: '',
@@ -44,7 +44,16 @@ const Jobs = () => {
     company: '',
     workMode: '',
     salaryRange: '',
-    department: ''
+  })
+  // Draft filters — temporary state inside the filter dialog (only applied on button click)
+  const [draftFilters, setDraftFilters] = useState({
+    jobType: '',
+    experienceLevel: '',
+    location: '',
+    status: '',
+    company: '',
+    workMode: '',
+    salaryRange: '',
   })
   
   const { user } = useAuth()
@@ -54,10 +63,16 @@ const Jobs = () => {
     loadJobsFromAPI()
   }, [])
 
-  // Filter jobs when search query or filters change
+  // Filter jobs when search query or applied filters change
   useEffect(() => {
     applyFilters()
   }, [searchQuery, allJobs, filters])
+
+  // Sync draft filters when opening the dialog
+  const handleOpenFilterDialog = () => {
+    setDraftFilters({ ...filters })
+    setOpenFilterDialog(true)
+  }
 
   const applyFilters = () => {
     let filtered = [...allJobs]
@@ -114,12 +129,6 @@ const Jobs = () => {
         const jobMode = (job.workMode || job.work_mode || '').toLowerCase()
         return jobMode.includes(filters.workMode.toLowerCase())
       })
-    }
-
-    if (filters.department) {
-      filtered = filtered.filter((job: any) =>
-        (job.department || '').toLowerCase().includes(filters.department.toLowerCase())
-      )
     }
 
     setFilteredJobs(filtered)
@@ -277,24 +286,26 @@ const Jobs = () => {
   }
 
 
-  // Filter handlers
-  const handleOpenFilterDialog = () => {
-    setOpenFilterDialog(true)
+  const handleCloseFilterDialog = () => {
+    // Discard draft changes — don't apply
+    setOpenFilterDialog(false)
   }
 
-  const handleCloseFilterDialog = () => {
+  const handleApplyFilters = () => {
+    // Commit draft filters to applied filters
+    setFilters({ ...draftFilters })
     setOpenFilterDialog(false)
   }
 
   const handleFilterChange = (filterName: string, value: string) => {
-    setFilters(prev => ({
+    setDraftFilters(prev => ({
       ...prev,
       [filterName]: value
     }))
   }
 
   const handleClearFilters = () => {
-    setFilters({
+    const empty = {
       jobType: '',
       experienceLevel: '',
       location: '',
@@ -302,12 +313,17 @@ const Jobs = () => {
       company: '',
       workMode: '',
       salaryRange: '',
-      department: ''
-    })
+    }
+    setDraftFilters(empty)
+    setFilters(empty)
   }
 
   const getActiveFilterCount = () => {
     return Object.values(filters).filter(value => value !== '').length
+  }
+
+  const getDraftFilterCount = () => {
+    return Object.values(draftFilters).filter(value => value !== '').length
   }
 
   const jobs = [
@@ -565,12 +581,15 @@ const Jobs = () => {
             <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
               Active Filters:
             </Typography>
-            {Object.entries(filters).map(([key, value]) => 
+            {Object.entries(filters).map(([key, value]) =>
               value && (
                 <Chip
                   key={key}
                   label={`${key}: ${value}`}
-                  onDelete={() => handleFilterChange(key, '')}
+                  onDelete={() => {
+                    setFilters(prev => ({ ...prev, [key]: '' }))
+                    setDraftFilters(prev => ({ ...prev, [key]: '' }))
+                  }}
                   size="small"
                   color="primary"
                   variant="outlined"
@@ -816,8 +835,8 @@ const Jobs = () => {
                   Filter Jobs
                 </Typography>
                 <Typography sx={{ fontSize: '13px', color: '#94a3b8' }}>
-                  {getActiveFilterCount() > 0
-                    ? `${getActiveFilterCount()} filter${getActiveFilterCount() > 1 ? 's' : ''} active`
+                  {getDraftFilterCount() > 0
+                    ? `${getDraftFilterCount()} filter${getDraftFilterCount() > 1 ? 's' : ''} selected`
                     : 'Narrow down your search'
                   }
                 </Typography>
@@ -836,7 +855,7 @@ const Jobs = () => {
           </Box>
 
           {/* Active Filter Chips */}
-          {getActiveFilterCount() > 0 && (
+          {getDraftFilterCount() > 0 && (
             <Box sx={{
               padding: '12px 24px',
               backgroundColor: '#EEF0FF',
@@ -846,7 +865,7 @@ const Jobs = () => {
               flexWrap: 'wrap',
               alignItems: 'center',
             }}>
-              {Object.entries(filters).map(([key, value]) =>
+              {Object.entries(draftFilters).map(([key, value]) =>
                 value && (
                   <Chip
                     key={key}
@@ -871,7 +890,7 @@ const Jobs = () => {
               )}
               <Chip
                 label="Clear all"
-                onClick={handleClearFilters}
+                onClick={() => setDraftFilters({ jobType: '', experienceLevel: '', location: '', status: '', company: '', workMode: '', salaryRange: '' })}
                 size="small"
                 variant="outlined"
                 sx={{
@@ -912,7 +931,7 @@ const Jobs = () => {
                       Job Type
                     </Typography>
                     <Select
-                      value={filters.jobType}
+                      value={draftFilters.jobType}
                       onChange={(e) => handleFilterChange('jobType', e.target.value)}
                       displayEmpty
                       sx={{
@@ -937,7 +956,7 @@ const Jobs = () => {
                       Experience
                     </Typography>
                     <Select
-                      value={filters.experienceLevel}
+                      value={draftFilters.experienceLevel}
                       onChange={(e) => handleFilterChange('experienceLevel', e.target.value)}
                       displayEmpty
                       sx={{
@@ -984,7 +1003,7 @@ const Jobs = () => {
                       Work Mode
                     </Typography>
                     <Select
-                      value={filters.workMode}
+                      value={draftFilters.workMode}
                       onChange={(e) => handleFilterChange('workMode', e.target.value)}
                       displayEmpty
                       sx={{
@@ -1011,7 +1030,7 @@ const Jobs = () => {
                       fullWidth
                       size="small"
                       placeholder="City or location..."
-                      value={filters.location}
+                      value={draftFilters.location}
                       onChange={(e) => handleFilterChange('location', e.target.value)}
                       slotProps={{
                         input: {
@@ -1062,7 +1081,7 @@ const Jobs = () => {
                       Status
                     </Typography>
                     <Select
-                      value={filters.status}
+                      value={draftFilters.status}
                       onChange={(e) => handleFilterChange('status', e.target.value)}
                       displayEmpty
                       sx={{
@@ -1082,45 +1101,16 @@ const Jobs = () => {
                     </Select>
                   </FormControl>
 
-                  <FormControl fullWidth size="small">
+                  <Box>
                     <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                      Department
+                      Company Name
                     </Typography>
-                    <Select
-                      value={filters.department}
-                      onChange={(e) => handleFilterChange('department', e.target.value)}
-                      displayEmpty
-                      sx={{
-                        borderRadius: '10px',
-                        backgroundColor: '#f8fafc',
-                        fontSize: '13px',
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5560FF' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1A22E0' },
-                      }}
-                    >
-                      <MenuItem value="">All Departments</MenuItem>
-                      <MenuItem value="Engineering">Engineering</MenuItem>
-                      <MenuItem value="Design">Design</MenuItem>
-                      <MenuItem value="Product">Product</MenuItem>
-                      <MenuItem value="Marketing">Marketing</MenuItem>
-                      <MenuItem value="Sales">Sales</MenuItem>
-                      <MenuItem value="HR">HR</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                {/* Company Name - full width below */}
-                <Box sx={{ marginTop: '12px' }}>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
-                    Company Name
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="Search company..."
-                    value={filters.company}
-                    onChange={(e) => handleFilterChange('company', e.target.value)}
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder="Search company..."
+                      value={draftFilters.company}
+                      onChange={(e) => handleFilterChange('company', e.target.value)}
                     slotProps={{
                       input: {
                         startAdornment: (
@@ -1142,6 +1132,7 @@ const Jobs = () => {
                     }}
                   />
                 </Box>
+              </Box>
               </Box>
             </Box>
           </DialogContent>
@@ -1171,7 +1162,7 @@ const Jobs = () => {
               Reset Filters
             </Button>
             <Button
-              onClick={handleCloseFilterDialog}
+              onClick={handleApplyFilters}
               variant="contained"
               sx={{
                 background: `linear-gradient(135deg, ${'#020291'} 0%, ${'#0F17BF'} 100%)`,

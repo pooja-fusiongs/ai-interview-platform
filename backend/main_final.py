@@ -210,9 +210,18 @@ def start_interview_reminder_scheduler():
     import threading, time
     from datetime import datetime, timezone, timedelta
 
+    IST = timezone(timedelta(hours=5, minutes=30))
+
+    def _to_ist(dt):
+        """Convert any datetime to IST reliably."""
+        if dt.tzinfo is None:
+            # Treat naive datetimes as UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(IST)
+
     def _reminder_loop():
         time.sleep(30)  # Wait for DB to be ready
-        print("🔔 Interview reminder scheduler started (checks every 5 min)")
+        print("🔔 Interview reminder scheduler started (checks every 2 min)")
 
         while True:
             try:
@@ -224,10 +233,10 @@ def start_interview_reminder_scheduler():
 
                 db = SessionLocal()
                 now = datetime.now(timezone.utc)
-                window_start = now + timedelta(minutes=10)
-                window_end = now + timedelta(minutes=20)
+                window_start = now + timedelta(minutes=5)
+                window_end = now + timedelta(minutes=25)
 
-                # Find interviews starting in 10-20 min — eager load relationships (1 query instead of 300+)
+                # Find interviews starting in 5-25 min — wider window for reliability
                 upcoming = db.query(VideoInterview).options(
                     joinedload(VideoInterview.candidate),
                     joinedload(VideoInterview.interviewer),
@@ -239,19 +248,24 @@ def start_interview_reminder_scheduler():
                     VideoInterview.reminder_sent_at.is_(None),
                 ).all()
 
+                if upcoming:
+                    print(f"🔔 Found {len(upcoming)} interview(s) needing reminders (window: {window_start.isoformat()} – {window_end.isoformat()})")
+
                 for vi in upcoming:
                     try:
                         candidate = vi.candidate
                         recruiter = vi.interviewer
                         job = vi.job
                         if not candidate or not candidate.email:
+                            print(f"⚠️ Skipping interview #{vi.id}: no candidate email")
                             continue
 
-                        ist_offset = timedelta(hours=5, minutes=30)
-                        scheduled_ist = vi.scheduled_at.astimezone(timezone(ist_offset)) if vi.scheduled_at.tzinfo else (vi.scheduled_at + ist_offset)
+                        scheduled_ist = _to_ist(vi.scheduled_at)
                         interview_date_str = scheduled_ist.strftime("%A, %B %d, %Y")
                         interview_time_str = scheduled_ist.strftime("%I:%M %p") + " IST"
                         job_title = job.title if job else "Interview"
+
+                        print(f"🔔 Interview #{vi.id}: scheduled_at={vi.scheduled_at.isoformat()}, IST={scheduled_ist.strftime('%Y-%m-%d %I:%M %p')}")
 
                         frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
                         candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
@@ -283,17 +297,23 @@ def start_interview_reminder_scheduler():
                                 email_type="reminder",
                             )
                             print(f"🔔 Recruiter reminder sent to {recruiter.email} for interview #{vi.id}")
+                        else:
+                            print(f"⚠️ Interview #{vi.id}: no recruiter email found, skipping recruiter reminder")
 
                         vi.reminder_sent_at = now
                         db.commit()
                     except Exception as e:
                         print(f"⚠️ Reminder failed for interview #{vi.id}: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 db.close()
             except Exception as e:
                 print(f"⚠️ Reminder scheduler error: {e}")
+                import traceback
+                traceback.print_exc()
 
-            time.sleep(300)  # Check every 5 minutes
+            time.sleep(120)  # Check every 2 minutes for reliability
 
     threading.Thread(target=_reminder_loop, daemon=True).start()
 

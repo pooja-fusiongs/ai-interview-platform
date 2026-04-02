@@ -9,6 +9,7 @@ fraud analysis records.
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status, UploadFile, File
 from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime, timezone, timedelta
@@ -346,8 +347,10 @@ def schedule_video_interview(
         import threading
         try:
             from datetime import timezone as tz_mod
-            ist_offset = timedelta(hours=5, minutes=30)
-            scheduled_ist = body.scheduled_at.astimezone(tz_mod(ist_offset)) if body.scheduled_at.tzinfo else (body.scheduled_at + ist_offset)
+            IST = tz_mod(timedelta(hours=5, minutes=30))
+            # Ensure timezone-aware before converting to IST
+            sched_dt = body.scheduled_at if body.scheduled_at.tzinfo else body.scheduled_at.replace(tzinfo=tz_mod.utc)
+            scheduled_ist = sched_dt.astimezone(IST)
             interview_date = scheduled_ist.strftime("%B %d, %Y")
             interview_time = scheduled_ist.strftime("%I:%M %p") + " IST"
 
@@ -468,8 +471,13 @@ def list_video_interviews(
             query = query.filter(VideoInterview.candidate_id == current_user.id)
             print(f"[DEBUG] Filtering for candidate_id: {current_user.id}")
         elif current_user.role == UserRole.RECRUITER:
-            query = query.filter(VideoInterview.interviewer_id == current_user.id)
-            print(f"[DEBUG] Filtering for interviewer_id: {current_user.id}")
+            # Show interviews where recruiter is interviewer OR owns the job
+            recruiter_job_ids = [j.id for j in db.query(Job.id).filter(Job.created_by == current_user.id).all()]
+            conditions = [VideoInterview.interviewer_id == current_user.id]
+            if recruiter_job_ids:
+                conditions.append(VideoInterview.job_id.in_(recruiter_job_ids))
+            query = query.filter(or_(*conditions))
+            print(f"[DEBUG] Filtering for interviewer_id: {current_user.id} or job_ids: {recruiter_job_ids}")
 
         # Fetch data first, then count only if paginating (saves 1 DB round-trip)
         interviews = query.order_by(VideoInterview.scheduled_at.desc()).offset(skip).limit(limit).all()
@@ -500,6 +508,30 @@ def list_video_interviews(
                 JobApplication.applicant_email.in_(candidate_emails)
             ).all()
         app_name_map = {(a.job_id, a.applicant_email): a.applicant_name for a in all_applications}
+        app_id_map = {(a.job_id, a.applicant_email): a.id for a in all_applications}
+
+        # Batch fallback: fetch ALL applications for relevant jobs (case-insensitive email match)
+        # This avoids N+1 queries when exact email match fails
+        app_by_job_email_lower = {}
+        for a in all_applications:
+            key = (a.job_id, a.applicant_email.lower() if a.applicant_email else "")
+            app_by_job_email_lower[key] = a
+
+        # If some interviews have candidates not in all_applications, bulk-fetch remaining
+        missing_job_ids = set()
+        for vi in interviews:
+            if vi.candidate and not app_id_map.get((vi.job_id, vi.candidate.email)):
+                missing_job_ids.add(vi.job_id)
+        if missing_job_ids:
+            extra_apps = db.query(JobApplication).filter(JobApplication.job_id.in_(missing_job_ids)).all()
+            for a in extra_apps:
+                key_exact = (a.job_id, a.applicant_email)
+                if key_exact not in app_id_map:
+                    app_name_map[key_exact] = a.applicant_name
+                    app_id_map[key_exact] = a.id
+                key_lower = (a.job_id, a.applicant_email.lower() if a.applicant_email else "")
+                if key_lower not in app_by_job_email_lower:
+                    app_by_job_email_lower[key_lower] = a
 
         # Build responses with pre-fetched data
         result = []
@@ -507,18 +539,30 @@ def list_video_interviews(
             fraud = fraud_map.get(vi.id)
 
             candidate_name = ""
+            candidate_email = vi.candidate.email if vi.candidate else None
+            application_id = None
             if vi.candidate:
                 candidate_name = app_name_map.get((vi.job_id, vi.candidate.email), "")
+                application_id = app_id_map.get((vi.job_id, vi.candidate.email))
                 if not candidate_name:
                     candidate_name = vi.candidate.full_name or vi.candidate.username or ""
+                # Fallback: case-insensitive email match from pre-fetched data
+                if not application_id and vi.candidate.email:
+                    fallback = app_by_job_email_lower.get((vi.job_id, vi.candidate.email.lower()))
+                    if fallback:
+                        application_id = fallback.id
+                        candidate_email = fallback.applicant_email
+                        if not candidate_name:
+                            candidate_name = fallback.applicant_name
 
             job_title = vi.job.title if vi.job else ""
-            
+
             result.append(VideoInterviewListResponse(
                 id=vi.id,
                 job_id=vi.job_id,
                 candidate_id=vi.candidate_id,
-                candidate_email=vi.candidate.email if vi.candidate else None,
+                candidate_email=candidate_email,
+                application_id=application_id,
                 job_title=job_title,
                 candidate_name=candidate_name,
                 status=vi.status.value if hasattr(vi.status, "value") else vi.status,
@@ -696,8 +740,9 @@ def update_video_interview(
                 job_title = job.title if job else "Interview"
                 # Convert UTC to IST for email display
                 from datetime import timezone as tz_mod
-                ist_offset = timedelta(hours=5, minutes=30)
-                scheduled_ist = vi.scheduled_at.astimezone(tz_mod(ist_offset)) if vi.scheduled_at.tzinfo else (vi.scheduled_at + ist_offset)
+                IST = tz_mod(timedelta(hours=5, minutes=30))
+                sched_dt = vi.scheduled_at if vi.scheduled_at.tzinfo else vi.scheduled_at.replace(tzinfo=timezone.utc)
+                scheduled_ist = sched_dt.astimezone(IST)
                 interview_date = scheduled_ist.strftime("%A, %B %d, %Y") if vi.scheduled_at else ""
                 interview_time = (scheduled_ist.strftime("%I:%M %p") + " IST") if vi.scheduled_at else ""
 
@@ -1024,7 +1069,8 @@ def process_interview_completion_task(video_id: int):
         if not vi:
             return
             
-        if vi.recording_url and not vi.transcript:
+        # Generate recording transcript even if realtime exists (recording is more accurate)
+        if vi.recording_url and vi.transcript_source != "recording":
             try:
                 # Resolve path
                 recording_filename = os.path.basename(vi.recording_url)
@@ -1032,7 +1078,7 @@ def process_interview_completion_task(video_id: int):
                     os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
                 ))
                 recording_path = os.path.join(recordings_dir, recording_filename)
-                
+
                 actual_questions = []
                 if vi.job_id:
                     questions = db.query(InterviewQuestion).filter(
@@ -1041,7 +1087,7 @@ def process_interview_completion_task(video_id: int):
                     ).all()
                     if questions:
                         actual_questions = [{"question_text": q.question_text, "sample_answer": q.sample_answer or ""} for q in questions]
-                        
+
                 if os.path.exists(recording_path):
                     validate_recording_file(recording_path)
                     transcript_data = create_real_transcript(
@@ -1056,11 +1102,13 @@ def process_interview_completion_task(video_id: int):
                     vi.transcript_generated_at = datetime.now(timezone.utc)
                     print(f"[background_task] Transcript generated successfully for {video_id}")
                 else:
-                    vi.transcript_source = "failed"
-                    vi.transcript_error = "Recording file not found"
+                    if not vi.transcript:
+                        vi.transcript_source = "failed"
+                        vi.transcript_error = "Recording file not found"
             except Exception as e:
-                vi.transcript_source = "failed"
-                vi.transcript_error = str(e)
+                if not vi.transcript:
+                    vi.transcript_source = "failed"
+                    vi.transcript_error = str(e)
                 print(f"[background_task] Transcript error: {e}")
                 
         # Create InterviewSession
@@ -1331,35 +1379,51 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
 
             transcript_text = None
 
-            # === TRY 1: PyAnnote diarization + Whisper timestamps (best quality) ===
+            # === TRY 1: Deepgram diarized transcription (speaker labels built-in) ===
             try:
-                from services.speaker_diarization import (
-                    diarize_audio, assign_speaker_roles,
-                    align_transcript_with_diarization, DiarizationError
-                )
-                from services.transcript_generator import transcribe_audio_file_with_timestamps
-
-                print(f"[BG Transcription] Trying PyAnnote diarization...")
-                raw_text, whisper_segments = transcribe_audio_file_with_timestamps(recording_path)
-
-                if whisper_segments:
-                    diar_segments = diarize_audio(recording_path)
-                    role_map = assign_speaker_roles(diar_segments)
-                    labeled_text = align_transcript_with_diarization(
-                        whisper_segments, diar_segments, role_map
-                    )
-
+                from services.transcript_generator import transcribe_with_deepgram_diarized
+                print(f"[BG Transcription] Trying Deepgram diarized transcription...")
+                diarized_text = transcribe_with_deepgram_diarized(recording_path)
+                if diarized_text:
                     start_str = (started_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
                     end_str = (bg_vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
-                    transcript_text = f"[Interview Start: {start_str}]\n\n{labeled_text}\n\n[Interview End: {end_str}]"
-                    print(f"[BG Transcription] PyAnnote diarization success ({len(transcript_text)} chars)")
+                    transcript_text = f"[Interview Start: {start_str}]\n\n{diarized_text}\n\n[Interview End: {end_str}]"
+                    print(f"[BG Transcription] Deepgram diarized success ({len(transcript_text)} chars)")
                 else:
-                    print(f"[BG Transcription] No whisper segments, falling back...")
-
+                    print(f"[BG Transcription] Deepgram diarization returned no result, falling back...")
             except Exception as diar_err:
-                print(f"[BG Transcription] Diarization failed (falling back): {diar_err}")
+                print(f"[BG Transcription] Deepgram diarization failed (falling back): {diar_err}")
 
-            # === TRY 2: Fallback to existing method (no speaker diarization) ===
+            # === TRY 2: PyAnnote diarization + Whisper timestamps ===
+            if not transcript_text:
+                try:
+                    from services.speaker_diarization import (
+                        diarize_audio, assign_speaker_roles,
+                        align_transcript_with_diarization, DiarizationError
+                    )
+                    from services.transcript_generator import transcribe_audio_file_with_timestamps
+
+                    print(f"[BG Transcription] Trying PyAnnote diarization...")
+                    raw_text, whisper_segments = transcribe_audio_file_with_timestamps(recording_path)
+
+                    if whisper_segments:
+                        diar_segments = diarize_audio(recording_path)
+                        role_map = assign_speaker_roles(diar_segments)
+                        labeled_text = align_transcript_with_diarization(
+                            whisper_segments, diar_segments, role_map
+                        )
+
+                        start_str = (started_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                        end_str = (bg_vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
+                        transcript_text = f"[Interview Start: {start_str}]\n\n{labeled_text}\n\n[Interview End: {end_str}]"
+                        print(f"[BG Transcription] PyAnnote diarization success ({len(transcript_text)} chars)")
+                    else:
+                        print(f"[BG Transcription] No whisper segments, falling back...")
+
+                except Exception as pyannote_err:
+                    print(f"[BG Transcription] PyAnnote failed (falling back): {pyannote_err}")
+
+            # === TRY 3: Plain Whisper transcription (no speaker labels) ===
             if not transcript_text:
                 transcript_data = create_real_transcript(
                     interview_id=vi_id,
@@ -1369,51 +1433,30 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                     question_timestamps=actual_questions if actual_questions else None
                 )
                 transcript_text = transcript_data["transcript_text"]
-                print(f"[BG Transcription] Fallback success ({len(transcript_text)} chars)")
+                print(f"[BG Transcription] Plain Whisper fallback success ({len(transcript_text)} chars)")
 
-            # Compare real-time vs recording transcript — use the better one
+            # Always prefer recording (Whisper) transcript over realtime.
+            # Realtime transcripts suffer from interleaving (speaker streams overlap),
+            # word errors, and fragmentation. Whisper post-recording is far more accurate.
             final_transcript = transcript_text
             chosen_source = "recording"
 
             if realtime_transcript and transcript_text:
                 rt_words = len(realtime_transcript.split())
                 rec_words = len(transcript_text.split())
-
-                # Check if real-time has speaker labels (Recruiter:/Candidate:)
-                rt_has_speakers = "Recruiter:" in realtime_transcript and "Candidate:" in realtime_transcript
                 rec_has_speakers = "Recruiter:" in transcript_text or "Candidate:" in transcript_text
 
-                print(f"[BG Transcription] Comparing: realtime={rt_words} words (speakers={rt_has_speakers}), recording={rec_words} words (speakers={rec_has_speakers})")
+                print(f"[BG Transcription] Comparing: realtime={rt_words} words, recording={rec_words} words (speakers={rec_has_speakers})")
 
-                if rt_has_speakers and not rec_has_speakers and rt_words > rec_words * 0.7:
-                    # Real-time has speaker labels and is reasonably complete — keep it
+                # Only fall back to realtime if recording transcript is nearly empty
+                if rec_words < 10 and rt_words > 20:
                     final_transcript = realtime_transcript
                     chosen_source = "realtime"
-                    print(f"[BG Transcription] Keeping real-time transcript (has speaker labels, {rt_words} words)")
-                elif rec_words > rt_words * 1.3:
-                    # Recording captured significantly more content — use it
+                    print(f"[BG Transcription] Recording transcript too short ({rec_words} words), falling back to realtime")
+                else:
                     final_transcript = transcript_text
                     chosen_source = "recording"
-                    print(f"[BG Transcription] Using recording transcript (more complete: {rec_words} vs {rt_words} words)")
-                elif rt_has_speakers and rec_words > rt_words:
-                    # Recording has more words but realtime has labels
-                    # Merge: use recording text but note both sources
-                    final_transcript = transcript_text
-                    chosen_source = "recording+realtime"
-                    print(f"[BG Transcription] Using recording transcript (more words), both sources available")
-                else:
-                    # Use the longer one — it captured more words
-                    if rt_words >= rec_words:
-                        final_transcript = realtime_transcript
-                        chosen_source = "realtime"
-                    else:
-                        final_transcript = transcript_text
-                        chosen_source = "recording"
-                    print(f"[BG Transcription] Using {chosen_source} transcript ({max(rt_words, rec_words)} words)")
-                    # If real-time has speaker labels, append it as reference
-                    if rt_has_speakers and chosen_source == "recording":
-                        final_transcript = final_transcript + "\n\n--- Speaker-Labeled Transcript ---\n" + realtime_transcript
-                        chosen_source = "recording+realtime"
+                    print(f"[BG Transcription] Using recording transcript ({rec_words} words, more accurate than realtime)")
 
             bg_vi.transcript = final_transcript
             bg_vi.transcript_source = chosen_source

@@ -46,6 +46,8 @@ def submit_movement_detection(
     vi_status = vi.status.value if hasattr(vi.status, "value") else vi.status
     if vi_status in ("cancelled", "no_show", "completed"):
         return {"status": "interview_ended"}
+    if vi_status == "scheduled":
+        return {"status": "interview_not_started"}
 
     # 1) Store MovementTimeline record
     flags_dict = payload.flags.dict() if hasattr(payload.flags, "dict") else vars(payload.flags)

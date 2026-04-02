@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 from typing import Optional
 import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from database import get_db
 from models import (
@@ -192,10 +194,12 @@ async def submit_transcript(
 
     if transcript_text and transcript_text.strip():
         final_transcript = transcript_text.strip()
-        candidate.transcript_text = final_transcript
 
     if not final_transcript:
         raise HTTPException(status_code=400, detail="Please provide a transcript (text or file)")
+
+    # Always save the final transcript text (whether from paste or file)
+    candidate.transcript_text = final_transcript
 
     # Get questions and answers for context
     questions = db.query(InterviewQuestion).filter(
@@ -215,25 +219,7 @@ async def submit_transcript(
         if jd_text:
             job_description = jd_text
 
-    # Call AI to score
-    ai_result = score_transcript(
-        transcript=final_transcript,
-        job_title=job.title,
-        job_description=job_description,
-        candidate_name=candidate.applicant_name,
-        questions_and_answers=questions_and_answers
-    )
-
-    ai_score = ai_result["score"]
-    candidate.ai_score = ai_score
-
-    # Final score = 80% AI + 20% recruiter
-    if candidate.overall_score is not None:
-        candidate.final_score = round((ai_score * 0.8) + (candidate.overall_score * 0.2), 1)
-    else:
-        candidate.final_score = ai_score
-
-    # Build report card
+    # Prepare report card data upfront (DB queries before LLM calls)
     all_ratings = (
         db.query(InterviewRating)
         .join(InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id)
@@ -252,11 +238,66 @@ async def submit_transcript(
             "notes": rating_row.notes if rating_row else "",
         })
 
-    report_card = _build_report_card(
-        job, candidate, questions_data, ai_result["feedback"], final_transcript
-    )
-    candidate.report_card_json = json.dumps(report_card)
+    # Build strengths/improvements context for report card (no LLM needed)
+    strengths_context = []
+    improvements_context = []
+    for qd in questions_data:
+        category = qd.get("category") or "General"
+        if qd.get("rating") is not None:
+            score_val = float(qd["rating"])
+            if score_val >= 8:
+                strengths_context.append(f"Strong in {category}: {qd.get('question_text', '')[:120]}")
+            elif score_val <= 5:
+                improvements_context.append(f"Weak in {category}: {qd.get('question_text', '')[:120]}")
 
+    recruiter_score = float(candidate.overall_score) if candidate.overall_score is not None else None
+    score_breakdown = [
+        {"label": "Overall Rating", "score": None},
+        {"label": "iHire Rating", "score": None},
+        {"label": "Recruiter Rating", "score": recruiter_score},
+    ]
+
+    # Run BOTH LLM calls in parallel (scoring + report card)
+    loop = asyncio.get_event_loop()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        score_future = loop.run_in_executor(executor, lambda: score_transcript(
+            transcript=final_transcript,
+            job_title=job.title,
+            job_description=job_description,
+            candidate_name=candidate.applicant_name,
+            questions_and_answers=questions_and_answers
+        ))
+
+        report_future = loop.run_in_executor(executor, lambda: generate_report_card(
+            candidate_name=candidate.applicant_name,
+            job_title=job.title,
+            score_breakdown=score_breakdown,
+            strengths_context=strengths_context[:6],
+            improvements_context=improvements_context[:6],
+            transcript_feedback="",  # Not available yet, but transcript text is
+            transcript_text=final_transcript,
+        ))
+
+        ai_result, report_card = await asyncio.gather(score_future, report_future)
+
+    ai_score = ai_result["score"]
+    candidate.ai_score = ai_score
+
+    # Final score = 80% AI + 20% recruiter
+    if candidate.overall_score is not None:
+        candidate.final_score = round((ai_score * 0.8) + (candidate.overall_score * 0.2), 1)
+    else:
+        candidate.final_score = ai_score
+
+    # Update report card with final scores
+    report_card["scores"] = [
+        {"label": "Overall Rating", "score": float(candidate.final_score)},
+        {"label": "iHire Rating", "score": float(ai_score)},
+        {"label": "Recruiter Rating", "score": recruiter_score},
+    ]
+
+    candidate.report_card_json = json.dumps(report_card)
     db.commit()
     db.refresh(candidate)
 
@@ -344,6 +385,7 @@ async def get_interview_summary(
         "overall_score": candidate.overall_score,
         "ai_score": candidate.ai_score,
         "final_score": candidate.final_score,
+        "has_transcript": bool(candidate.transcript_text or candidate.transcript_path),
         "report_card": report_card,
         "questions": questions_data
     }

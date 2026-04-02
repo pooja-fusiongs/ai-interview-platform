@@ -34,10 +34,6 @@ import {
   DialogActions,
 } from '@mui/material';
 import { Visibility, PlayArrow, Cancel, Refresh, ArrowBack, Search, EventRepeat } from '@mui/icons-material';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker';
-import { MobileTimePicker } from '@mui/x-date-pickers/MobileTimePicker';
 import dayjs, { Dayjs } from 'dayjs';
 import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
@@ -1199,76 +1195,56 @@ const VideoInterviewScheduler: React.FC = () => {
                       <ValidationIcon isValid={validation.scheduledAt} show={touched.scheduledAt} />
                     </Box>
 
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                      <Box sx={{ display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap', flexDirection: { xs: 'column', sm: 'row' } }}>
-                        <MobileDatePicker
-                          value={selectedDate}
-                          onChange={(newValue) => {
-                            setSelectedDate(newValue);
+                    <Box sx={{ display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap', flexDirection: { xs: 'column', sm: 'row' } }}>
+                        <TextField
+                          type="date"
+                          value={selectedDate ? selectedDate.format('YYYY-MM-DD') : ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedDate(val ? dayjs(val) : null);
                             setTouched((prev) => ({ ...prev, scheduledAt: true }));
                           }}
-                          minDate={minDate}
-                          format="DD-MM-YYYY"
-                          sx={{ flex: 1, minWidth: 0 }}
-                          slotProps={{
-                            textField: {
-                              size: 'medium',
-                              placeholder: 'Select date',
-                              error: touched.scheduledAt && !selectedDate,
-                              helperText: touched.scheduledAt && !selectedDate ? 'Date is required' : '',
-                              sx: { ...inputStyles, width: '100%' },
-                              InputProps: {
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <i className="fas fa-calendar" style={{ color: '#9ca3af', fontSize: '14px' }} />
-                                  </InputAdornment>
-                                ),
-                              },
-                            },
-                            dialog: {
-                              sx: {
-                                '& .MuiPickersCalendarHeader-root': { backgroundColor: '#020291', color: '#fff' },
-                                '& .MuiPickersDay-root.Mui-selected': { backgroundColor: '#020291' },
-                                '& .MuiButton-root': { color: '#020291' },
-                              },
-                            },
+                          inputProps={{ min: minDate.format('YYYY-MM-DD') }}
+                          size="medium"
+                          placeholder="Select date"
+                          error={touched.scheduledAt && !selectedDate}
+                          helperText={touched.scheduledAt && !selectedDate ? 'Date is required' : ''}
+                          sx={{ ...inputStyles, flex: 1, minWidth: 0, width: '100%' }}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <i className="fas fa-calendar" style={{ color: '#9ca3af', fontSize: '14px' }} />
+                              </InputAdornment>
+                            ),
                           }}
                         />
-                        <MobileTimePicker
-                          value={selectedTime}
-                          onChange={(newValue) => {
-                            setSelectedTime(newValue);
+                        <TextField
+                          type="time"
+                          value={selectedTime ? selectedTime.format('HH:mm') : ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) {
+                              const [h, m] = val.split(':').map(Number);
+                              setSelectedTime(dayjs().hour(h).minute(m));
+                            } else {
+                              setSelectedTime(null);
+                            }
                             setTouched((prev) => ({ ...prev, scheduledAt: true }));
                           }}
-                          format="HH:mm"
-                          ampm={false}
-                          sx={{ flex: 1, minWidth: 0 }}
-                          slotProps={{
-                            textField: {
-                              size: 'medium',
-                              placeholder: 'Select time',
-                              error: touched.scheduledAt && !selectedTime,
-                              helperText: touched.scheduledAt && !selectedTime ? 'Time is required' : '',
-                              sx: { ...inputStyles, width: '100%' },
-                              InputProps: {
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <i className="fas fa-clock" style={{ color: '#9ca3af', fontSize: '14px' }} />
-                                  </InputAdornment>
-                                ),
-                              },
-                            },
-                            dialog: {
-                              sx: {
-                                '& .MuiPickersToolbar-root': { backgroundColor: '#020291', color: '#fff' },
-                                '& .MuiClock-pin, & .MuiClockPointer-root, & .MuiClockPointer-thumb': { backgroundColor: '#020291' },
-                                '& .MuiButton-root': { color: '#020291' },
-                              },
-                            },
+                          size="medium"
+                          placeholder="Select time"
+                          error={touched.scheduledAt && !selectedTime}
+                          helperText={touched.scheduledAt && !selectedTime ? 'Time is required' : ''}
+                          sx={{ ...inputStyles, flex: 1, minWidth: 0, width: '100%' }}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <i className="fas fa-clock" style={{ color: '#9ca3af', fontSize: '14px' }} />
+                              </InputAdornment>
+                            ),
                           }}
                         />
                       </Box>
-                    </LocalizationProvider>
 
                     {touched.scheduledAt && !validation.scheduledAt && (
                       <Typography sx={{ fontSize: '12px', color: '#ef4444', mt: '6px', ml: '14px' }}>
@@ -1449,35 +1425,40 @@ const VideoInterviewScheduler: React.FC = () => {
           <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3 }}>
             This interview has expired. Pick a new date and time to reschedule.
           </Typography>
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <MobileDatePicker
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                type="date"
                 label="New Date"
-                value={rescheduleDate}
-                onChange={(val) => setRescheduleDate(val)}
-                minDate={dayjs()}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    size: 'small',
-                    sx: { '& .MuiOutlinedInput-root': { borderRadius: '10px' } },
-                  },
+                value={rescheduleDate ? rescheduleDate.format('YYYY-MM-DD') : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRescheduleDate(val ? dayjs(val) : null);
                 }}
+                inputProps={{ min: dayjs().format('YYYY-MM-DD') }}
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
               />
-              <MobileTimePicker
+              <TextField
+                type="time"
                 label="New Time"
-                value={rescheduleTime}
-                onChange={(val) => setRescheduleTime(val)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    size: 'small',
-                    sx: { '& .MuiOutlinedInput-root': { borderRadius: '10px' } },
-                  },
+                value={rescheduleTime ? rescheduleTime.format('HH:mm') : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    const [h, m] = val.split(':').map(Number);
+                    setRescheduleTime(dayjs().hour(h).minute(m));
+                  } else {
+                    setRescheduleTime(null);
+                  }
                 }}
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
               />
             </Box>
-          </LocalizationProvider>
           {getRescheduleError() && (
             <Typography sx={{ color: '#ef4444', fontSize: '13px', mt: 1.5 }}>
               {getRescheduleError()}

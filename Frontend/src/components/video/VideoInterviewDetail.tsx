@@ -357,20 +357,49 @@ const VideoInterviewDetail: React.FC = () => {
                       border: '1px solid #e2e8f0',
                       mb: 2
                     }}>
-                      <Typography
-                        component="pre"
-                        sx={{
-                          fontFamily: 'inherit',
-                          fontSize: '14px',
-                          color: '#374151',
-                          lineHeight: 1.8,
-                          whiteSpace: 'pre-wrap',
-                          wordWrap: 'break-word',
-                          margin: 0
-                        }}
-                      >
-                        {transcript}
-                      </Typography>
+                      {transcript.split('\n').some(l => /^(Recruiter|Candidate):/.test(l.trim())) ? (
+                        // Formatted speaker-labeled transcript
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                          {transcript.split('\n').filter(l => l.trim()).map((line, i) => {
+                            const recruiterMatch = line.match(/^Recruiter:\s*(.*)/)
+                            const candidateMatch = line.match(/^Candidate:\s*(.*)/)
+                            if (recruiterMatch) {
+                              return (
+                                <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#1e40af', minWidth: 80, mt: '2px', flexShrink: 0 }}>Recruiter</Typography>
+                                  <Typography sx={{ fontSize: '14px', color: '#1e3a5f', lineHeight: 1.7, background: '#eff6ff', borderRadius: '8px', px: 1.5, py: 0.8, flex: 1 }}>{recruiterMatch[1]}</Typography>
+                                </Box>
+                              )
+                            }
+                            if (candidateMatch) {
+                              return (
+                                <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', minWidth: 80, mt: '2px', flexShrink: 0 }}>Candidate</Typography>
+                                  <Typography sx={{ fontSize: '14px', color: '#374151', lineHeight: 1.7, background: '#f5f3ff', borderRadius: '8px', px: 1.5, py: 0.8, flex: 1 }}>{candidateMatch[1]}</Typography>
+                                </Box>
+                              )
+                            }
+                            // Non-labeled lines (timestamps, etc.)
+                            return <Typography key={i} sx={{ fontSize: '12px', color: '#9ca3af', textAlign: 'center', fontStyle: 'italic' }}>{line.trim()}</Typography>
+                          })}
+                        </Box>
+                      ) : (
+                        // Plain text transcript (no speaker labels)
+                        <Typography
+                          component="pre"
+                          sx={{
+                            fontFamily: 'inherit',
+                            fontSize: '14px',
+                            color: '#374151',
+                            lineHeight: 1.8,
+                            whiteSpace: 'pre-wrap',
+                            wordWrap: 'break-word',
+                            margin: 0
+                          }}
+                        >
+                          {transcript}
+                        </Typography>
+                      )}
                     </Box>
                     {!scoreResult && (
                       <Button

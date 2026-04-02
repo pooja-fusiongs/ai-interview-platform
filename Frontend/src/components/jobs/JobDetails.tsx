@@ -172,9 +172,13 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       const vMapping: Record<number, number> = {}
       for (const vi of interviews) {
         if (vi.job_id === selectedJob.id) {
-          const matched = vi.candidate_email ? fetchedCandidates.find((c: any) =>
-            c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
-          ) : null
+          // Match by application_id first (most reliable), then fallback to email
+          let matched = vi.application_id ? fetchedCandidates.find((c: any) => c.id === vi.application_id) : null
+          if (!matched && vi.candidate_email) {
+            matched = fetchedCandidates.find((c: any) =>
+              c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
+            )
+          }
           if (matched) vMapping[matched.id] = vi.id
         }
       }
@@ -223,9 +227,12 @@ const JobDetails: React.FC<JobDetailsProps> = ({
         const vMapping: Record<number, number> = { ...candidateVideoIds }
         for (const vi of interviews) {
           if (vi.job_id === selectedJob.id) {
-            const matched = vi.candidate_email ? candidates.find((c: any) =>
-              c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
-            ) : null
+            let matched = vi.application_id ? candidates.find((c: any) => c.id === vi.application_id) : null
+            if (!matched && vi.candidate_email) {
+              matched = candidates.find((c: any) =>
+                c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
+              )
+            }
             if (matched) vMapping[matched.id] = vi.id
           }
         }

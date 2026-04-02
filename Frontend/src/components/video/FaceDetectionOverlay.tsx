@@ -82,16 +82,8 @@ const FaceDetectionOverlay: React.FC<FaceDetectionOverlayProps> = ({ enabled, vi
     const lkTrack = localMicTrack.publication.track.mediaStreamTrack;
 
     const tryGetMic = async () => {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
-        ownStream = s;
-        setMicStream(s);
-        return;
-      } catch (e) {
-        console.warn(`[FraudDetection] getUserMedia failed: ${e}`);
-      }
-
+      // Use LiveKit's track directly — avoid separate getUserMedia call
+      // which conflicts with LiveKit's camera/mic and causes "Could not start video source"
       if (cancelled) return;
       try {
         const cloned = lkTrack.clone();

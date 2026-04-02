@@ -72,7 +72,7 @@ Interview Questions & Expected Answers:
 {questions_context[:4000]}
 
 Actual Interview Transcript:
-{transcript[:8000]}
+{transcript[:6000]}
 
 STRICT EVALUATION RULES:
 1) Compare EACH candidate answer against its expected answer. If the candidate's answer is factually wrong, off-topic, or contradicts the expected answer — penalize heavily.
@@ -157,7 +157,7 @@ Scores (pre-calculated — use as-is):
 {json.dumps(score_breakdown, ensure_ascii=True)}
 
 {"FULL INTERVIEW TRANSCRIPT:" if has_transcript else "NO TRANSCRIPT AVAILABLE — return empty arrays."}
-{transcript_text[:12000] if has_transcript else ''}
+{transcript_text[:6000] if has_transcript else ''}
 
 {"AI evaluation feedback:" if transcript_feedback else ""}
 {transcript_feedback if transcript_feedback else ""}
@@ -198,7 +198,7 @@ Return strict JSON:
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=5000,
+            max_tokens=2500,
         )
 
         content = response.choices[0].message.content or ""

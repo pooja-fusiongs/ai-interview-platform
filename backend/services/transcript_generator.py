@@ -278,6 +278,110 @@ def _transcribe_with_deepgram(file_path: str) -> str:
         raise TranscriptionError(f"Deepgram transcription failed: {e}")
 
 
+def transcribe_with_deepgram_diarized(file_path: str) -> Optional[str]:
+    """
+    Transcribe using Deepgram with speaker diarization.
+    Returns transcript with Recruiter:/Candidate: labels.
+    Returns None if diarization data not available.
+    """
+    import requests
+
+    api_key = config.DEEPGRAM_API_KEY
+    if not api_key:
+        return None
+
+    url = "https://api.deepgram.com/v1/listen"
+    params = {
+        "model": "nova-2",
+        "smart_format": "true",
+        "punctuate": "true",
+        "diarize": "true",
+        "language": "en",
+    }
+    headers = {
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "application/octet-stream",
+    }
+
+    try:
+        with open(file_path, "rb") as f:
+            response = requests.post(url, params=params, headers=headers, data=f, timeout=120)
+
+        if response.status_code != 200:
+            logger.warning(f"[diarized] Deepgram API error {response.status_code}")
+            return None
+
+        result = response.json()
+        channels = result.get("results", {}).get("channels", [])
+        if not channels:
+            return None
+
+        alternatives = channels[0].get("alternatives", [])
+        if not alternatives:
+            return None
+
+        words = alternatives[0].get("words", [])
+        if not words or len(words) < 5:
+            return None
+
+        # Group words by speaker first, then determine roles
+        all_speakers = set(w.get("speaker", 0) for w in words)
+
+        # Build raw speaker segments
+        raw_lines = []  # [(speaker_id, text), ...]
+        current_speaker_id = None
+        current_words = []
+
+        for word_info in words:
+            speaker_id = word_info.get("speaker", 0)
+            word_text = word_info.get("punctuated_word", word_info.get("word", ""))
+
+            if speaker_id != current_speaker_id:
+                if current_words and current_speaker_id is not None:
+                    raw_lines.append((current_speaker_id, " ".join(current_words)))
+                current_speaker_id = speaker_id
+                current_words = [word_text]
+            else:
+                current_words.append(word_text)
+
+        if current_words and current_speaker_id is not None:
+            raw_lines.append((current_speaker_id, " ".join(current_words)))
+
+        # Determine roles: Recruiter asks questions (more "?"), Candidate gives answers
+        question_count = {}
+        for speaker_id, text in raw_lines:
+            question_count[speaker_id] = question_count.get(speaker_id, 0) + text.count("?")
+
+        # Speaker with more question marks = Recruiter
+        speaker_role_map = {}
+        if len(all_speakers) >= 2:
+            sorted_by_questions = sorted(all_speakers, key=lambda s: question_count.get(s, 0), reverse=True)
+            speaker_role_map[sorted_by_questions[0]] = "Recruiter"
+            for spk in sorted_by_questions[1:]:
+                speaker_role_map[spk] = "Candidate"
+        elif len(all_speakers) == 1:
+            speaker_role_map[list(all_speakers)[0]] = "Speaker"
+
+        logger.info(f"[diarized] Speaker roles: {speaker_role_map}, questions per speaker: {question_count}")
+
+        # Build labeled transcript
+        lines = []
+        for speaker_id, text in raw_lines:
+            role = speaker_role_map.get(speaker_id, "Speaker")
+            lines.append(f"{role}: {text}")
+
+        if not lines:
+            return None
+
+        labeled_transcript = "\n".join(lines)
+        logger.info(f"[diarized] Deepgram diarized transcript: {len(lines)} speaker turns, {len(labeled_transcript)} chars")
+        return labeled_transcript
+
+    except Exception as e:
+        logger.warning(f"[diarized] Deepgram diarization failed: {e}")
+        return None
+
+
 def _transcribe_with_groq(file_path: str) -> str:
     """
     Transcribe using Groq Whisper API.
