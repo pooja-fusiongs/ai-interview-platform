@@ -344,18 +344,10 @@ const VideoInterviewScheduler: React.FC = () => {
         rawCandidates = response.data.candidates;
       }
       const normalizedCandidates = rawCandidates.map(normalizeCandidate).filter(c => c.id);
-      if (normalizedCandidates.length === 0 && allCandidates.length > 0) {
-        setCandidates(allCandidates);
-      } else {
-        setCandidates(normalizedCandidates);
-      }
+      setCandidates(normalizedCandidates);
     } catch (err: any) {
       console.error('Failed to load candidates by job:', err?.response?.data || err?.message || err);
-      if (allCandidates.length > 0) {
-        setCandidates(allCandidates);
-      } else {
-        setCandidates([]);
-      }
+      setCandidates([]);
     } finally {
       setLoadingCandidates(false);
     }
@@ -1027,11 +1019,14 @@ const VideoInterviewScheduler: React.FC = () => {
                         setTouched((prev) => ({ ...prev, job: true }));
                       }}
                       onBlur={() => setTouched((prev) => ({ ...prev, job: true }))}
+                      getOptionDisabled={(option) => ['closed', 'cancelled'].includes((option.status || '').toLowerCase())}
                       getOptionLabel={(option) => {
                         if (!option) return '';
                         const title = option.title || 'Untitled';
                         const company = option.company;
-                        return company ? `${title} - ${company}` : title;
+                        const isClosed = ['closed', 'cancelled'].includes((option.status || '').toLowerCase());
+                        const label = company ? `${title} - ${company}` : title;
+                        return isClosed ? `${label} (Closed)` : label;
                       }}
                       loading={loadingJobs}
                       isOptionEqualToValue={(option, value) => option?.id === value?.id}
@@ -1055,20 +1050,24 @@ const VideoInterviewScheduler: React.FC = () => {
                           }}
                         />
                       )}
-                      renderOption={(props, option) => (
-                        <Box component="li" {...props} key={option.id} sx={{ padding: '10px 14px !important' }}>
-                          <Box>
-                            <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>
-                              {option.title || 'Untitled Job'}
-                            </Typography>
-                            {option.company && (
-                              <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
-                                {option.company}
+                      renderOption={(props, option) => {
+                        const isClosed = ['closed', 'cancelled'].includes((option.status || '').toLowerCase());
+                        return (
+                          <Box component="li" {...props} key={option.id} sx={{ padding: '10px 14px !important', background: isClosed ? '#fef2f2 !important' : 'transparent', opacity: '1 !important' }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography sx={{ fontSize: '14px', fontWeight: 500, color: isClosed ? '#1e293b' : '#1e293b' }}>
+                                {option.title || 'Untitled Job'}
+                                {isClosed && <span style={{ color: '#dc2626', fontSize: '13px', fontWeight: 700, marginLeft: 8, background: '#fecaca', padding: '2px 8px', borderRadius: '4px' }}>Closed</span>}
                               </Typography>
-                            )}
+                              {option.company && (
+                                <Typography sx={{ fontSize: '12px', color: '#64748b' }}>
+                                  {option.company}
+                                </Typography>
+                              )}
+                            </Box>
                           </Box>
-                        </Box>
-                      )}
+                        );
+                      }}
                     />
                   </Box>
 

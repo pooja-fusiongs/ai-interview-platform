@@ -102,6 +102,9 @@ const Candidates = () => {
   })
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({})
 
+  // Delete confirmation dialog state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; candidate: Candidate | null; action?: string }>({ open: false, candidate: null })
+
   // Fetch candidates from API
   const fetchCandidates = async () => {
     try {
@@ -354,12 +357,14 @@ const Candidates = () => {
     }
   }
 
-  const handleDeleteCandidate = async (candidate: Candidate) => {
-    if (!window.confirm(`Are you sure you want to delete "${candidate.name}"?`)) return
+  const handleDeleteCandidate = async (candidate?: Candidate) => {
+    const target = candidate || deleteConfirm.candidate
+    if (!target) return
+    setDeleteConfirm({ open: false, candidate: null })
     try {
-      await apiClient.delete(`/api/candidates/${candidate.id}`)
+      await apiClient.delete(`/api/candidates/${target.id}`)
       toast.success('Candidate deleted')
-      setCandidates(prev => prev.filter(c => c.id !== candidate.id))
+      setCandidates(prev => prev.filter(c => c.id !== target.id))
     } catch (error) {
       console.error('Error deleting candidate:', error)
       toast.error('Failed to delete candidate')
@@ -774,9 +779,7 @@ const Candidates = () => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const action = candidate.is_active === false ? 'activate' : 'deactivate';
-                                if (window.confirm(`Are you sure you want to ${action} "${candidate.name}"?\n\n${action === 'deactivate' ? 'Inactive candidates will not appear in Similar Candidates.' : 'This candidate will appear in Similar Candidates again.'}`)) {
-                                  handleToggleStatus(candidate);
-                                }
+                                setDeleteConfirm({ open: true, candidate, action });
                               }}
                               sx={{
                                 color: candidate.is_active === false ? 'red' : '#059669',
@@ -801,7 +804,7 @@ const Candidates = () => {
                           <Tooltip title="Delete Candidate">
                             <IconButton
                               size="small"
-                              onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(candidate) }}
+                              onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, candidate }) }}
                               sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626', background: 'rgba(220,38,38,0.06)' } }}
                             >
                               <i className="fas fa-trash-alt" style={{ fontSize: '12px' }}></i>
@@ -894,7 +897,7 @@ const Candidates = () => {
                     </IconButton>
                     <IconButton
                       size="small"
-                      onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(candidate) }}
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, candidate }) }}
                       sx={{ color: '#94a3b8', p: 0.5 }}
                     >
                       <i className="fas fa-trash-alt" style={{ fontSize: '11px' }}></i>
@@ -2055,6 +2058,75 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               {addSubmitting ? <><CircularProgress size={16} sx={{ mr: 1, color: 'white' }} /> Adding...</> : <>Add Candidate <i className="fas fa-arrow-right" style={{ marginLeft: 8, fontSize: 12 }} /></>}
             </Button>
           </DialogActions>
+        </Dialog>
+
+        {/* Delete / Toggle Confirmation Dialog */}
+        <Dialog
+          open={deleteConfirm.open}
+          onClose={() => setDeleteConfirm({ open: false, candidate: null })}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: '16px', overflow: 'hidden' } }}
+        >
+          <Box sx={{ textAlign: 'center', p: 4 }}>
+            <Box sx={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: deleteConfirm.action ? '#fffbeb' : '#fef2f2',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <i className={deleteConfirm.action ? 'fas fa-toggle-on' : 'fas fa-trash-alt'}
+                style={{ fontSize: 22, color: deleteConfirm.action ? '#d97706' : '#dc2626' }}></i>
+            </Box>
+            <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', mb: 1 }}>
+              {deleteConfirm.action
+                ? `${deleteConfirm.action === 'activate' ? 'Activate' : 'Deactivate'} Candidate`
+                : 'Delete Candidate'}
+            </Typography>
+            <Typography sx={{ fontSize: '14px', color: '#64748b', mb: 3, lineHeight: 1.6 }}>
+              {deleteConfirm.action
+                ? <>Are you sure you want to {deleteConfirm.action} <strong>{deleteConfirm.candidate?.name}</strong>?
+                  {deleteConfirm.action === 'deactivate'
+                    ? ' Inactive candidates will not appear in Similar Candidates.'
+                    : ' This candidate will appear in Similar Candidates again.'}</>
+                : <>Are you sure you want to delete <strong>{deleteConfirm.candidate?.name}</strong>? This action cannot be undone.</>}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center' }}>
+              <Button
+                onClick={() => setDeleteConfirm({ open: false, candidate: null })}
+                variant="outlined"
+                sx={{
+                  textTransform: 'none', fontWeight: 600, borderRadius: '10px',
+                  px: 3, borderColor: '#e2e8f0', color: '#64748b',
+                  '&:hover': { borderColor: '#cbd5e1', background: '#f8fafc' }
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (deleteConfirm.action && deleteConfirm.candidate) {
+                    handleToggleStatus(deleteConfirm.candidate);
+                    setDeleteConfirm({ open: false, candidate: null });
+                  } else {
+                    handleDeleteCandidate();
+                  }
+                }}
+                variant="contained"
+                sx={{
+                  textTransform: 'none', fontWeight: 600, borderRadius: '10px',
+                  px: 3,
+                  background: deleteConfirm.action ? '#d97706' : '#dc2626',
+                  boxShadow: 'none',
+                  '&:hover': { background: deleteConfirm.action ? '#b45309' : '#b91c1c', boxShadow: 'none' }
+                }}
+              >
+                {deleteConfirm.action
+                  ? (deleteConfirm.action === 'activate' ? 'Activate' : 'Deactivate')
+                  : 'Delete'}
+              </Button>
+            </Box>
+          </Box>
         </Dialog>
       </Box>
     </Navigation>

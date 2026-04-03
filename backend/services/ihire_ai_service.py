@@ -209,10 +209,19 @@ Return strict JSON:
             for p in transcript_qa_seed
         ] if has_transcript else []
 
+        performed = result.get("performed_well", []) if has_transcript else []
+        improvements = result.get("areas_to_improve", []) if has_transcript else []
+
+        # Ensure report card is never completely empty when transcript exists
+        if has_transcript and not performed:
+            performed = ["No notable strengths identified from the interview"]
+        if has_transcript and not improvements:
+            improvements = ["No specific areas for improvement identified"]
+
         return {
             "scores": result.get("scores", score_breakdown),
-            "performed_well": result.get("performed_well", []) if has_transcript else [],
-            "areas_to_improve": result.get("areas_to_improve", []) if has_transcript else [],
+            "performed_well": performed,
+            "areas_to_improve": improvements,
             "transcript_qa": result.get("transcript_qa", fallback_qa) if has_transcript else [],
         }
     except Exception as e:
@@ -222,10 +231,24 @@ Return strict JSON:
             for p in transcript_qa_seed
         ] if has_transcript else []
 
+        # Generate basic fallback from scores
+        fallback_strengths = []
+        fallback_improvements = []
+        for s in score_breakdown:
+            if s.get("score") is not None:
+                if s["score"] >= 7:
+                    fallback_strengths.append(f"Good {s['label']}: {s['score']}/10")
+                elif s["score"] <= 4:
+                    fallback_improvements.append(f"Needs improvement in {s['label']}: {s['score']}/10")
+        if not fallback_strengths:
+            fallback_strengths = ["No notable strengths identified from the interview"]
+        if not fallback_improvements:
+            fallback_improvements = ["Review transcript for detailed assessment"]
+
         return {
             "scores": score_breakdown,
-            "performed_well": [],
-            "areas_to_improve": [],
+            "performed_well": fallback_strengths if has_transcript else [],
+            "areas_to_improve": fallback_improvements if has_transcript else [],
             "transcript_qa": fallback_qa,
         }
 

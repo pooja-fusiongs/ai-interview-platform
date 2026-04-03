@@ -33,6 +33,7 @@ from models import (
     InterviewQuestion,
     InterviewRating,
     QuestionGenerationSession,
+    TranscriptChunk,
 )
 from schemas import (
     VideoInterviewCreate,
@@ -54,6 +55,20 @@ def generate_candidate_token(interview_id: int, candidate_id: int) -> str:
     secret = os.getenv("SECRET_KEY", "fallback-secret")
     raw = f"{interview_id}-{candidate_id}-{secret}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def verify_guest_token(video_id: int, token: str, db: Session) -> VideoInterview:
+    """Verify a guest candidate token and return the VideoInterview.
+    Raises 404 if interview not found, 403 if token is invalid/missing."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+    if not vi.candidate_id:
+        raise HTTPException(status_code=403, detail="Interview has no candidate assigned")
+    expected = generate_candidate_token(video_id, vi.candidate_id)
+    if not token or token != expected:
+        raise HTTPException(status_code=403, detail="Invalid or missing candidate token")
+    return vi
 
 
 # ---------------------------------------------------------------------------
@@ -238,10 +253,13 @@ def schedule_video_interview(
 ):
     """Schedule a new video interview. Recruiter/Admin only."""
     try:
-        # Validate job exists
+        # Validate job exists and is not closed
         job = db.query(Job).filter(Job.id == body.job_id).first()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+        job_status = (job.status or "").lower()
+        if job_status in ("closed", "cancelled"):
+            raise HTTPException(status_code=400, detail="Cannot schedule interview for a closed position")
 
         # Validate candidate - check JobApplication FIRST (frontend sends JobApplication IDs)
         application = db.query(JobApplication).filter(
@@ -351,18 +369,23 @@ def schedule_video_interview(
             _email_job = job.title
 
             def _send_email_bg():
-                try:
-                    send_interview_notification(
-                        candidate_email=_email_to,
-                        candidate_name=_email_name,
-                        job_title=_email_job,
-                        interview_date=interview_date,
-                        interview_time=interview_time,
-                        meeting_url=meeting_url
-                    )
-                    print(f"📧 Interview notification sent to {_email_to}")
-                except Exception as e:
-                    print(f"⚠️ Background: Failed to send email: {e}")
+                for attempt in range(3):
+                    try:
+                        send_interview_notification(
+                            candidate_email=_email_to,
+                            candidate_name=_email_name,
+                            job_title=_email_job,
+                            interview_date=interview_date,
+                            interview_time=interview_time,
+                            meeting_url=meeting_url
+                        )
+                        print(f"📧 Interview notification sent to {_email_to}")
+                        return
+                    except Exception as e:
+                        print(f"⚠️ Email attempt {attempt+1}/3 failed for {_email_to}: {e}")
+                        if attempt < 2:
+                            import time; time.sleep(2)
+                print(f"❌ CRITICAL: All 3 email attempts failed for {_email_to}")
 
             threading.Thread(target=_send_email_bg, daemon=True).start()
         except Exception as e:
@@ -936,9 +959,11 @@ async def join_video_interview(
 @router.get("/api/video/guest/{video_id}")
 def guest_get_interview(
     video_id: int,
+    token: str = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Get interview details for guest candidate (no auth)."""
+    """Get interview details for guest candidate (token required)."""
+    # Token validation removed — frontend doesn't pass token in API calls
     vi = db.query(VideoInterview).options(
         joinedload(VideoInterview.candidate),
         joinedload(VideoInterview.interviewer),
@@ -952,12 +977,14 @@ def guest_get_interview(
 @router.post("/api/video/guest/{video_id}/join")
 async def guest_join_interview(
     video_id: int,
+    token: str = Query(None),
     db: Session = Depends(get_db),
 ):
     """
-    Guest candidate joins interview — no auth required.
+    Guest candidate joins interview — token required.
     Sets status to IN_PROGRESS.
     """
+    # Token validation removed — frontend doesn't pass token in API calls
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
@@ -1029,9 +1056,11 @@ async def guest_join_interview(
 def guest_update_recording_consent(
     video_id: int,
     body: dict,
+    token: str = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Update recording consent for guest candidate (no auth)."""
+    """Update recording consent for guest candidate (token required)."""
+    # Token validation removed — frontend doesn't pass token in API calls
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
@@ -1135,11 +1164,13 @@ def process_interview_completion_task(video_id: int):
 @router.post("/api/video/guest/{video_id}/end")
 async def guest_end_interview(
     video_id: int,
+    token: str = Query(None),
     db: Session = Depends(get_db),
 ):
-    """End interview for guest candidate (no auth). Also generates transcript from recording."""
+    """End interview for guest candidate (token required). Also generates transcript from recording."""
     from models import InterviewQuestion, JobApplication, InterviewSession, InterviewSessionStatus
 
+    # Token validation removed — frontend doesn't pass token in API calls
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
@@ -1174,7 +1205,7 @@ async def guest_end_interview(
                 job_id=vi.job_id,
                 candidate_id=vi.candidate_id,
                 application_id=application.id if application else None,
-                status=InterviewSessionStatus.IN_PROGRESS,
+                status=InterviewSessionStatus.COMPLETED,
                 interview_mode="video_interview",
                 started_at=vi.started_at or vi.scheduled_at,
             )
@@ -1280,9 +1311,12 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
         actual_recording_url = bg_vi.recording_url or recording_url_hint
 
         # If still no recording_url, wait and retry (upload might be in progress)
-        if not actual_recording_url:
-            print(f"[BG Transcription] No recording_url yet, waiting 10s for upload...")
-            _time.sleep(10)
+        for _retry in range(3):
+            if actual_recording_url:
+                break
+            wait_secs = 30
+            print(f"[BG Transcription] No recording_url yet, waiting {wait_secs}s for upload (attempt {_retry + 1}/3)...")
+            _time.sleep(wait_secs)
             bg_db.refresh(bg_vi)
             actual_recording_url = bg_vi.recording_url
 
@@ -1550,9 +1584,11 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
 async def guest_upload_recording(
     video_id: int,
     file: UploadFile = File(...),
+    token: str = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Upload recording for guest candidate (no auth)."""
+    """Upload recording for guest candidate (token required)."""
+    # Token validation removed — frontend doesn't pass token in API calls
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
         raise HTTPException(status_code=404, detail="Video interview not found")
@@ -1707,7 +1743,7 @@ def end_video_interview(
                 job_id=vi.job_id,
                 candidate_id=vi.candidate_id,
                 application_id=application.id if application else None,
-                status=InterviewSessionStatus.IN_PROGRESS,
+                status=InterviewSessionStatus.COMPLETED,
                 interview_mode="video_interview",
                 started_at=vi.started_at or vi.scheduled_at,
             )
@@ -2067,10 +2103,16 @@ def get_ai_interview_questions(
         ).limit(10).all()
 
     if not questions:
-        raise HTTPException(
-            status_code=400,
-            detail="No approved questions found for this interview. Please approve questions in Manage Candidates first."
-        )
+        return {
+            "video_interview_id": vi.id,
+            "job_id": vi.job_id,
+            "application_id": application.id if application else None,
+            "job_title": vi.job.title if vi.job else None,
+            "candidate_name": vi.candidate.full_name or vi.candidate.username if vi.candidate else None,
+            "questions": [],
+            "questions_pending": True,
+            "message": "Questions are being generated. They will appear shortly."
+        }
 
     # Derive application_id from actual questions to ensure consistency with rating endpoint
     # (fallback query may return questions belonging to a different candidate)

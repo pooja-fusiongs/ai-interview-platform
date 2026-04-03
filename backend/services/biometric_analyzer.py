@@ -438,28 +438,26 @@ def analyze_body_movement(video_path: str) -> Dict[str, Any]:
 # =====================================================================
 
 def _generate_flags(voice_score: float, lip_score: float, body_score: float):
+    """Generate flags — names consistent with live event flags."""
     flags = []
     if voice_score < 0.75:
         flags.append({
-            "flag_type": "voice_inconsistency",
-            "severity": "high" if voice_score < 0.65 else "medium",
-            "timestamp_seconds": round(random.uniform(60, 1800), 1),
+            "flag_type": "low_voice_consistency",
+            "severity": "high" if voice_score < 0.5 else "medium",
             "description": "Voice pattern shift detected - possible speaker change",
             "confidence": round(1.0 - voice_score, 3),
         })
     if lip_score < 0.75:
         flags.append({
-            "flag_type": "lip_sync_mismatch",
-            "severity": "high" if lip_score < 0.65 else "medium",
-            "timestamp_seconds": round(random.uniform(120, 2400), 1),
+            "flag_type": "low_lip_sync",
+            "severity": "high" if lip_score < 0.5 else "medium",
             "description": "Lip movement does not match audio stream",
             "confidence": round(1.0 - lip_score, 3),
         })
     if body_score < 0.75:
         flags.append({
-            "flag_type": "unusual_movement",
-            "severity": "medium" if body_score >= 0.65 else "high",
-            "timestamp_seconds": round(random.uniform(180, 3000), 1),
+            "flag_type": "excessive_movement",
+            "severity": "high" if body_score < 0.5 else "medium",
             "description": "Unusual body movement or frequent off-screen glances",
             "confidence": round(1.0 - body_score, 3),
         })

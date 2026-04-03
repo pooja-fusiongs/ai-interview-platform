@@ -1502,8 +1502,10 @@ def get_candidate_interviews(
         
         result = []
         for app in applications:
-            # Find matching session
-            session = next((s for s in sessions if s.job_id == app.job_id), None)
+            # Find matching session — match by job_id, or fall back to candidate_id when job_id is NULL
+            session = next((s for s in sessions if s.job_id is not None and s.job_id == app.job_id), None)
+            if session is None:
+                session = next((s for s in sessions if s.job_id is None and s.candidate_id == candidate_id), None)
             
             result.append({
                 "job_id": app.job_id,
@@ -2050,34 +2052,12 @@ def generate_score_for_candidate(
     if not transcript and session and session.transcript_text:
         transcript = session.transcript_text
     
-    # If no transcript found, generate a default score instead of error
+    # If no transcript found, return error — don't generate fake score
     if not transcript:
-        # Create session if it doesn't exist
-        if not session:
-            session = InterviewSession(
-                job_id=request.job_id,
-                candidate_id=candidate_id,
-                status=InterviewSessionStatus.IN_PROGRESS,
-                interview_mode="recruiter_driven"
-            )
-            db.add(session)
-            db.flush()
-        
-        # Generate default score for candidates without transcript
-        default_score = 75.0  # Default score when no transcript
-        session.overall_score = default_score
-        session.status = InterviewSessionStatus.SCORED
-        candidate.score = default_score
-        candidate.has_transcript = False  # Mark as no transcript
-        
-        db.commit()
-        
-        return {
-            "success": True, 
-            "message": "Default score generated (no transcript uploaded)", 
-            "score": default_score,
-            "has_transcript": False
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="No transcript available. Please upload a transcript or complete a video interview first before generating a score."
+        )
     
     # If transcript exists, ensure session exists for scoring logic
     if not session:

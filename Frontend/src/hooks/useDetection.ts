@@ -178,6 +178,11 @@ export function useDetection({
   const faceDetectorRef = useRef<any>(null);
   const multiFaceCountRef = useRef(0); // Updated by FaceDetection (supports multiple faces)
   const internalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Liveness detection — track face landmark movement between frames
+  const prevNoseRef = useRef<{ x: number; y: number } | null>(null);
+  const staticFrameCountRef = useRef(0);
+  const STATIC_THRESHOLD = 0.002; // Minimum nose movement to count as "alive"
+  const STATIC_FRAMES_LIMIT = 10; // After 10 static frames (~10s), treat as not a real face
   
   // Audio Trackers
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -249,6 +254,8 @@ export function useDetection({
       pitch_shift_count: 0,
       max_pitch_deviation: 0,
       inconsistent_seconds: 0,
+      looking_away_count: 0,
+      looking_away_seconds: 0,
       movement_score: 'CALM',
       movement_intensity: 0,
     };
@@ -366,16 +373,38 @@ export function useDetection({
 
       // --- FACE PROCESSING ---
       // Holistic gives 0 or 1 face. Use FaceDetection model for accurate multi-face count.
-      const hasFace = !!results.faceLandmarks && results.faceLandmarks.length > 0;
-      // Use multi-face detector count if available (supports 0, 1, 2+ faces), fallback to holistic
-      const faceCountCurrent = multiFaceCountRef.current > 0 ? multiFaceCountRef.current : (hasFace ? 1 : 0);
+      const rawHasFace = !!results.faceLandmarks && results.faceLandmarks.length > 0;
+
+      // Liveness check — detect if face is static (avatar/image/icon)
+      let isLiveFace = rawHasFace;
+      if (rawHasFace && results.faceLandmarks && results.faceLandmarks.length > 1) {
+        const nose = results.faceLandmarks[1]; // nose tip
+        if (prevNoseRef.current) {
+          const dx = Math.abs(nose.x - prevNoseRef.current.x);
+          const dy = Math.abs(nose.y - prevNoseRef.current.y);
+          const movement = dx + dy;
+          if (movement < STATIC_THRESHOLD) {
+            staticFrameCountRef.current += 1;
+          } else {
+            staticFrameCountRef.current = 0; // Reset — face is moving
+          }
+          // If face hasn't moved for too many frames, it's likely a static image/avatar
+          if (staticFrameCountRef.current >= STATIC_FRAMES_LIMIT) {
+            isLiveFace = false;
+          }
+        }
+        prevNoseRef.current = { x: nose.x, y: nose.y };
+      } else {
+        prevNoseRef.current = null;
+        staticFrameCountRef.current = 0;
+      }
+
+      const hasFace = isLiveFace;
+      // Use multi-face detector count if available, but apply liveness filter
+      let faceCountCurrent = multiFaceCountRef.current > 0 ? multiFaceCountRef.current : (hasFace ? 1 : 0);
+      if (!isLiveFace && faceCountCurrent === 1) faceCountCurrent = 0; // Static face = no real face
       setFaceCount(faceCountCurrent);
       w.total_detections += 1;
-
-      // Debug: log face landmark status every 10th frame
-      if (w.total_detections % 10 === 1) {
-        console.log(`[FaceDetection] Frame #${w.total_detections}: hasFace=${hasFace}, landmarks=${results.faceLandmarks?.length ?? 0}, pose=${!!results.poseLandmarks}`);
-      }
 
       if (faceCountCurrent === 0) {
         w.no_face_count += 1;
@@ -405,7 +434,7 @@ export function useDetection({
 
       // --- LIP SYNC ---
       w.total_frames += 1;
-      if (!hasFace) {
+      if (!hasFace || !rawHasFace) {
         w.no_face_frames += 1;
         setLipMoving(false);
       } else {
@@ -581,9 +610,38 @@ export function useDetection({
 
       setStatus('running');
 
+      // Canvas for black frame detection
+      const checkCanvas = document.createElement('canvas');
+      const checkCtx = checkCanvas.getContext('2d', { willReadFrequently: true });
+
       internalIntervalRef.current = setInterval(async () => {
         if (!holisticRef.current || !videoElement || isProcessing) return;
         if (videoElement.readyState < 2 || videoElement.videoWidth === 0) return;
+
+        // Black frame detection — if video is mostly black (camera off), skip ML and report no face
+        if (checkCtx) {
+          checkCanvas.width = 32;
+          checkCanvas.height = 32;
+          checkCtx.drawImage(videoElement, 0, 0, 32, 32);
+          const pixels = checkCtx.getImageData(0, 0, 32, 32).data;
+          let brightness = 0;
+          for (let i = 0; i < pixels.length; i += 16) { // Sample every 4th pixel
+            brightness += pixels[i] + pixels[i + 1] + pixels[i + 2];
+          }
+          brightness /= (pixels.length / 16) * 3;
+          if (brightness < 10) { // Nearly black frame — camera is off
+            setFaceCount(0);
+            multiFaceCountRef.current = 0;
+            const w = windowStatsRef.current;
+            w.total_detections += 1;
+            w.no_face_count += 1;
+            w.no_face_seconds += intervalMs / 1000;
+            w.total_frames += 1;
+            w.no_face_frames += 1;
+            flagsRef.current.left_frame = true;
+            return;
+          }
+        }
 
         isProcessing = true;
         try {

@@ -159,8 +159,8 @@ const Jobs = () => {
             return job.skills_required ? job.skills_required.split(',').map((skill:any) => skill.trim()) : [];
           }
         })(),
-        responsibilities: ['Develop and maintain applications', 'Collaborate with team', 'Write clean code'],
-        benefits: ['Health insurance', 'Flexible hours', 'Remote work'],
+        responsibilities: [],
+        benefits: [],
         icon: getJobIcon(job.department || 'Engineering'),
         color: getJobColor(job.department || 'Engineering'),
         // Add API field mappings for jobDetails component - BOTH formats for compatibility
@@ -176,10 +176,9 @@ const Jobs = () => {
       setAllJobs(apiJobs)
       setFilteredJobs(apiJobs) // Initially show all jobs
     } catch (error) {
-      console.error('❌ Error loading jobs from API:', error)
-      const staticJobs = jobs
-      setAllJobs(staticJobs)
-      setFilteredJobs(staticJobs)
+      console.error('Error loading jobs:', error)
+      setAllJobs([])
+      setFilteredJobs([])
     } finally {
       setJobsLoading(false)
     }

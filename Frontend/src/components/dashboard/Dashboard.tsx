@@ -18,6 +18,7 @@ import Navigation from '../layout/Sidebar'
 import { jobService } from '../../services/jobService'
 import { videoInterviewService } from '../../services/videoInterviewService'
 import { questionGenerationService } from '../../services/questionGenerationService'
+import { apiClient } from '../../services/api'
 
 
 interface Job {
@@ -71,10 +72,11 @@ const Dashboard = () => {
     setLoading(true)
     try {
       // Fetch all data in parallel (with limits for performance)
-      const [jobsData, interviewsData, questionSetsData] = await Promise.allSettled([
+      const [jobsData, interviewsData, questionSetsData, candidatesData] = await Promise.allSettled([
         jobService.getJobs({ limit: 50 }),
         videoInterviewService.getInterviews(),
-        questionGenerationService.getQuestionSets()
+        questionGenerationService.getQuestionSets(),
+        apiClient.get('/api/candidates?limit=1')
       ])
 
       // Process jobs data
@@ -85,12 +87,19 @@ const Dashboard = () => {
 
         const activeJobsCount = jobs.filter((j: Job) => ['active', 'open'].includes(j.status?.toLowerCase())).length
         const closedJobsCount = jobs.filter((j: Job) => j.status === 'Closed' || j.status === 'closed').length
-        const totalApplicants = jobs.reduce((sum: number, j: Job) => sum + (j.application_count || 0), 0)
+        // Get unique candidate count from API (deduplicated by email)
+        let uniqueCandidateCount = 0
+        if (candidatesData.status === 'fulfilled') {
+          uniqueCandidateCount = candidatesData.value?.data?.total || candidatesData.value?.data?.data?.length || 0
+        }
+        if (!uniqueCandidateCount) {
+          uniqueCandidateCount = jobs.reduce((sum: number, j: Job) => sum + (j.application_count || 0), 0)
+        }
 
         setStats(prev => ({
           ...prev,
           activeJobs: activeJobsCount || jobs.length,
-          totalCandidates: totalApplicants,
+          totalCandidates: uniqueCandidateCount,
           closedJobs: closedJobsCount
         }))
       }
@@ -110,9 +119,13 @@ const Dashboard = () => {
           .slice(0, 5)
         setUpcomingInterviews(upcoming)
 
+        const scheduledCount = interviews.filter((i: Interview) =>
+          i.status?.toLowerCase() === 'scheduled'
+        ).length
+
         setStats(prev => ({
           ...prev,
-          scheduledInterviews: interviews.length
+          scheduledInterviews: scheduledCount
         }))
       }
 
@@ -121,13 +134,12 @@ const Dashboard = () => {
         const questionSets = questionSetsData.value?.data || []
         setRecentQuestionSets(Array.isArray(questionSets) ? questionSets.slice(0, 3) : [])
 
-        const totalQuestions = Array.isArray(questionSets)
-          ? questionSets.reduce((sum: number, qs: QuestionSet) => sum + (qs.total_questions || 0), 0)
-          : 0
+        // Count unique candidates with generated questions (not total question count)
+        const candidatesWithQuestions = Array.isArray(questionSets) ? questionSets.length : 0
 
         setStats(prev => ({
           ...prev,
-          aiQuestions: totalQuestions
+          aiQuestions: candidatesWithQuestions
         }))
       }
 
@@ -172,7 +184,7 @@ const Dashboard = () => {
     { title: 'Active Jobs', value: stats.activeJobs, icon: 'fas fa-briefcase', color: 'blue', change: 'Total active' },
     { title: 'Total Candidates', value: stats.totalCandidates, icon: 'fas fa-users', color: 'green', change: 'Applicants' },
     { title: 'Interviews Scheduled', value: stats.scheduledInterviews, icon: 'fas fa-calendar', color: 'orange', change: 'Upcoming' },
-    { title: 'AI Questions Generated', value: stats.aiQuestions, icon: 'fas fa-robot', color: 'purple', change: 'Total generated' },
+    { title: 'AI Questions Generated', value: stats.aiQuestions, icon: 'fas fa-robot', color: 'purple', change: 'Candidates assessed' },
     { title: 'Closed Positions', value: stats.closedJobs, icon: 'fas fa-archive', color: 'red', change: 'Archived' }
   ]
 

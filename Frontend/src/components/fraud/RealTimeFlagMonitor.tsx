@@ -117,9 +117,10 @@ const RealTimeFlagMonitor: React.FC = () => {
         const flags = parseFlags(a.flags, a.candidate_name || 'Unknown');
         const isLive = a.interview_status === 'in_progress' || a.interview_status === 'waiting';
         let status: 'live' | 'flagged' | 'completed';
+        const trustPct = Math.round((a.overall_trust_score || 0) * 100);
         if (isLive) {
           status = 'live';
-        } else if ((a.flag_count || 0) > 0) {
+        } else if ((a.flag_count || 0) > 0 || trustPct < 60) {
           status = 'flagged';
         } else {
           status = 'completed';
@@ -134,7 +135,7 @@ const RealTimeFlagMonitor: React.FC = () => {
           voiceScore: Math.round((a.voice_consistency_score || 0) * 100),
           lipSyncScore: Math.round((a.lip_sync_score || 0) * 100),
           bodyScore: Math.round((a.body_movement_score || 0) * 100),
-          faceDetectionScore: a.face_detection_score != null ? Math.round(a.face_detection_score * 100) : 0,
+          faceDetectionScore: a.face_detection_score != null ? Math.round(a.face_detection_score * 100) : null,
           analyzedAt: a.analyzed_at,
           interviewStatus: a.interview_status || '',
         };
@@ -210,7 +211,28 @@ const RealTimeFlagMonitor: React.FC = () => {
     return filteredSessions.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredSessions, page]); 
 
-  const ScoreBar = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => {
+  const ScoreBar = ({ label, value, icon }: { label: string; value: number | null; icon: React.ReactNode }) => {
+    if (value === null) {
+      return (
+        <Box sx={{ mb: '12px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '6px' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Box sx={{ color: '#94a3b8', display: 'flex', alignItems: 'center' }}>{icon}</Box>
+              <Typography sx={{ fontSize: '13px', color: '#94a3b8', fontWeight: 500 }}>{label}</Typography>
+            </Box>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>N/A</Typography>
+          </Box>
+          <LinearProgress
+            variant="determinate"
+            value={0}
+            sx={{
+              height: 8, borderRadius: 4, backgroundColor: '#e5e7eb',
+              '& .MuiLinearProgress-bar': { backgroundColor: '#e5e7eb' },
+            }}
+          />
+        </Box>
+      );
+    }
     const scoreColor = getScoreColor(value);
     return (
       <Box sx={{ mb: '12px' }}>

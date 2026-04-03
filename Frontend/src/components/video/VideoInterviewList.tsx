@@ -9,6 +9,7 @@ import { Visibility, PlayArrow, Cancel, Search, FilterList, Close, Refresh } fro
 import { useNavigate } from 'react-router-dom';
 import Navigation from '../layout/Sidebar';
 import videoInterviewService from '../../services/videoInterviewService';
+import { apiClient } from '../../services/api';
 
 
 const getStatusColor = (status: string): 'primary' | 'warning' | 'success' | 'error' | 'default' => {
@@ -45,12 +46,15 @@ const VideoInterviewList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [jobFilter, setJobFilter] = useState('all');
 
+  // All jobs for filter dropdown
+  const [allJobTitles, setAllJobTitles] = useState<string[]>([]);
+
   // Filter popover state
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLButtonElement | null>(null);
   const filterOpen = Boolean(filterAnchorEl);
 
-  // Get unique job titles for filter dropdown
-  const uniqueJobTitles = [...new Set(interviews.map(i => i.job_title).filter(Boolean))];
+  // Get unique job titles — combine from all jobs API + interviews
+  const uniqueJobTitles = [...new Set([...allJobTitles, ...interviews.map(i => i.job_title).filter(Boolean)])];
 
   // Count active filters
   const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (jobFilter !== 'all' ? 1 : 0);
@@ -70,6 +74,11 @@ const VideoInterviewList: React.FC = () => {
 
   useEffect(() => {
     fetchInterviews();
+    // Fetch all job titles for filter dropdown
+    apiClient.get('/api/jobs').then(res => {
+      const titles = (res.data || []).map((j: any) => j.title).filter(Boolean);
+      setAllJobTitles(titles);
+    }).catch(() => {});
   }, []);
 
   const handleCancel = async (id: number) => {

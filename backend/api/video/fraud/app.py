@@ -10,7 +10,7 @@ Provides endpoints for:
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func as sql_func
+from sqlalchemy import func as sql_func, or_
 from typing import List, Optional
 from datetime import datetime
 import json
@@ -38,9 +38,7 @@ def _get_run_real_analysis():
     from services.biometric_analyzer import run_real_analysis
     return run_real_analysis
 
-def _get_run_simulated_analysis():
-    from services.fraud_simulator import run_full_simulated_analysis
-    return run_full_simulated_analysis
+# Simulator removed — fraud analysis only uses real biometric analysis
 
 router = APIRouter(tags=["Fraud Detection"])
 
@@ -150,12 +148,15 @@ def submit_face_events(
     no_face_ratio = payload.no_face_count / total
     multi_face_ratio = payload.multiple_face_count / total
 
-    # Score: single_face_ratio IS the score — no face detected = low score
-    face_score = max(0.0, single_ratio)
+    # Score: start from 1.0, subtract penalties (consistent with movement.py)
+    face_score = 1.0
+    if no_face_ratio > 0:
+        face_score -= no_face_ratio * 0.5
     if multi_face_ratio > 0:
-        face_score = max(0.0, face_score - (multi_face_ratio * 0.8))
+        face_score -= multi_face_ratio * 0.7
     if payload.no_face_seconds > 2:
-        face_score = max(0.0, face_score - 0.3)
+        face_score -= 0.15
+    face_score = max(0.0, min(1.0, face_score))
 
     details = json.dumps({
         "total_detections": payload.total_detections,
@@ -194,9 +195,9 @@ def submit_face_events(
     existing = get_or_create_fraud_analysis(db, video_interview_id)
     now = datetime.utcnow()
 
-    # Keep the WORST (lowest) face detection score
+    # Weighted average merge (consistent with movement.py)
     if existing.face_detection_score is not None:
-        existing.face_detection_score = round(min(face_score, existing.face_detection_score), 3)
+        existing.face_detection_score = round((existing.face_detection_score * 0.5) + (face_score * 0.5), 3)
     else:
         existing.face_detection_score = round(face_score, 3)
     existing.face_detection_details = details
@@ -226,15 +227,12 @@ def submit_face_events(
     existing.flags = json.dumps(all_flags)
     existing.flag_count = len(all_flags)
 
-    # Recalculate overall trust score
-    scores = [s for s in [
-        existing.voice_consistency_score,
-        existing.lip_sync_score,
-        existing.body_movement_score,
-        existing.face_detection_score,
-    ] if s is not None]
-    if scores:
-        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+    # Recalculate overall trust score — weighted formula (voice=30%, lip=30%, body=20%, face=20%)
+    _v = existing.voice_consistency_score if existing.voice_consistency_score is not None else 0.8
+    _l = existing.lip_sync_score if existing.lip_sync_score is not None else 0.8
+    _b = existing.body_movement_score if existing.body_movement_score is not None else 0.8
+    _f = existing.face_detection_score if existing.face_detection_score is not None else 0.8
+    existing.overall_trust_score = round(_v * 0.30 + _l * 0.30 + _b * 0.20 + _f * 0.20, 3)
     if existing.analysis_status == "pending":
         existing.analysis_status = "completed"
         existing.analyzed_at = now
@@ -368,15 +366,12 @@ def submit_lip_events(
     existing.flags = json.dumps(all_flags)
     existing.flag_count = len(all_flags)
 
-    # Recalculate overall trust score
-    scores = [s for s in [
-        existing.voice_consistency_score,
-        existing.lip_sync_score,
-        existing.body_movement_score,
-        existing.face_detection_score,
-    ] if s is not None]
-    if scores:
-        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+    # Recalculate overall trust score — weighted formula (voice=30%, lip=30%, body=20%, face=20%)
+    _v = existing.voice_consistency_score if existing.voice_consistency_score is not None else 0.8
+    _l = existing.lip_sync_score if existing.lip_sync_score is not None else 0.8
+    _b = existing.body_movement_score if existing.body_movement_score is not None else 0.8
+    _f = existing.face_detection_score if existing.face_detection_score is not None else 0.8
+    existing.overall_trust_score = round(_v * 0.30 + _l * 0.30 + _b * 0.20 + _f * 0.20, 3)
 
     if existing.analysis_status == "pending":
         existing.analysis_status = "completed"
@@ -506,15 +501,12 @@ def submit_voice_events(
     existing.flags = json.dumps(all_flags)
     existing.flag_count = len(all_flags)
 
-    # Recalculate overall trust score
-    scores = [s for s in [
-        existing.voice_consistency_score,
-        existing.lip_sync_score,
-        existing.body_movement_score,
-        existing.face_detection_score,
-    ] if s is not None]
-    if scores:
-        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+    # Recalculate overall trust score — weighted formula (voice=30%, lip=30%, body=20%, face=20%)
+    _v = existing.voice_consistency_score if existing.voice_consistency_score is not None else 0.8
+    _l = existing.lip_sync_score if existing.lip_sync_score is not None else 0.8
+    _b = existing.body_movement_score if existing.body_movement_score is not None else 0.8
+    _f = existing.face_detection_score if existing.face_detection_score is not None else 0.8
+    existing.overall_trust_score = round(_v * 0.30 + _l * 0.30 + _b * 0.20 + _f * 0.20, 3)
 
     if existing.analysis_status == "pending":
         existing.analysis_status = "completed"
@@ -647,6 +639,8 @@ def trigger_fraud_analysis(
                 fa.lip_sync_details = results["lip_sync_details"]
                 fa.body_movement_score = results["body_movement_score"]
                 fa.body_movement_details = results["body_movement_details"]
+                fa.face_detection_score = results.get("face_detection_score")
+                fa.face_detection_details = results.get("face_detection_details")
                 fa.overall_trust_score = results["overall_trust_score"]
                 fa.flags = results["flags"]
                 fa.flag_count = results["flag_count"]
@@ -764,6 +758,8 @@ def fraud_dashboard(
                         lip_sync_details=results["lip_sync_details"],
                         body_movement_score=results["body_movement_score"],
                         body_movement_details=results["body_movement_details"],
+                        face_detection_score=results.get("face_detection_score"),
+                        face_detection_details=results.get("face_detection_details"),
                         overall_trust_score=results["overall_trust_score"],
                         flags=results["flags"],
                         flag_count=results["flag_count"],
@@ -792,7 +788,7 @@ def fraud_dashboard(
     total_interviews = db.query(sql_func.count(VideoInterview.id)).scalar() or 0
     analyzed_count = stats.analyzed or 0
     flagged_count = db.query(sql_func.count(FraudAnalysis.id)).filter(
-        FraudAnalysis.flag_count > 0
+        or_(FraudAnalysis.flag_count > 0, FraudAnalysis.overall_trust_score < 0.6)
     ).scalar() or 0
     cleared_count = analyzed_count - flagged_count
     average_trust_score = round(float(stats.avg_trust), 3) if stats.avg_trust else 0.0
@@ -832,17 +828,20 @@ def list_flagged_interviews(
     db: Session = Depends(get_db),
 ):
     """
-    List all fraud analyses with flag_count > 0, joined with
-    video interview details for context.
+    List all fraud analyses that are suspicious: flag_count > 0 OR trust score < 60%.
     """
     from sqlalchemy.orm import joinedload
+    from sqlalchemy import or_
     flagged = (
         db.query(FraudAnalysis)
         .options(
             joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.candidate),
             joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.job),
         )
-        .filter(FraudAnalysis.flag_count > 0)
+        .filter(or_(
+            FraudAnalysis.flag_count > 0,
+            FraudAnalysis.overall_trust_score < 0.6
+        ))
         .order_by(FraudAnalysis.analyzed_at.desc().nullslast())
         .limit(100)
         .all()

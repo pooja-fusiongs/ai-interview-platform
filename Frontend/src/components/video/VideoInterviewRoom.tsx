@@ -678,15 +678,25 @@ const VideoInterviewRoom: React.FC = () => {
     };
   }, [isGuest]);
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (retryCount = 0) => {
     try {
       setLoadingQuestions(true);
       const response = await videoInterviewService.getAIInterviewQuestions(Number(videoId));
-      setQuestions(response.questions || []);
+      const fetchedQuestions = response.questions || [];
+      setQuestions(fetchedQuestions);
       if (response.job_id) setInterviewJobId(response.job_id);
       if (response.application_id) setApplicationId(response.application_id);
+
+      // If questions still pending (generating in background), retry after delay
+      if (fetchedQuestions.length === 0 && response.questions_pending && retryCount < 5) {
+        setTimeout(() => fetchQuestions(retryCount + 1), 5000);
+      }
     } catch (err: any) {
       console.warn('Failed to fetch questions:', err);
+      // Retry on error (questions might still be generating)
+      if (retryCount < 3) {
+        setTimeout(() => fetchQuestions(retryCount + 1), 5000);
+      }
     } finally {
       setLoadingQuestions(false);
     }
@@ -1294,10 +1304,10 @@ const VideoInterviewRoom: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {!isUserCandidate && !isCompleted && (
               <Chip
-                icon={interviewMode === 'video' ? <VideoCall sx={{ fontSize: 16 }} /> : <Description sx={{ fontSize: 16 }} />}
+                icon={interviewMode === 'video' ? <VideoCall sx={{ fontSize: 16, color: '#fff' }} /> : <Description sx={{ fontSize: 16, color: '#fff' }} />}
                 label={interviewMode === 'video' ? 'Video Mode' : 'Classic Mode'}
                 size="small"
-                sx={{ fontWeight: 600, fontSize: '11px', background: interviewMode === 'video' ? '#020291' : '#7c3aed', color: '#fff' }}
+                sx={{ fontWeight: 600, fontSize: '11px', background: interviewMode === 'video' ? '#020291' : '#7c3aed', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }}
               />
             )}
             {interview?.status === 'waiting' && gracePeriodTimer && (
@@ -1342,21 +1352,23 @@ const VideoInterviewRoom: React.FC = () => {
                 }}
               />
             )}
-            <Box sx={{
-              background: '#dbeafe',
-              color: '#1e40af',
-              borderRadius: '8px',
-              border: '1px solid #bfdbfe',
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1
-            }}>
-              <AccessTime sx={{ fontSize: 18 }} />
-              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '15px' }}>
-                {formatTime(elapsed)}
-              </Typography>
-            </Box>
+            {interviewMode !== 'classic' && (
+              <Box sx={{
+                background: '#dbeafe',
+                color: '#1e40af',
+                borderRadius: '8px',
+                border: '1px solid #bfdbfe',
+                padding: '8px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1
+              }}>
+                <AccessTime sx={{ fontSize: 18 }} />
+                <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '15px' }}>
+                  {formatTime(elapsed)}
+                </Typography>
+              </Box>
+            )}
           </Box>
         </Box>
 

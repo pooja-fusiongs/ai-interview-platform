@@ -114,8 +114,7 @@ const ExpertReview: React.FC = () => {
     } catch (error) {
       console.error('Error fetching question sets:', error);
       toast.error('Failed to load question sets');
-      // Fallback to demo data if API fails
-      setQuestionSets(generateDemoData());
+      setQuestionSets([]);
     } finally {
       setLoading(false);
     }

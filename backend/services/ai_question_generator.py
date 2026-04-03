@@ -40,7 +40,23 @@ class AIQuestionGenerator:
         
         if not job or not candidate:
             raise ValueError("Job or candidate not found")
-        
+
+        # Prevent duplicate generation — check if questions already exist
+        existing_count = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == job_id,
+            InterviewQuestion.candidate_id == candidate_id
+        ).count()
+        if existing_count >= total_questions:
+            existing_session = db.query(QuestionGenerationSession).filter(
+                QuestionGenerationSession.job_id == job_id,
+                QuestionGenerationSession.candidate_id == candidate_id
+            ).order_by(QuestionGenerationSession.created_at.desc()).first()
+            return {
+                "session_id": existing_session.id if existing_session else None,
+                "total_questions": existing_count,
+                "message": "Questions already exist"
+            }
+
         # Create generation session
         session = QuestionGenerationSession(
             job_id=job_id,

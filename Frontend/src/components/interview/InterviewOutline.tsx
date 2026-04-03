@@ -120,7 +120,12 @@ const InterviewOutline: React.FC = () => {
             setRatings(savedRatings);
             setRatingNotes(savedNotes);
         } catch {
-            // Summary endpoint may fail if no ratings yet - that's ok
+            // Summary endpoint may fail if no ratings yet — show empty score cards
+            setRatingSummary((prev: any) => prev || {
+                ai_score: null, final_score: null, overall_score: null,
+                total_questions: 0, rated_questions: 0, has_transcript: false,
+                report_card: null, questions: []
+            });
         }
     };
 
@@ -683,13 +688,13 @@ const InterviewOutline: React.FC = () => {
                             {[
                                 { label: 'Final Score', value: ratingSummary.final_score },
                                 { label: 'AI Score', value: ratingSummary.ai_score },
-                                { label: 'Recruiter Score', value: ratingSummary.overall_score },
+                                { label: 'Recruiter Score', value: ratingSummary.overall_score ?? ratingSummary.average_score },
                             ].map((item, i) => (
                                 <Card key={i} sx={{ flex: 1, textAlign: 'center', border: '1px solid #e5e7eb' }}>
                                     <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                                         <Typography variant="caption" color="text.secondary">{item.label}</Typography>
-                                        <Typography variant="h5" fontWeight={700} sx={{ color: item.value && item.value >= 7 ? '#22c55e' : item.value && item.value >= 5 ? '#f59e0b' : '#374151' }}>
-                                            {item.value ? `${item.value}/10` : '-'}
+                                        <Typography variant="h5" fontWeight={700} sx={{ color: item.value != null && item.value >= 7 ? '#22c55e' : item.value != null && item.value >= 5 ? '#f59e0b' : '#374151' }}>
+                                            {item.value != null ? `${item.value}/10` : '-'}
                                         </Typography>
                                     </CardContent>
                                 </Card>
@@ -1121,6 +1126,14 @@ const InterviewOutline: React.FC = () => {
 
                                         const result = await ratingService.submitTranscript(jId, cId, formData);
                                         toast.success(`AI Score: ${result.ai_score}/10 | Final: ${result.final_score}/10`);
+                                        // Update scores immediately from response, then refresh full summary
+                                        setRatingSummary((prev: any) => ({
+                                            ...prev,
+                                            ai_score: result.ai_score,
+                                            final_score: result.final_score,
+                                            report_card: result.report_card || prev?.report_card,
+                                            has_transcript: true,
+                                        }));
                                         loadSavedRatings(jId, cId);
                                     } catch (err: any) {
                                         toast.error(err?.response?.data?.detail || 'Failed to process transcript');
@@ -1145,13 +1158,28 @@ const InterviewOutline: React.FC = () => {
                     )}
 
                     {/* Report Card (from client merge) */}
-                    {ratingSummary?.report_card && (
+                    {ratingSummary && (ratingSummary.has_transcript || ratingSummary.report_card) && (
                         <Box sx={{ mt: 3, p: 3, backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', mb: 2, fontSize: '1rem' }}>
                                 Interview Report Card
                             </Typography>
 
-                            {ratingSummary.report_card.performed_well?.length > 0 && (
+                            {(() => {
+                                const rc = ratingSummary.report_card;
+                                const hasContent = rc && (
+                                    (rc.performed_well?.length > 0) ||
+                                    (rc.areas_to_improve?.length > 0) ||
+                                    (rc.transcript_qa?.length > 0)
+                                );
+                                if (!hasContent) return (
+                                    <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                                        Report card is being generated. Please refresh the page in a moment.
+                                    </Typography>
+                                );
+                                return null;
+                            })()}
+
+                            {ratingSummary.report_card?.performed_well?.length > 0 && (
                                 <Box sx={{ mb: 2 }}>
                                     <Typography variant="subtitle2" sx={{ color: '#22c55e', fontWeight: 600, mb: 0.5 }}>Performed Well</Typography>
                                     {ratingSummary.report_card.performed_well.map((item: string, i: number) => (
@@ -1160,7 +1188,7 @@ const InterviewOutline: React.FC = () => {
                                 </Box>
                             )}
 
-                            {ratingSummary.report_card.areas_to_improve?.length > 0 && (
+                            {ratingSummary.report_card?.areas_to_improve?.length > 0 && (
                                 <Box sx={{ mb: 2 }}>
                                     <Typography variant="subtitle2" sx={{ color: '#f59e0b', fontWeight: 600, mb: 0.5 }}>Areas to Improve</Typography>
                                     {ratingSummary.report_card.areas_to_improve.map((item: string, i: number) => (
@@ -1169,7 +1197,7 @@ const InterviewOutline: React.FC = () => {
                                 </Box>
                             )}
 
-                            {ratingSummary.report_card.transcript_qa?.length > 0 && (
+                            {ratingSummary.report_card?.transcript_qa?.length > 0 && (
                                 <Box>
                                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Q&A Observations</Typography>
                                     {ratingSummary.report_card.transcript_qa.map((qa: any, i: number) => (

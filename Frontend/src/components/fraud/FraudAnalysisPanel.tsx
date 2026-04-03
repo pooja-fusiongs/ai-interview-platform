@@ -529,7 +529,14 @@ const FraudAnalysisPanel: React.FC = () => {
             {/* Right Content */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {/* Score Cards Grid */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 3 }}>
+                <ScoreCard
+                  title="Face Detection"
+                  score={analysis.face_detection_score != null ? Math.round(analysis.face_detection_score * 100) : 0}
+                  details={analysis.face_detection_details}
+                  icon={<Security sx={{ color: '#020291', fontSize: 24 }} />}
+                  iconBg="#EEF0FF"
+                />
                 <ScoreCard
                   title="Voice Consistency"
                   score={Math.round((analysis.voice_consistency_score || 0) * 100)}

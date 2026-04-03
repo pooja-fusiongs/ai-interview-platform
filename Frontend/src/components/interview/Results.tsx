@@ -79,9 +79,19 @@ const Results = () => {
     })
   }
 
+  const escapeHtml = (str: string): string => {
+    if (!str) return ''
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
   const buildReportHtml = (s: InterviewSession) => {
-    const name = s.candidate_name || 'Candidate'
-    const job = s.job_title || 'Position'
+    const name = escapeHtml(s.candidate_name || 'Candidate')
+    const job = escapeHtml(s.job_title || 'Position')
     const scoreVal = s.overall_score != null ? s.overall_score / 10 : 0
     const scoreStr = s.overall_score != null ? (s.overall_score / 10).toFixed(1) : 'N/A'
     const date = s.completed_at ? new Date(s.completed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -111,9 +121,9 @@ const Results = () => {
           <div style="width:22px;height:22px;border-radius:6px;background:#F0F2FF;text-align:center;line-height:22px;font-size:9px;font-weight:600;color:#6C74C4;font-family:monospace;">${String(i + 1).padStart(2, '0')}</div>
         </td>
         <td style="padding:6px 4px;vertical-align:top;">
-          <div style="font-size:9px;font-weight:500;line-height:1.45;color:#1C1F3A;margin-bottom:2px;">${a.question_text || ''}</div>
-          ${hasAnswer ? `<div style="font-size:8px;color:#374151;line-height:1.5;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:4px 6px;margin:3px 0;"><span style="font-size:7px;font-weight:600;color:#991b1b;text-transform:uppercase;">Candidate's Answer:</span><br/>${a.answer_text}</div>` : ''}
-          ${a.feedback ? `<div style="font-size:8px;color:#9699B8;line-height:1.4;font-style:italic;border-left:2px solid #E4E7F8;padding-left:6px;margin-top:2px;">${a.feedback}</div>` : ''}
+          <div style="font-size:9px;font-weight:500;line-height:1.45;color:#1C1F3A;margin-bottom:2px;">${escapeHtml(a.question_text || '')}</div>
+          ${hasAnswer ? `<div style="font-size:8px;color:#374151;line-height:1.5;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:4px 6px;margin:3px 0;"><span style="font-size:7px;font-weight:600;color:#991b1b;text-transform:uppercase;">Candidate's Answer:</span><br/>${escapeHtml(a.answer_text)}</div>` : ''}
+          ${a.feedback ? `<div style="font-size:8px;color:#9699B8;line-height:1.4;font-style:italic;border-left:2px solid #E4E7F8;padding-left:6px;margin-top:2px;">${escapeHtml(a.feedback)}</div>` : ''}
         </td>
         <td style="padding:6px 10px;vertical-align:top;text-align:center;width:40px;">
           <div style="width:34px;height:20px;border-radius:6px;background:${chipBg};text-align:center;line-height:20px;font-size:9px;font-weight:600;color:${chipC};font-family:monospace;">${qs}</div>

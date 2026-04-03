@@ -163,9 +163,10 @@ def submit_movement_detection(
         except:
             pass
             
-    # Remove old movement flags
-    existing_flags = [f for f in existing_flags if f.get("flag_type") != "excessive_movement"]
-    
+    # Remove old auto-generated flags (keep manually added ones)
+    auto_flag_types = {"excessive_movement", "low_face_score", "low_lip_sync", "low_voice_consistency"}
+    existing_flags = [f for f in existing_flags if f.get("flag_type") not in auto_flag_types]
+
     if high_count >= 3:
         existing_flags.append({
             "flag_type": "excessive_movement",
@@ -174,19 +175,47 @@ def submit_movement_detection(
             "confidence": 0.9,
             "timestamp_seconds": 0
         })
-        
+
+    # Flag low face detection score (possible fraud: no face or multiple faces)
+    if existing.face_detection_score is not None and existing.face_detection_score < 0.5:
+        existing_flags.append({
+            "flag_type": "low_face_score",
+            "severity": "high" if existing.face_detection_score < 0.3 else "medium",
+            "description": f"Face detection score low: {existing.face_detection_score}",
+            "confidence": 0.85,
+            "timestamp_seconds": 0
+        })
+
+    # Flag low lip sync score (possible lip-sync fraud)
+    if existing.lip_sync_score is not None and existing.lip_sync_score < 0.5:
+        existing_flags.append({
+            "flag_type": "low_lip_sync",
+            "severity": "high" if existing.lip_sync_score < 0.3 else "medium",
+            "description": f"Lip sync score low: {existing.lip_sync_score}",
+            "confidence": 0.8,
+            "timestamp_seconds": 0
+        })
+
+    # Flag low voice consistency (possible voice spoofing)
+    if existing.voice_consistency_score is not None and existing.voice_consistency_score < 0.5:
+        existing_flags.append({
+            "flag_type": "low_voice_consistency",
+            "severity": "high" if existing.voice_consistency_score < 0.3 else "medium",
+            "description": f"Voice consistency score low: {existing.voice_consistency_score}",
+            "confidence": 0.8,
+            "timestamp_seconds": 0
+        })
+
     existing.flags = json.dumps(existing_flags)
     existing.flag_count = len(existing_flags)
     
-    # Recalculate overall
-    scores = [s for s in [
-        existing.voice_consistency_score,
-        existing.lip_sync_score,
-        existing.body_movement_score,
-        existing.face_detection_score,
-    ] if s is not None]
-    if scores:
-        existing.overall_trust_score = round(sum(scores) / len(scores), 3)
+    # Recalculate overall trust score — weighted formula (consistent everywhere)
+    # Weights: voice=30%, lip=30%, body=20%, face=20%
+    v = existing.voice_consistency_score if existing.voice_consistency_score is not None else 0.8
+    l = existing.lip_sync_score if existing.lip_sync_score is not None else 0.8
+    b = existing.body_movement_score if existing.body_movement_score is not None else 0.8
+    f = existing.face_detection_score if existing.face_detection_score is not None else 0.8
+    existing.overall_trust_score = round(v * 0.30 + l * 0.30 + b * 0.20 + f * 0.20, 3)
         
     db.commit()
     return {"status": "success"}
