@@ -260,7 +260,23 @@ class AIQuestionGenerator:
             except (json.JSONDecodeError, TypeError):
                 skill_weights = None
 
-        # Try OpenAI first (7-phase framework)
+        # Try Groq FIRST (fastest - free, ~2 sec response)
+        try:
+            from services.groq_service import generate_questions_with_groq
+            groq_questions = generate_questions_with_groq(
+                job_description=job.description or "",
+                skills_required=job_skills,
+                resume_text=resume_text,
+                experience_years=experience_years or 0,
+                total_questions=total_questions
+            )
+            if groq_questions:
+                print("[QuestionGenerator] Questions generated via Groq (fast path)")
+                return groq_questions
+        except Exception as e:
+            print(f"[QuestionGenerator] Groq failed: {e}")
+
+        # Try OpenAI second (7-phase framework - slower but high quality)
         try:
             from services.open_ai_service import generate_interview_questions
             raw = generate_interview_questions(
@@ -287,22 +303,6 @@ class AIQuestionGenerator:
                 return converted
         except Exception as e:
             print(f"[QuestionGenerator] OpenAI 7-phase failed: {e}")
-
-        # Try Groq (free, fast, no quota limits)
-        try:
-            from services.groq_service import generate_questions_with_groq
-            groq_questions = generate_questions_with_groq(
-                job_description=job.description or "",
-                skills_required=job_skills,
-                resume_text=resume_text,
-                experience_years=experience_years or 0,
-                total_questions=total_questions
-            )
-            if groq_questions:
-                print("[QuestionGenerator] Questions generated via Groq")
-                return groq_questions
-        except Exception as e:
-            print(f"[QuestionGenerator] Groq failed: {e}")
 
         # Fallback to Gemini
         try:

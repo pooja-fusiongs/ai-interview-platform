@@ -183,6 +183,24 @@ async def add_candidate_to_job(
     db.commit()
     db.refresh(application)
 
+    import threading
+    _bg_job_id = job_id
+    _bg_candidate_id = application.id
+
+    def _generate_questions_bg():
+        try:
+            from database import get_safe_db
+            from services.ai_question_generator import get_question_generator
+            bg_db = get_safe_db()
+            generator = get_question_generator()
+            result = generator.generate_questions(db=bg_db, job_id=_bg_job_id, candidate_id=_bg_candidate_id, total_questions=10)
+            print(f"✅ Pre-generated {result.get('total_questions', 0)} questions for candidate {_bg_candidate_id}")
+            bg_db.close()
+        except Exception as e:
+            print(f"⚠️ Background question pre-generation failed: {e}")
+
+    threading.Thread(target=_generate_questions_bg, daemon=True).start()
+
     return {
         "id": application.id,
         "applicant_name": application.applicant_name,
@@ -279,6 +297,24 @@ def add_existing_candidate_to_job(
 
     db.commit()
     db.refresh(application)
+
+    import threading
+    _bg_job_id = job_id
+    _bg_candidate_id = application.id
+
+    def _generate_questions_bg():
+        try:
+            from database import get_safe_db
+            from services.ai_question_generator import get_question_generator
+            bg_db = get_safe_db()
+            generator = get_question_generator()
+            result = generator.generate_questions(db=bg_db, job_id=_bg_job_id, candidate_id=_bg_candidate_id, total_questions=10)
+            print(f"✅ Pre-generated {result.get('total_questions', 0)} questions for existing candidate {_bg_candidate_id}")
+            bg_db.close()
+        except Exception as e:
+            print(f"⚠️ Background question pre-generation failed: {e}")
+
+    threading.Thread(target=_generate_questions_bg, daemon=True).start()
 
     return {
         "id": application.id,

@@ -108,104 +108,34 @@ def generate_questions(
             "total_questions": existing_questions_count
         }
 
-    # If session exists but no questions, delete the old session and regenerate
+    # If session exists but no questions, delete the old session and regenerate in background
     if existing_session and existing_questions_count == 0:
         db.delete(existing_session)
         db.commit()
-    
-    try:
-        # Generate questions
-        generator = get_question_generator()
-        result = generator.generate_questions(
-            db=db,
-            job_id=request.job_id,
-            candidate_id=request.candidate_id,
-            total_questions=request.total_questions
-        )
-        
-        # Auto-create video interview session + send email
-        video_interview_id = None
+
+    import threading
+    _bg_job_id = request.job_id
+    _bg_candidate_id = request.candidate_id
+    _bg_total = request.total_questions
+
+    def _generate_bg():
         try:
-            from models import VideoInterview, VideoInterviewStatus
-            from datetime import timedelta, timezone
-            import hashlib, random as _rnd
+            from database import get_safe_db
+            bg_db = get_safe_db()
+            generator = get_question_generator()
+            result = generator.generate_questions(db=bg_db, job_id=_bg_job_id, candidate_id=_bg_candidate_id, total_questions=_bg_total)
+            print(f"✅ Generated {result.get('total_questions', 0)} questions for candidate {_bg_candidate_id}")
+            bg_db.close()
+        except Exception as e:
+            print(f"⚠️ Background generation failed: {e}")
 
-            candidate_user = db.query(User).filter(User.email == candidate.applicant_email).first()
-            if not candidate_user:
-                base_username = candidate.applicant_email.split('@')[0]
-                username = base_username
-                if db.query(User).filter(User.username == username).first():
-                    username = f"{base_username}{_rnd.randint(100, 999)}"
-                candidate_user = User(
-                    email=candidate.applicant_email,
-                    username=username,
-                    full_name=candidate.applicant_name,
-                    role=UserRole.CANDIDATE,
-                    is_active=True,
-                    hashed_password=hashlib.sha256("Welcome123".encode()).hexdigest()
-                )
-                db.add(candidate_user)
-                db.flush()
+    threading.Thread(target=_generate_bg, daemon=True).start()
 
-            existing_vi = db.query(VideoInterview).filter(
-                VideoInterview.job_id == request.job_id,
-                VideoInterview.candidate_id == candidate_user.id
-            ).first()
-
-            scheduled_time = datetime.now(timezone.utc) + timedelta(days=1)
-
-            if not existing_vi:
-                vi = VideoInterview(
-                    job_id=request.job_id,
-                    candidate_id=candidate_user.id,
-                    interviewer_id=current_user.id,
-                    scheduled_at=scheduled_time,
-                    duration_minutes=candidate.duration_minutes or 30,
-                    status=VideoInterviewStatus.SCHEDULED.value,
-                )
-                db.add(vi)
-                db.commit()
-                db.refresh(vi)
-                video_interview_id = vi.id
-            else:
-                video_interview_id = existing_vi.id
-
-            candidate.status = "Questions Generated"
-            db.commit()
-
-            try:
-                from services.email_service import send_interview_notification
-                frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
-                send_interview_notification(
-                    candidate_email=candidate.applicant_email,
-                    candidate_name=candidate.applicant_name,
-                    job_title=job.title,
-                    interview_date=scheduled_time.strftime("%B %d, %Y"),
-                    interview_time=scheduled_time.strftime("%I:%M %p UTC"),
-                    meeting_url=f"{frontend_url}/video-room/{video_interview_id}?token={_generate_candidate_token(video_interview_id, candidate_user.id)}"
-                )
-            except Exception as email_err:
-                print(f"⚠️ Email notification failed: {email_err}")
-                import traceback
-                traceback.print_exc()
-        except Exception as vi_err:
-            print(f"⚠️ Auto video interview creation failed: {vi_err}")
-
-        return {
-            "message": f"Successfully generated {result['total_questions']} questions in {result['mode']} mode",
-            "session_id": result["session_id"],
-            "mode": result["mode"],
-            "total_questions": result["total_questions"],
-            "status": "success",
-            "preview_mode": result["mode"] == "preview",
-            "video_interview_id": video_interview_id
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate questions: {str(e)}"
-        )
+    return {
+        "message": "Questions are being generated",
+        "status": "generating",
+        "total_questions": _bg_total,
+    }
 
 @router.post("/regenerate-questions", response_model=dict)
 def regenerate_questions(
@@ -266,30 +196,29 @@ def regenerate_questions(
 
     db.commit()
 
-    # Generate new questions
-    try:
-        generator = get_question_generator()
-        result = generator.generate_questions(
-            db=db,
-            job_id=request.job_id,
-            candidate_id=request.candidate_id,
-            total_questions=request.total_questions
-        )
+    import threading
+    _bg_job_id = request.job_id
+    _bg_candidate_id = request.candidate_id
+    _bg_total = request.total_questions
 
-        return {
-            "message": f"Successfully regenerated {result['total_questions']} questions in {result['mode']} mode",
-            "session_id": result["session_id"],
-            "mode": result["mode"],
-            "total_questions": result["total_questions"],
-            "status": "success",
-            "preview_mode": result["mode"] == "preview"
-        }
+    def _regenerate_bg():
+        try:
+            from database import get_safe_db
+            bg_db = get_safe_db()
+            generator = get_question_generator()
+            result = generator.generate_questions(db=bg_db, job_id=_bg_job_id, candidate_id=_bg_candidate_id, total_questions=_bg_total)
+            print(f"✅ Regenerated {result.get('total_questions', 0)} questions for candidate {_bg_candidate_id}")
+            bg_db.close()
+        except Exception as e:
+            print(f"⚠️ Background regeneration failed: {e}")
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to regenerate questions: {str(e)}"
-        )
+    threading.Thread(target=_regenerate_bg, daemon=True).start()
+
+    return {
+        "message": "Questions are being regenerated",
+        "status": "generating",
+        "total_questions": _bg_total,
+    }
 
 
 @router.get("/sessions/{session_id}", response_model=QuestionGenerationSessionResponse)

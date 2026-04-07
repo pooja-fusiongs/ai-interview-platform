@@ -29,6 +29,7 @@ from models import (
     FraudAnalysis,
     UserRole,
     InterviewSession,
+    InterviewSessionStatus,
     InterviewAnswer,
     InterviewQuestion,
     InterviewRating,
@@ -391,53 +392,7 @@ def schedule_video_interview(
         except Exception as e:
             print(f"⚠️ Failed to prepare email notification: {e}")
 
-        # Check questions status for this candidate (after interview is created)
-        from models import InterviewQuestion
-        from services.ai_question_generator import get_question_generator
-
-        candidate_id_for_questions = application.id if application else body.candidate_id
-        questions_approved = True
-
-        # Check for existing questions
-        existing_questions = db.query(InterviewQuestion).filter(
-            InterviewQuestion.job_id == body.job_id,
-            InterviewQuestion.candidate_id == candidate_id_for_questions
-        ).all()
-
-        if len(existing_questions) == 0:
-            # No questions exist - generate in background (don't block API response)
-            print(f"🤖 No questions found for candidate {candidate_id_for_questions}, auto-generating in background...")
-            import threading
-            _bg_job_id = body.job_id
-            _bg_candidate_id = candidate_id_for_questions
-
-            def _generate_questions_bg():
-                try:
-                    from database import get_safe_db
-                    bg_db = get_safe_db()
-                    generator = get_question_generator()
-                    result = generator.generate_questions(
-                        db=bg_db,
-                        job_id=_bg_job_id,
-                        candidate_id=_bg_candidate_id,
-                        total_questions=10
-                    )
-                    print(f"✅ Background: Auto-generated {result.get('total_questions', 0)} questions for video interview")
-                    bg_db.close()
-                except Exception as e:
-                    print(f"⚠️ Background: Failed to auto-generate questions: {e}")
-
-            threading.Thread(target=_generate_questions_bg, daemon=True).start()
-            questions_approved = True  # Questions are auto-approved when generated
-        else:
-            # Questions exist - check if they are approved
-            approved_count = sum(1 for q in existing_questions if q.is_approved)
-            print(f"✅ Found {len(existing_questions)} existing questions ({approved_count} approved) for candidate {candidate_id_for_questions}")
-
-            if approved_count == 0:
-                questions_approved = False
-
-        return _build_response(vi, db, questions_approved=questions_approved)
+        return _build_response(vi, db, questions_approved=True)
     
     except HTTPException:
         raise  # Re-raise HTTP exceptions
@@ -1290,6 +1245,7 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
     from models import VideoInterview, InterviewQuestion, JobApplication, InterviewSession, VideoInterviewStatus
 
     bg_db = None
+    temp_downloaded = None
     try:
         from database import get_safe_db
         bg_db = get_safe_db()
@@ -1379,25 +1335,43 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
             except Exception as q_err:
                 print(f"[BG Transcription] Question fetch error: {q_err}")
 
-        # Resolve recording file path
-        recording_filename = os.path.basename(actual_recording_url)
-        recordings_dir = os.path.normpath(os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
-        ))
-        recording_path = os.path.join(recordings_dir, recording_filename)
+        # Resolve recording file path — download from URL if needed
+        temp_downloaded = None
+        if actual_recording_url.startswith("http://") or actual_recording_url.startswith("https://"):
+            import tempfile, requests as _dl_requests
+            print(f"[BG Transcription] Downloading recording from URL: {actual_recording_url[:80]}...")
+            try:
+                resp = _dl_requests.get(actual_recording_url, timeout=120)
+                resp.raise_for_status()
+                ext = ".mp4" if ".mp4" in actual_recording_url else ".webm"
+                temp_downloaded = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+                temp_downloaded.write(resp.content)
+                temp_downloaded.close()
+                recording_path = temp_downloaded.name
+                print(f"[BG Transcription] Downloaded {len(resp.content)} bytes to {recording_path}")
+            except Exception as dl_err:
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = f"Failed to download recording: {dl_err}"
+                bg_db.commit()
+                return
+        else:
+            recording_filename = os.path.basename(actual_recording_url)
+            recordings_dir = os.path.normpath(os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads", "recordings"
+            ))
+            recording_path = os.path.join(recordings_dir, recording_filename)
 
-        # Wait for recording file to appear on disk
-        for attempt in range(6):
-            if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
-                break
-            print(f"[BG Transcription] File not ready, waiting... (attempt {attempt+1}/6)")
-            _time.sleep(5)
+            for attempt in range(6):
+                if os.path.exists(recording_path) and os.path.getsize(recording_path) > 1000:
+                    break
+                print(f"[BG Transcription] File not ready, waiting... (attempt {attempt+1}/6)")
+                _time.sleep(5)
 
-        if not os.path.exists(recording_path):
-            bg_vi.transcript_source = "failed"
-            bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
-            bg_db.commit()
-            return
+            if not os.path.exists(recording_path):
+                bg_vi.transcript_source = "failed"
+                bg_vi.transcript_error = f"Recording file not found: {recording_filename}"
+                bg_db.commit()
+                return
 
         from services.transcript_generator import create_real_transcript, TranscriptionError, validate_recording_file
 
@@ -1581,9 +1555,10 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
         print(f"[BG Transcription] Fatal error: {e}")
         traceback.print_exc()
     finally:
+        if temp_downloaded:
+            try: os.unlink(temp_downloaded.name)
+            except OSError: pass
         if bg_db: bg_db.close()
-
-    return {"message": "Interview ended", "status": vi.status}
 
 
 @router.post("/api/video/guest/{video_id}/upload-recording")
@@ -2990,6 +2965,240 @@ async def upload_recording(
     )
 
     return {"message": "Recording uploaded successfully", "recording_url": vi.recording_url}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/upload-complete  -- Upload recording & complete interview
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/{video_id}/upload-complete")
+async def upload_and_complete_interview(
+    video_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_any_role([UserRole.RECRUITER, UserRole.ADMIN])),
+    db: Session = Depends(get_db),
+):
+    """Upload a recording for a scheduled interview, mark it completed, and trigger transcript + fraud + scoring."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "mp4"
+    if ext not in ("mp4", "webm", "mp3", "wav", "m4a"):
+        raise HTTPException(status_code=400, detail="Unsupported format. Use mp4, webm, mp3, wav, or m4a")
+
+    now = datetime.now(timezone.utc)
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    filename = f"interview_{video_id}_{timestamp}.{ext}"
+    recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "recordings")
+    os.makedirs(recordings_dir, exist_ok=True)
+    file_path = os.path.join(recordings_dir, filename)
+
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    from services.cloudinary_upload import upload_recording as cloudinary_upload
+    cloudinary_url = cloudinary_upload(file_path, video_id)
+    vi.recording_url = cloudinary_url if cloudinary_url else f"/uploads/recordings/{filename}"
+    vi.status = VideoInterviewStatus.COMPLETED.value
+    vi.started_at = vi.started_at or now
+    vi.ended_at = now
+    vi.recording_consent = True
+
+    session = None
+    if not vi.session_id:
+        session = InterviewSession(
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="video_interview",
+            started_at=now,
+        )
+        db.add(session)
+        db.flush()
+        vi.session_id = session.id
+
+    db.commit()
+
+    _start_background_transcription_task(
+        vi_id=video_id,
+        job_id=vi.job_id,
+        candidate_id=vi.candidate_id,
+        candidate_email=vi.candidate.email if vi.candidate else None,
+        started_at=vi.started_at or vi.scheduled_at,
+        recording_url_hint=f"/uploads/recordings/{filename}",
+        session_id=vi.session_id,
+    )
+
+    import threading
+    _vi_id = video_id
+    _file_path = file_path
+
+    def _bg_fraud():
+        import time
+        time.sleep(5)
+        try:
+            from database import SessionLocal
+            from services.biometric_analyzer import run_real_analysis
+            bg_db = SessionLocal()
+            results = run_real_analysis(video_interview_id=_vi_id, recording_path=_file_path)
+            if results and "_error" not in results:
+                fraud = FraudAnalysis(
+                    video_interview_id=_vi_id,
+                    voice_consistency_score=results.get("voice_consistency_score"),
+                    voice_consistency_details=results.get("voice_consistency_details"),
+                    lip_sync_score=results.get("lip_sync_score"),
+                    lip_sync_details=results.get("lip_sync_details"),
+                    body_movement_score=results.get("body_movement_score"),
+                    body_movement_details=results.get("body_movement_details"),
+                    face_detection_score=results.get("face_detection_score"),
+                    face_detection_details=results.get("face_detection_details"),
+                    overall_trust_score=results.get("overall_trust_score"),
+                    flags=results.get("flags", "[]"),
+                    flag_count=results.get("flag_count", 0),
+                    analysis_status="completed",
+                    consent_granted=True,
+                    analyzed_at=datetime.now(timezone.utc),
+                )
+                bg_db.add(fraud)
+                bg_db.commit()
+                print(f"✅ Fraud analysis completed for VI {_vi_id}")
+            bg_db.close()
+        except Exception as e:
+            print(f"⚠️ Fraud analysis failed for VI {_vi_id}: {e}")
+
+    threading.Thread(target=_bg_fraud, daemon=True).start()
+
+    return {
+        "message": "Recording uploaded, interview completed. Transcript & fraud analysis processing.",
+        "video_interview_id": video_id,
+        "recording_url": vi.recording_url,
+        "status": "completed",
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/interviews/{video_id}/link-complete  -- Link recording URL & complete interview
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _BaseModel
+
+class _RecordingLinkBody(_BaseModel):
+    recording_url: str
+
+@router.post("/api/video/interviews/{video_id}/link-complete")
+def link_recording_and_complete(
+    video_id: int,
+    body: _RecordingLinkBody,
+    current_user: User = Depends(require_any_role([UserRole.RECRUITER, UserRole.ADMIN])),
+    db: Session = Depends(get_db),
+):
+    """Link an existing recording URL to a scheduled interview, mark completed, trigger transcript + fraud + scoring."""
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    url = body.recording_url.strip()
+    if not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    now = datetime.now(timezone.utc)
+    vi.recording_url = url
+    vi.status = VideoInterviewStatus.COMPLETED.value
+    vi.started_at = vi.started_at or now
+    vi.ended_at = now
+    vi.recording_consent = True
+
+    if not vi.session_id:
+        session = InterviewSession(
+            job_id=vi.job_id,
+            candidate_id=vi.candidate_id,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            interview_mode="video_interview",
+            started_at=now,
+        )
+        db.add(session)
+        db.flush()
+        vi.session_id = session.id
+
+    # Update JobApplication status to "Interview Completed"
+    if vi.candidate and vi.job_id:
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id,
+            JobApplication.applicant_email == vi.candidate.email
+        ).first()
+        if application:
+            application.status = "Interview Completed"
+
+    db.commit()
+
+    _start_background_transcription_task(
+        vi_id=video_id,
+        job_id=vi.job_id,
+        candidate_id=vi.candidate_id,
+        candidate_email=vi.candidate.email if vi.candidate else None,
+        started_at=vi.started_at or vi.scheduled_at,
+        recording_url_hint=url,
+        session_id=vi.session_id,
+    )
+
+    import threading
+    _vi_id = video_id
+    _url = url
+
+    def _bg_fraud_from_url():
+        import time, tempfile, requests as _requests
+        time.sleep(5)
+        try:
+            from database import SessionLocal
+            from services.biometric_analyzer import run_real_analysis
+            print(f"[fraud-bg] Downloading recording from {_url[:80]}...")
+            resp = _requests.get(_url, timeout=120)
+            resp.raise_for_status()
+            ext = ".mp4" if ".mp4" in _url else ".webm"
+            tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+            tmp.write(resp.content)
+            tmp.close()
+            print(f"[fraud-bg] Downloaded {len(resp.content)} bytes")
+
+            bg_db = SessionLocal()
+            results = run_real_analysis(video_interview_id=_vi_id, recording_path=tmp.name)
+            if results and "_error" not in results:
+                fraud = FraudAnalysis(
+                    video_interview_id=_vi_id,
+                    voice_consistency_score=results.get("voice_consistency_score"),
+                    voice_consistency_details=results.get("voice_consistency_details"),
+                    lip_sync_score=results.get("lip_sync_score"),
+                    lip_sync_details=results.get("lip_sync_details"),
+                    body_movement_score=results.get("body_movement_score"),
+                    body_movement_details=results.get("body_movement_details"),
+                    face_detection_score=results.get("face_detection_score"),
+                    face_detection_details=results.get("face_detection_details"),
+                    overall_trust_score=results.get("overall_trust_score"),
+                    flags=results.get("flags", "[]"),
+                    flag_count=results.get("flag_count", 0),
+                    analysis_status="completed",
+                    consent_granted=True,
+                    analyzed_at=datetime.now(timezone.utc),
+                )
+                bg_db.add(fraud)
+                bg_db.commit()
+                print(f"✅ Fraud analysis completed for VI {_vi_id}")
+            bg_db.close()
+            try: os.unlink(tmp.name)
+            except OSError: pass
+        except Exception as e:
+            print(f"⚠️ Fraud analysis failed for VI {_vi_id}: {e}")
+
+    threading.Thread(target=_bg_fraud_from_url, daemon=True).start()
+
+    return {
+        "message": "Recording linked, interview completed. Transcript & fraud analysis processing.",
+        "video_interview_id": video_id,
+        "recording_url": url,
+        "status": "completed",
+    }
 
 
 # ---------------------------------------------------------------------------

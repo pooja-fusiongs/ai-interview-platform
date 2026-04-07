@@ -40,9 +40,18 @@ def transcribe_audio_file(file_path: str) -> str:
     
     logger.info(f"[transcribe] Starting real transcription of {os.path.basename(file_path)} ({file_size} bytes)")
 
-    # Try both services and use the one that captured more words
+    # Try Groq first (fast), then Deepgram as fallback
     groq_result = None
     deepgram_result = None
+
+    if config.GROQ_API_KEY:
+        try:
+            groq_result = _transcribe_with_groq(file_path)
+            logger.info(f"[transcribe] Groq Whisper: {len(groq_result.split())} words")
+            if groq_result and len(groq_result.split()) > 5:
+                return groq_result
+        except TranscriptionError as e:
+            logger.warning(f"[transcribe] Groq failed: {e}")
 
     if config.DEEPGRAM_API_KEY:
         try:
@@ -102,16 +111,18 @@ def transcribe_audio_file_with_timestamps(file_path: str) -> tuple:
 
         file_ext = os.path.splitext(file_path)[1].lower()
         video_extensions = {'.mp4', '.mpeg', '.webm'}
+        large_audio_extensions = {'.wav', '.flac', '.ogg', '.m4a', '.mp3'}
         file_size_mb = file_size / (1024 * 1024)
 
-        # Extract audio if large video
+        # Extract/compress audio if file is too large for Groq API (25MB limit)
         upload_path = file_path
-        if file_ext in video_extensions and file_size_mb > 24:
-            try:
-                upload_path = _extract_audio_from_video(file_path)
-                temp_file = upload_path
-            except Exception:
-                upload_path = file_path
+        if file_size_mb > 24:
+            if file_ext in video_extensions or file_ext in large_audio_extensions:
+                try:
+                    upload_path = _extract_audio_from_video(file_path)
+                    temp_file = upload_path
+                except Exception:
+                    upload_path = file_path
 
         logger.info(f"[transcribe+timestamps] Using verbose_json for {os.path.basename(file_path)}")
 
@@ -212,6 +223,36 @@ def _extract_audio_from_video(video_path: str) -> str:
 
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
         logger.info(f"[transcribe] Audio extracted: {size_mb:.1f} MB")
+
+        # Re-compress at lower bitrate if still over Groq's 25MB limit
+        if size_mb > 24:
+            logger.info(f"[transcribe] Extracted audio still too large ({size_mb:.1f} MB), re-compressing at 48k...")
+            recompressed_path = output_path.replace(".mp3", "_small.mp3")
+            re_result = subprocess.run(
+                [
+                    ffmpeg_bin, "-y",
+                    "-i", output_path,
+                    "-ac", "1",
+                    "-ar", "16000",
+                    "-b:a", "48k",
+                    "-f", "mp3",
+                    recompressed_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if re_result.returncode == 0 and os.path.exists(recompressed_path) and os.path.getsize(recompressed_path) > 1000:
+                os.unlink(output_path)
+                new_size = os.path.getsize(recompressed_path) / (1024 * 1024)
+                logger.info(f"[transcribe] Re-compressed audio: {new_size:.1f} MB")
+                return recompressed_path
+            else:
+                # Cleanup failed recompress attempt
+                if os.path.exists(recompressed_path):
+                    os.unlink(recompressed_path)
+                logger.warning("[transcribe] Re-compression failed, using original extracted audio")
+
         return output_path
 
     except subprocess.TimeoutExpired:
@@ -406,23 +447,27 @@ def _transcribe_with_groq(file_path: str) -> str:
         temp_files = []
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        if file_ext in video_extensions:
-            if file_size_mb > 24:
-                # Large video — must extract audio (Groq 25MB limit)
-                logger.info(f"[transcribe] Large video ({file_size_mb:.1f} MB), extracting audio...")
-                try:
-                    audio_path = _extract_audio_from_video(file_path)
-                    temp_files = [audio_path]
-                    files_to_transcribe = temp_files
-                except Exception as extract_err:
-                    logger.warning(f"[transcribe] Audio extraction failed: {extract_err}, trying direct upload...")
-                    temp_files = []
-                    files_to_transcribe = [file_path]
-            else:
-                # Small video — try direct upload first (faster)
+        if file_size_mb > 24:
+            # File too large for Groq 25MB limit — extract/compress audio
+            logger.info(f"[transcribe] Large file ({file_size_mb:.1f} MB), extracting/compressing audio...")
+            try:
+                audio_path = _extract_audio_from_video(file_path)
+                temp_files = [audio_path]
+                files_to_transcribe = temp_files
+            except Exception as extract_err:
+                logger.warning(f"[transcribe] Audio extraction failed: {extract_err}, trying direct upload...")
+                temp_files = []
+                files_to_transcribe = [file_path]
+        elif file_ext in video_extensions:
+            # Small video — extract audio (handles Chrome webm with no duration header)
+            try:
+                audio_path = _extract_audio_from_video(file_path)
+                temp_files = [audio_path]
+                files_to_transcribe = temp_files
+            except Exception:
                 files_to_transcribe = [file_path]
         else:
-            # Audio file — send directly
+            # Small audio file — send directly
             files_to_transcribe = [file_path]
 
         # Transcribe each chunk
@@ -562,6 +607,7 @@ def _add_speaker_labels(raw_text: str, questions: Optional[List[Dict]] = None) -
     """
     Use Groq LLM to add speaker labels (Recruiter/Candidate) to raw transcript.
     Uses interview questions to identify who said what.
+    Splits large transcripts into chunks to avoid LLM context limits.
     Falls back to raw text if LLM call fails.
     """
     if not config.GROQ_API_KEY:
@@ -573,36 +619,73 @@ def _add_speaker_labels(raw_text: str, questions: Optional[List[Dict]] = None) -
 
         questions_context = ""
         if questions:
-            q_list = "\n".join([f"- {q['question_text']}" for q in questions[:10]])
+            q_list = "\n".join([f"- {q.get('question_text', str(q))}" for q in questions[:10]])
             questions_context = f"\n\nThese are the interview questions the Recruiter was supposed to ask:\n{q_list}"
 
-        prompt = f"""You are a transcript formatter. Below is a raw speech-to-text transcript from a job interview between a Recruiter and a Candidate. Your job is to add speaker labels.
+        # Split into chunks if transcript is too long (>6000 chars ~ safe for LLM context)
+        max_chunk_chars = 6000
+        if len(raw_text) > max_chunk_chars:
+            # Split on sentence boundaries
+            sentences = raw_text.replace(". ", ".\n").split("\n")
+            chunks = []
+            current_chunk = ""
+            for sentence in sentences:
+                if len(current_chunk) + len(sentence) > max_chunk_chars and current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = sentence
+                else:
+                    current_chunk += " " + sentence if current_chunk else sentence
+            if current_chunk.strip():
+                chunks.append(current_chunk.strip())
+            logger.info(f"[speaker_labels] Splitting transcript into {len(chunks)} chunks")
+        else:
+            chunks = [raw_text]
+
+        labeled_parts = []
+        for i, chunk in enumerate(chunks):
+            chunk_context = f" (Part {i+1}/{len(chunks)})" if len(chunks) > 1 else ""
+            prompt = f"""You are a transcript formatter. Below is a raw speech-to-text transcript{chunk_context} from a job interview between a Recruiter and a Candidate. Your job is to add speaker labels.
 
 Rules:
-- Label each dialogue turn as **Recruiter:** or **Candidate:**
+- Label each dialogue turn as Recruiter: or Candidate:
+- Do NOT use any markdown formatting - no bold (**), no italics, no headers
 - The Recruiter asks questions, gives instructions, and manages the interview flow
 - The Candidate answers questions and talks about their experience
 - Keep the EXACT original words - do NOT add, remove, or change any words
-- Just add "Recruiter:" or "Candidate:" before each speaker turn
+- Just add "Recruiter:" or "Candidate:" before each speaker turn (plain text, no bold/markdown)
 - Put each speaker turn on a new line with a blank line between turns
 - If you cannot determine the speaker for a part, label it as "Speaker:"{questions_context}
 
 Raw transcript:
-{raw_text}
+{chunk}
 
 Formatted transcript with speaker labels:"""
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=4000,
-        )
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=8000,
+            )
 
-        labeled_text = response.choices[0].message.content.strip()
-        if len(labeled_text) < len(raw_text) * 0.5:
-            logger.warning("[speaker_labels] LLM output too short, using raw text")
-            return raw_text
+            labeled_chunk = response.choices[0].message.content.strip()
+            if len(labeled_chunk) < len(chunk) * 0.3:
+                logger.warning(f"[speaker_labels] Chunk {i+1} output too short, using raw text for this chunk")
+                labeled_parts.append(chunk)
+            else:
+                labeled_parts.append(labeled_chunk)
+                logger.info(f"[speaker_labels] Chunk {i+1}/{len(chunks)} done ({len(labeled_chunk)} chars)")
+
+        labeled_text = "\n\n".join(labeled_parts)
+
+        # Clean up markdown formatting LLM might add (e.g. **Recruiter:** → Recruiter:)
+        import re
+        labeled_text = re.sub(r'\*\*Recruiter:\*\*', 'Recruiter:', labeled_text)
+        labeled_text = re.sub(r'\*\*Candidate:\*\*', 'Candidate:', labeled_text)
+        labeled_text = re.sub(r'\*\*Speaker:\*\*', 'Speaker:', labeled_text)
+        # Also handle partial bold: **Recruiter: or Recruiter:**
+        labeled_text = re.sub(r'\*\*(Recruiter|Candidate|Speaker):', r'\1:', labeled_text)
+        labeled_text = re.sub(r'(Recruiter|Candidate|Speaker):\*\*', r'\1:', labeled_text)
 
         logger.info(f"[speaker_labels] Successfully added speaker labels ({len(labeled_text)} chars)")
         return labeled_text
@@ -628,8 +711,8 @@ def _process_transcript_with_timestamps(
     if not raw_text or not raw_text.strip():
         raise TranscriptionError("No valid text found in transcription")
 
-    # Skip LLM speaker labeling (too slow) — use raw text directly
-    labeled_text = raw_text.strip()
+    # Use LLM to add Recruiter/Candidate speaker labels
+    labeled_text = _add_speaker_labels(raw_text.strip(), question_timestamps)
 
     start_str = start_time.strftime("%H:%M:%S")
     end_str = end_time.strftime("%H:%M:%S")

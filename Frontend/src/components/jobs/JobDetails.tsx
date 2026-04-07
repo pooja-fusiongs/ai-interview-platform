@@ -318,7 +318,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       }
       setCandidates((prev: any[]) => prev.map(c => c.id === candidateRef.id ? { ...c, status: 'Interview Scheduled' } : c))
 
-      // Refresh question sets in background
+      // Refresh question sets
       try {
         const response = await apiClient.get('/api/interview/question-sets')
         const sets = response.data || []
@@ -1210,11 +1210,14 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 }
 
                                 if (hasQuestions || st === 'Questions Generated' || st === 'Interview Scheduled') {
+                                  const showReview = hasQuestions && (st === 'Interview Scheduled' || st === 'Interview Completed' || st === 'Questions Generated')
                                   return (
                                     <>
-                                      <Button className="job-action-btn" onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
-                                        <i className="fas fa-eye" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Review</span>
-                                      </Button>
+                                      {showReview && (
+                                        <Button className="job-action-btn" onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                          <i className="fas fa-eye" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Review</span>
+                                        </Button>
+                                      )}
                                       {candidateVideoIds[candidate.id] ? (
                                         <Button className="job-action-btn" onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
                                           <i className="fas fa-video" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Interview</span>
@@ -1366,11 +1369,14 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                           )
                         }
                         if (hasQuestions || st === 'Questions Generated' || st === 'Interview Scheduled') {
+                          const showReview = hasQuestions && (st === 'Interview Scheduled' || st === 'Interview Completed' || st === 'Questions Generated')
                           return (
                             <>
-                              <Button onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
-                                <i className="fas fa-eye" style={{ marginRight: 4, fontSize: 10 }}></i>Review
-                              </Button>
+                              {showReview && (
+                                <Button onClick={() => navigate(`/interview-outline/${questionSetId}?jobId=${selectedJob.id}&jobTitle=${encodeURIComponent(selectedJob.title)}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                  <i className="fas fa-eye" style={{ marginRight: 4, fontSize: 10 }}></i>Review
+                                </Button>
+                              )}
                               {candidateVideoIds[candidate.id] ? (
                                 <Button onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
                                   <i className="fas fa-video" style={{ marginRight: 4, fontSize: 10 }}></i>Interview
@@ -2017,10 +2023,25 @@ const JobDetails: React.FC<JobDetailsProps> = ({
             </Box>
             <Box>
               <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Time *</Typography>
-              <TextField fullWidth type="time" value={scheduleForm.time}
-                onChange={e => setScheduleForm(prev => ({ ...prev, time: e.target.value }))}
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField type="time" value={scheduleForm.time}
+                  onChange={e => setScheduleForm(prev => ({ ...prev, time: e.target.value }))}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' } }} />
+                <TextField select
+                  value={(() => { const h = parseInt(scheduleForm.time?.split(':')[0] || '0', 10); return (isNaN(h) || h < 12) ? 'AM' : 'PM'; })()}
+                  onChange={e => {
+                    const [hStr, m] = (scheduleForm.time || '00:00').split(':');
+                    let h = parseInt(hStr, 10) || 0;
+                    const h12 = h % 12;
+                    const newH = e.target.value === 'PM' ? (h12 === 0 ? 12 : h12 + 12) : h12;
+                    setScheduleForm(prev => ({ ...prev, time: `${String(newH).padStart(2, '0')}:${m || '00'}` }));
+                  }}
+                  sx={{ width: '85px', '& .MuiOutlinedInput-root': { borderRadius: '10px', height: '44px' }, '& .MuiSelect-select': { fontWeight: 600 } }}>
+                  <MenuItem value="AM">AM</MenuItem>
+                  <MenuItem value="PM">PM</MenuItem>
+                </TextField>
+              </Box>
             </Box>
             <Box>
               <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', mb: '6px' }}>Duration</Typography>
