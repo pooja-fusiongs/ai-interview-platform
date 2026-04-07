@@ -848,7 +848,7 @@ const Results = () => {
           </Box>
         )}
 
-        {/* Integrity check */}
+        {/* Integrity check — real fraud detection data */}
         <Card sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: 'none' }}>
           <Box sx={{ padding: { xs: '12px 16px', md: '14px 20px' }, borderBottom: '1px solid #f1f5f9', background: '#EEF0FF', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fas fa-shield-alt" style={{ color: '#020291', fontSize: 14 }}></i>
@@ -857,21 +857,39 @@ const Results = () => {
             </Typography>
           </Box>
           <CardContent sx={{ padding: { xs: '8px 16px', md: '8px 20px' } }}>
-            {[
-              { label: 'Voice Consistency', icon: 'fas fa-microphone' },
-              { label: 'Lip/Body Movement', icon: 'fas fa-user-check' },
-              { label: 'Background Analysis', icon: 'fas fa-desktop' },
-            ].map((check) => (
-              <Box key={check.label} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Box sx={{ width: 30, height: 30, borderRadius: '8px', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <i className={check.icon} style={{ color: '#6B7280', fontSize: 12 }}></i>
+            {(() => {
+              const ic = selectedSession?.integrity_check;
+              const checks = [
+                { label: 'Voice Consistency', icon: 'fas fa-microphone', score: ic?.voice_consistency_score },
+                { label: 'Lip/Body Movement', icon: 'fas fa-user-check', score: ic ? Math.min(ic.lip_sync_score ?? 1, ic.body_movement_score ?? 1) : undefined },
+                { label: 'Face Detection', icon: 'fas fa-user-shield', score: ic?.face_detection_score },
+              ];
+              return checks.map((check) => {
+                const hasData = check.score !== undefined && check.score !== null;
+                const passed = !hasData || (check.score ?? 0) >= 0.6;
+                const chipLabel = !hasData ? 'No Data' : passed ? 'Passed' : 'Failed';
+                const chipBg = !hasData ? '#f1f5f9' : passed ? '#DCFCE7' : '#FEE2E2';
+                const chipColor = !hasData ? '#94a3b8' : passed ? '#166534' : '#991B1B';
+                return (
+                  <Box key={check.label} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Box sx={{ width: 30, height: 30, borderRadius: '8px', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i className={check.icon} style={{ color: '#6B7280', fontSize: 12 }}></i>
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>{check.label}</Typography>
+                        {hasData && (
+                          <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
+                            Score: {Math.round((check.score ?? 0) * 100)}%
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                    <Chip label={chipLabel} size="small" sx={{ fontSize: '11px', fontWeight: 600, backgroundColor: chipBg, color: chipColor, height: '24px' }} />
                   </Box>
-                  <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>{check.label}</Typography>
-                </Box>
-                <Chip label="Passed" size="small" sx={{ fontSize: '11px', fontWeight: 600, backgroundColor: '#DCFCE7', color: '#166534', height: '24px' }} />
-              </Box>
-            ))}
+                );
+              });
+            })()}
           </CardContent>
         </Card>
       </Box>

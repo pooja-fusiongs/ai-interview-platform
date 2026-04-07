@@ -401,7 +401,26 @@ const VideoInterviewDetail: React.FC = () => {
                         </Typography>
                       )}
                     </Box>
-                    {!scoreResult && (
+                    {scoreResult ? (
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        startIcon={<Assessment />}
+                        onClick={() => navigate(scoreResult.interview_session_id ? `/results?session=${scoreResult.interview_session_id}` : '/results')}
+                        sx={{
+                          padding: '12px',
+                          borderRadius: '10px',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          backgroundColor: '#16a34a',
+                          '&:hover': {
+                            backgroundColor: '#15803d'
+                          }
+                        }}
+                      >
+                        View Result
+                      </Button>
+                    ) : (
                       <Button
                         variant="contained"
                         fullWidth
@@ -492,9 +511,14 @@ const VideoInterviewDetail: React.FC = () => {
                       size="small"
                       variant="outlined"
                       startIcon={<CloudUpload sx={{ transform: 'rotate(180deg)' }} />}
-                      href={`${API_BASE_URL}/api/video/interviews/${interview.id}/recording-stream`}
-                      target="_blank"
-                      download
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = `${API_BASE_URL}/api/video/interviews/${interview.id}/recording-download`;
+                        a.download = `interview_${interview.id}.webm`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }}
                       sx={{
                         textTransform: 'none', fontWeight: 600, fontSize: '12px',
                         borderColor: '#e2e8f0', color: '#64748b', borderRadius: '8px',
@@ -514,12 +538,12 @@ const VideoInterviewDetail: React.FC = () => {
                       preload="metadata"
                       onLoadedMetadata={(e) => {
                         const video = e.currentTarget;
-                        // Fix webm duration issue — seek to end then back to get real duration
+                        // Fix webm duration issue — seek to end using 'seeked' event for accurate duration
                         if (video.duration === Infinity || isNaN(video.duration)) {
                           video.currentTime = 1e101;
-                          video.addEventListener('timeupdate', function fixDuration() {
+                          video.addEventListener('seeked', function fixDuration() {
+                            video.removeEventListener('seeked', fixDuration);
                             video.currentTime = 0;
-                            video.removeEventListener('timeupdate', fixDuration);
                           }, { once: true });
                         }
                       }}

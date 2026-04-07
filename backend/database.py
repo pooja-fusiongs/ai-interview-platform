@@ -33,13 +33,13 @@ if CLOUD_SQL_CONNECTION_NAME:
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
         pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=15,
-        pool_timeout=30,
+        pool_size=3,
+        max_overflow=5,
+        pool_timeout=15,
         pool_recycle=300,
         pool_reset_on_return="rollback",
     )
-    print(f"GCP Cloud SQL connected via Unix socket (pool=10+15, ~1-3ms latency)")
+    print(f"GCP Cloud SQL connected via Unix socket (pool=3+5, ~1-3ms latency)")
 
 elif DATABASE_URL:
     # Fix for Render: replace postgres:// with postgresql://

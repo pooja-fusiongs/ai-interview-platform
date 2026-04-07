@@ -43,14 +43,13 @@ def verify_reset_token(token: str) -> str:
 
 
 def send_password_reset_email(email: str, reset_link: str) -> bool:
-    from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail, Email, To, Content
+    import requests
 
-    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@ai-interview-platform.com")
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "pooja@fusiongs.com")
 
-    if not SENDGRID_API_KEY:
-        print(f"[ForgotPassword] SENDGRID_API_KEY not set, skipping email. Reset link: {reset_link}")
+    if not BREVO_API_KEY:
+        print(f"[ForgotPassword] BREVO_API_KEY not set, skipping email. Reset link: {reset_link}")
         return False
 
     try:
@@ -92,16 +91,22 @@ def send_password_reset_email(email: str, reset_link: str) -> bool:
 </body>
 </html>"""
 
-        message = Mail(
-            from_email=Email(SENDER_EMAIL, "AI Interview Platform"),
-            to_emails=To(email),
-            subject="Reset Your Password - AI Interview Platform",
-            html_content=Content("text/html", html_content)
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+                "api-key": BREVO_API_KEY,
+            },
+            json={
+                "sender": {"name": "AI Interview Platform", "email": SENDER_EMAIL},
+                "to": [{"email": email}],
+                "subject": "Reset Your Password - AI Interview Platform",
+                "htmlContent": html_content,
+            },
         )
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-        response = sg.send(message)
         print(f"[ForgotPassword] Reset email sent to {email}, status: {response.status_code}")
-        return True
+        return response.status_code in (200, 201)
     except Exception as e:
         print(f"[ForgotPassword] Failed to send reset email: {e}")
         return False

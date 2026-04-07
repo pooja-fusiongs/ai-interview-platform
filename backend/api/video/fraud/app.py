@@ -22,6 +22,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 from database import get_db
 from models import (
     User,
+    Job,
     VideoInterview,
     FraudAnalysis,
     UserRole,
@@ -98,6 +99,8 @@ class FaceEventPayload(BaseModel):
     multiple_face_seconds: float = 0
     max_faces_detected: int = 0
     detection_interval_ms: int = 750
+    camera_disabled_count: int = 0
+    face_changed: bool = False
 
 
 @router.post("/{video_interview_id}/face-events")
@@ -178,7 +181,7 @@ def submit_face_events(
         face_flags.append({
             "flag_type": "face_not_visible",
             "severity": "high" if no_face_ratio > 0.5 or payload.no_face_seconds > 60 else "medium",
-            "description": f"Face not visible {round(no_face_ratio * 100)}% of interview ({round(payload.no_face_seconds)}s)",
+            "description": f"Face not visible {round(no_face_ratio * 100)}% of interview ({round(payload.no_face_seconds)}s)" + (f" • Camera disabled {payload.camera_disabled_count} times" if payload.camera_disabled_count > 0 else ""),
             "confidence": round(no_face_ratio, 2),
             "timestamp_seconds": 0,
         })
@@ -190,6 +193,16 @@ def submit_face_events(
             "confidence": round(multi_face_ratio, 2),
             "timestamp_seconds": 0,
         })
+    if payload.face_changed:
+        face_flags.append({
+            "flag_type": "face_identity_change",
+            "severity": "high",
+            "description": "Different person detected during interview — face identity changed from the original candidate",
+            "confidence": 0.90,
+            "timestamp_seconds": 0,
+        })
+        # Heavy penalty — different person is strong fraud signal
+        face_score = max(0.0, face_score - 0.4)
 
     # Get or create single FraudAnalysis record (prevents duplicates)
     existing = get_or_create_fraud_analysis(db, video_interview_id)
@@ -208,8 +221,9 @@ def submit_face_events(
     if existing.flags:
         try:
             parsed = json.loads(existing.flags)
-            existing_flags = [f for f in parsed if f.get("flag_type") not in ("face_not_visible", "multiple_faces")]
-            old_face_flags = [f for f in parsed if f.get("flag_type") in ("face_not_visible", "multiple_faces")]
+            face_flag_types = ("face_not_visible", "multiple_faces", "face_identity_change")
+            existing_flags = [f for f in parsed if f.get("flag_type") not in face_flag_types]
+            old_face_flags = [f for f in parsed if f.get("flag_type") in face_flag_types]
         except (json.JSONDecodeError, TypeError):
             existing_flags = []
     merged_face_flags = {}
@@ -600,9 +614,9 @@ def trigger_fraud_analysis(
     _vi_id = video_interview_id
     import threading
     def _bg_fraud_analysis():
+        from database import SessionLocal
+        bg_db = SessionLocal()
         try:
-            from database import SessionLocal
-            bg_db = SessionLocal()
             import tempfile, requests
 
             # Download recording if remote URL
@@ -652,19 +666,17 @@ def trigger_fraud_analysis(
                 fa.analysis_status = "failed"
                 bg_db.commit()
                 print(f"[fraud-bg] Analysis failed for VI {_vi_id}: {results}")
-            bg_db.close()
         except Exception as e:
             print(f"[fraud-bg] Error: {e}")
             try:
-                from database import SessionLocal
-                err_db = SessionLocal()
-                fa = err_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == _vi_id).first()
+                fa = bg_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == _vi_id).first()
                 if fa:
                     fa.analysis_status = "failed"
-                    err_db.commit()
-                err_db.close()
+                    bg_db.commit()
             except Exception:
-                pass
+                bg_db.rollback()
+        finally:
+            bg_db.close()
 
     threading.Thread(target=_bg_fraud_analysis, daemon=True).start()
 
@@ -703,80 +715,8 @@ def fraud_dashboard(
     Fraud detection dashboard stats — returns instantly.
     Heavy auto-analysis moved to background thread.
     """
-    # Kick off auto-analysis in background (non-blocking)
-    import threading
-    def _bg_analyze():
-        try:
-            from database import SessionLocal
-            bg_db = SessionLocal()
-            # Find unanalyzed interviews
-            unanalyzed = (
-                bg_db.query(VideoInterview)
-                .filter(
-                    VideoInterview.status == "completed",
-                    VideoInterview.recording_url.isnot(None),
-                    ~VideoInterview.id.in_(
-                        bg_db.query(FraudAnalysis.video_interview_id)
-                    ),
-                )
-                .limit(3)  # Process max 3 at a time to avoid overload
-                .all()
-            )
-            for vi in unanalyzed:
-                try:
-                    recording_path = None
-                    temp_file = None
-                    if vi.recording_url.startswith("http://") or vi.recording_url.startswith("https://"):
-                        import tempfile, requests
-                        try:
-                            resp = requests.get(vi.recording_url, timeout=60)
-                            resp.raise_for_status()
-                            ext = ".webm" if ".webm" in vi.recording_url else ".mp4"
-                            temp_file = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
-                            temp_file.write(resp.content)
-                            temp_file.close()
-                            recording_path = temp_file.name
-                        except Exception as dl_err:
-                            print(f"[BG] Failed to download recording for VI {vi.id}: {dl_err}")
-                            continue
-                    else:
-                        base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-                        recording_path = os.path.join(base_dir, vi.recording_url.lstrip("/"))
-                        recording_path = os.path.normpath(recording_path)
-                    results = _get_run_real_analysis()(vi.id, recording_path)
-                    if temp_file:
-                        try: os.unlink(temp_file.name)
-                        except OSError: pass
-                    if results is None:
-                        print(f"[BG] Skipping VI {vi.id} — real analysis unavailable")
-                        continue
-                    fraud = FraudAnalysis(
-                        video_interview_id=vi.id,
-                        voice_consistency_score=results["voice_consistency_score"],
-                        voice_consistency_details=results["voice_consistency_details"],
-                        lip_sync_score=results["lip_sync_score"],
-                        lip_sync_details=results["lip_sync_details"],
-                        body_movement_score=results["body_movement_score"],
-                        body_movement_details=results["body_movement_details"],
-                        face_detection_score=results.get("face_detection_score"),
-                        face_detection_details=results.get("face_detection_details"),
-                        overall_trust_score=results["overall_trust_score"],
-                        flags=results["flags"],
-                        flag_count=results["flag_count"],
-                        analysis_status="completed",
-                        analyzed_at=results["analyzed_at"],
-                    )
-                    bg_db.add(fraud)
-                    bg_db.commit()
-                    print(f"[BG] Auto-analyzed fraud for VI {vi.id}")
-                except Exception as e:
-                    bg_db.rollback()
-                    print(f"[BG] Auto-analysis failed for VI {vi.id}: {e}")
-            bg_db.close()
-        except Exception as e:
-            print(f"[BG] Fraud auto-analysis error: {e}")
-
-    threading.Thread(target=_bg_analyze, daemon=True).start()
+    # Auto-analysis removed from dashboard endpoint to prevent connection exhaustion.
+    # Use the POST /{video_interview_id}/analyze endpoint to trigger analysis explicitly.
 
     # Return stats instantly using single aggregation query
     stats = db.query(
@@ -830,13 +770,17 @@ def list_flagged_interviews(
     """
     List all fraud analyses that are suspicious: flag_count > 0 OR trust score < 60%.
     """
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import joinedload, load_only
     from sqlalchemy import or_
     flagged = (
         db.query(FraudAnalysis)
         .options(
-            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.candidate),
-            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.job),
+            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.candidate).load_only(
+                User.id, User.full_name, User.username
+            ),
+            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.job).load_only(
+                Job.id, Job.title
+            ),
         )
         .filter(or_(
             FraudAnalysis.flag_count > 0,
@@ -893,7 +837,7 @@ def list_all_analyses(
 ):
     """All fraud analyses (live + completed) for monitor dashboard.
     Also includes in_progress/waiting interviews that don't have fraud data yet."""
-    from sqlalchemy.orm import joinedload, aliased
+    from sqlalchemy.orm import joinedload, aliased, load_only
     from sqlalchemy import outerjoin
 
     # 1) Interviews WITH fraud analysis (completed/in_progress)
@@ -901,8 +845,12 @@ def list_all_analyses(
         db.query(FraudAnalysis)
         .join(VideoInterview, FraudAnalysis.video_interview_id == VideoInterview.id)
         .options(
-            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.candidate),
-            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.job),
+            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.candidate).load_only(
+                User.id, User.full_name, User.username
+            ),
+            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.job).load_only(
+                Job.id, Job.title
+            ),
         )
         .filter(VideoInterview.status.notin_(["scheduled"]))
         .order_by(FraudAnalysis.analyzed_at.desc().nullslast())
@@ -947,8 +895,12 @@ def list_all_analyses(
     live_interviews = (
         db.query(VideoInterview)
         .options(
-            joinedload(VideoInterview.candidate),
-            joinedload(VideoInterview.job),
+            joinedload(VideoInterview.candidate).load_only(
+                User.id, User.full_name, User.username
+            ),
+            joinedload(VideoInterview.job).load_only(
+                Job.id, Job.title
+            ),
         )
         .filter(VideoInterview.status.in_(["in_progress", "waiting"]))
         .filter(VideoInterview.id.notin_(seen_vi_ids) if seen_vi_ids else sql_func.true())

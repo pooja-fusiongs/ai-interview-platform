@@ -717,6 +717,14 @@ def get_question_sets(
                 fallback_skills = [q.skill_focus for q in questions if q.skill_focus and q.skill_focus != "null"]
                 main_topics = list(dict.fromkeys(fallback_skills))
 
+            # Determine experience: prefer candidate's years, fallback to job level
+            if candidate and candidate.experience_years:
+                experience = f"{candidate.experience_years}+ years"
+            elif job and job.experience_level:
+                experience = str(job.experience_level)
+            else:
+                experience = None
+
             result.append({
                 "id": str(session.id),
                 "job_id": session.job_id,
@@ -730,7 +738,8 @@ def get_question_sets(
                 "mode": session.generation_mode.value if hasattr(session.generation_mode, 'value') else str(session.generation_mode),
                 "main_topics": main_topics,
                 "total_questions": len(questions),
-                "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"
+                "experience": experience,
+                "location": job.location if job else None
             })
 
         return result
@@ -823,6 +832,14 @@ def get_question_sets_test(db: Session = Depends(get_db)):
             fallback_skills = [q.skill_focus for q in questions if q.skill_focus and q.skill_focus != "null"]
             main_topics = list(dict.fromkeys(fallback_skills))
 
+        # Determine experience: prefer candidate's years, fallback to job level
+        if candidate and candidate.experience_years:
+            experience = f"{candidate.experience_years}+ years"
+        elif job and job.experience_level:
+            experience = str(job.experience_level)
+        else:
+            experience = None
+
         result.append({
             "id": str(session.id),
             "job_id": session.job_id,
@@ -836,7 +853,8 @@ def get_question_sets_test(db: Session = Depends(get_db)):
             "mode": session.generation_mode.value if hasattr(session.generation_mode, 'value') else str(session.generation_mode),
             "main_topics": main_topics,
             "total_questions": len(questions),
-            "experience": f"{candidate.experience_years}+ years" if candidate and candidate.experience_years else "2+ years"
+            "experience": experience,
+            "location": job.location if job else None
         })
 
     return result

@@ -241,82 +241,90 @@ def start_interview_reminder_scheduler():
                 from api.video.interviews.app import generate_candidate_token
 
                 db = SessionLocal()
-                now = datetime.now(timezone.utc)
-                window_start = now + timedelta(minutes=5)
-                window_end = now + timedelta(minutes=25)
+                try:
+                    now = datetime.now(timezone.utc)
+                    window_start = now + timedelta(minutes=5)
+                    window_end = now + timedelta(minutes=25)
 
-                # Find interviews starting in 5-25 min — wider window for reliability
-                upcoming = db.query(VideoInterview).options(
-                    joinedload(VideoInterview.candidate),
-                    joinedload(VideoInterview.interviewer),
-                    joinedload(VideoInterview.job),
-                ).filter(
-                    VideoInterview.status == "scheduled",
-                    VideoInterview.scheduled_at >= window_start,
-                    VideoInterview.scheduled_at <= window_end,
-                    VideoInterview.reminder_sent_at.is_(None),
-                ).all()
+                    # Find interviews starting in 5-25 min — wider window for reliability
+                    from sqlalchemy.orm import load_only as _lo
+                    upcoming = db.query(VideoInterview).options(
+                        joinedload(VideoInterview.candidate).load_only(
+                            User.id, User.email, User.full_name, User.username
+                        ),
+                        joinedload(VideoInterview.interviewer).load_only(
+                            User.id, User.email, User.full_name, User.username
+                        ),
+                        joinedload(VideoInterview.job).load_only(
+                            Job.id, Job.title
+                        ),
+                    ).filter(
+                        VideoInterview.status == "scheduled",
+                        VideoInterview.scheduled_at >= window_start,
+                        VideoInterview.scheduled_at <= window_end,
+                        VideoInterview.reminder_sent_at.is_(None),
+                    ).all()
 
-                if upcoming:
-                    print(f"🔔 Found {len(upcoming)} interview(s) needing reminders (window: {window_start.isoformat()} – {window_end.isoformat()})")
+                    if upcoming:
+                        print(f"🔔 Found {len(upcoming)} interview(s) needing reminders (window: {window_start.isoformat()} – {window_end.isoformat()})")
 
-                for vi in upcoming:
-                    try:
-                        candidate = vi.candidate
-                        recruiter = vi.interviewer
-                        job = vi.job
-                        if not candidate or not candidate.email:
-                            print(f"⚠️ Skipping interview #{vi.id}: no candidate email")
-                            continue
+                    for vi in upcoming:
+                        try:
+                            candidate = vi.candidate
+                            recruiter = vi.interviewer
+                            job = vi.job
+                            if not candidate or not candidate.email:
+                                print(f"⚠️ Skipping interview #{vi.id}: no candidate email")
+                                continue
 
-                        scheduled_ist = _to_ist(vi.scheduled_at)
-                        interview_date_str = scheduled_ist.strftime("%A, %B %d, %Y")
-                        interview_time_str = scheduled_ist.strftime("%I:%M %p") + " IST"
-                        job_title = job.title if job else "Interview"
+                            scheduled_ist = _to_ist(vi.scheduled_at)
+                            interview_date_str = scheduled_ist.strftime("%A, %B %d, %Y")
+                            interview_time_str = scheduled_ist.strftime("%I:%M %p") + " IST"
+                            job_title = job.title if job else "Interview"
 
-                        print(f"🔔 Interview #{vi.id}: scheduled_at={vi.scheduled_at.isoformat()}, IST={scheduled_ist.strftime('%Y-%m-%d %I:%M %p')}")
+                            print(f"🔔 Interview #{vi.id}: scheduled_at={vi.scheduled_at.isoformat()}, IST={scheduled_ist.strftime('%Y-%m-%d %I:%M %p')}")
 
-                        frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
-                        candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
-                        meeting_url = f"{frontend_url}/video-room/{vi.id}?token={candidate_token}"
+                            frontend_url = os.getenv("FRONTEND_URL", "https://ai-interview-platform-unqg.vercel.app")
+                            candidate_token = generate_candidate_token(vi.id, vi.candidate_id)
+                            meeting_url = f"{frontend_url}/video-room/{vi.id}?token={candidate_token}"
 
-                        # Send reminder to candidate
-                        send_interview_notification(
-                            candidate_email=candidate.email,
-                            candidate_name=candidate.full_name or candidate.username or "Candidate",
-                            job_title=job_title,
-                            interview_date=interview_date_str,
-                            interview_time=interview_time_str,
-                            meeting_url=meeting_url,
-                            email_type="reminder",
-                        )
-                        print(f"🔔 Candidate reminder sent to {candidate.email} for interview #{vi.id}")
-
-                        # Send reminder to recruiter/interviewer
-                        if recruiter and recruiter.email:
-                            recruiter_meeting_url = f"{frontend_url}/video-room/{vi.id}"
-                            candidate_name = candidate.full_name or candidate.username or "Candidate"
+                            # Send reminder to candidate
                             send_interview_notification(
-                                candidate_email=recruiter.email,
-                                candidate_name=recruiter.full_name or recruiter.username or "Recruiter",
-                                job_title=f"{job_title} — Candidate: {candidate_name}",
+                                candidate_email=candidate.email,
+                                candidate_name=candidate.full_name or candidate.username or "Candidate",
+                                job_title=job_title,
                                 interview_date=interview_date_str,
                                 interview_time=interview_time_str,
-                                meeting_url=recruiter_meeting_url,
+                                meeting_url=meeting_url,
                                 email_type="reminder",
                             )
-                            print(f"🔔 Recruiter reminder sent to {recruiter.email} for interview #{vi.id}")
-                        else:
-                            print(f"⚠️ Interview #{vi.id}: no recruiter email found, skipping recruiter reminder")
+                            print(f"🔔 Candidate reminder sent to {candidate.email} for interview #{vi.id}")
 
-                        vi.reminder_sent_at = now
-                        db.commit()
-                    except Exception as e:
-                        print(f"⚠️ Reminder failed for interview #{vi.id}: {e}")
-                        import traceback
-                        traceback.print_exc()
+                            # Send reminder to recruiter/interviewer
+                            if recruiter and recruiter.email:
+                                recruiter_meeting_url = f"{frontend_url}/video-room/{vi.id}"
+                                candidate_name = candidate.full_name or candidate.username or "Candidate"
+                                send_interview_notification(
+                                    candidate_email=recruiter.email,
+                                    candidate_name=recruiter.full_name or recruiter.username or "Recruiter",
+                                    job_title=f"{job_title} — Candidate: {candidate_name}",
+                                    interview_date=interview_date_str,
+                                    interview_time=interview_time_str,
+                                    meeting_url=recruiter_meeting_url,
+                                    email_type="reminder",
+                                )
+                                print(f"🔔 Recruiter reminder sent to {recruiter.email} for interview #{vi.id}")
+                            else:
+                                print(f"⚠️ Interview #{vi.id}: no recruiter email found, skipping recruiter reminder")
 
-                db.close()
+                            vi.reminder_sent_at = now
+                            db.commit()
+                        except Exception as e:
+                            print(f"⚠️ Reminder failed for interview #{vi.id}: {e}")
+                            import traceback
+                            traceback.print_exc()
+                finally:
+                    db.close()
             except Exception as e:
                 print(f"⚠️ Reminder scheduler error: {e}")
                 import traceback

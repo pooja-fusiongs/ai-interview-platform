@@ -367,6 +367,14 @@ class InterviewAnswerResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class IntegrityCheckData(BaseModel):
+    voice_consistency_score: Optional[float] = None
+    lip_sync_score: Optional[float] = None
+    body_movement_score: Optional[float] = None
+    face_detection_score: Optional[float] = None
+    overall_trust_score: Optional[float] = None
+    flag_count: int = 0
+
 class InterviewSessionResponse(BaseModel):
     id: int
     job_id: int
@@ -381,6 +389,7 @@ class InterviewSessionResponse(BaseModel):
     job_title: Optional[str] = None
     candidate_name: Optional[str] = None
     answers: List[InterviewAnswerResponse] = []
+    integrity_check: Optional[IntegrityCheckData] = None
 
     class Config:
         from_attributes = True
@@ -801,6 +810,9 @@ class UnifiedDetectionPayload(BaseModel):
     # Gaze / Looking Away Details
     looking_away_count: int = 0
     looking_away_seconds: float = 0
+
+    # Face Identity Change
+    face_changed_count: int = 0
 
     # Body Movement Details
     movement_score: str = "CALM"

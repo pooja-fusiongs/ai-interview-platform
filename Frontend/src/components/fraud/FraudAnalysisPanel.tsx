@@ -335,7 +335,7 @@ const FraudAnalysisPanel: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton
-              onClick={() => navigate('/fraud-dashboard')}
+              onClick={() => navigate(-1)}
               sx={{
                 background: 'white',
                 border: '1px solid #e2e8f0',

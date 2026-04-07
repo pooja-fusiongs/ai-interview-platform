@@ -102,6 +102,11 @@ def submit_movement_detection(
             looking_away_ratio = looking_away_count / total_face
             face_score -= looking_away_ratio * 0.3  # moderate penalty
 
+        # Penalty: face identity changed (different person)
+        face_changed_count = getattr(payload, 'face_changed_count', 0)
+        if face_changed_count > 0:
+            face_score -= 0.4  # heavy penalty — different person
+
         face_score = max(0.0, min(1.0, face_score))
 
         if existing.face_detection_score is not None:
@@ -164,8 +169,19 @@ def submit_movement_detection(
             pass
             
     # Remove old auto-generated flags (keep manually added ones)
-    auto_flag_types = {"excessive_movement", "low_face_score", "low_lip_sync", "low_voice_consistency"}
+    auto_flag_types = {"excessive_movement", "low_face_score", "low_lip_sync", "low_voice_consistency", "face_identity_change"}
     existing_flags = [f for f in existing_flags if f.get("flag_type") not in auto_flag_types]
+
+    # Flag face identity change (different person during interview)
+    face_changed_count = getattr(payload, 'face_changed_count', 0)
+    if face_changed_count > 0:
+        existing_flags.append({
+            "flag_type": "face_identity_change",
+            "severity": "high",
+            "description": f"Different person detected during interview (identity changed {face_changed_count} times)",
+            "confidence": 0.90,
+            "timestamp_seconds": 0
+        })
 
     if high_count >= 3:
         existing_flags.append({

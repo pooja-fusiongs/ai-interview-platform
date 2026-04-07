@@ -18,7 +18,6 @@ import {
   InputAdornment,
   Button,
   TablePagination,
-  CircularProgress,
   Card,
   CardContent,
   useMediaQuery,
@@ -64,6 +63,7 @@ interface QuestionSet {
   main_topics?: string[];
   total_questions: number;
   experience?: string;
+  location?: string;
 }
 
 const ExpertReview: React.FC = () => {
@@ -107,7 +107,8 @@ const ExpertReview: React.FC = () => {
         mode: item.mode || 'preview',
         main_topics: item.main_topics || [],
         total_questions: item.questions?.length || 0,
-        experience: item.experience || '2+ years'
+        experience: item.experience || null,
+        location: item.location || null
       }));
 
       setQuestionSets(transformedData);
@@ -120,40 +121,6 @@ const ExpertReview: React.FC = () => {
     }
   };
 
-  const generateDemoData = (): QuestionSet[] => {
-    return [
-      {
-        id: 'set-1',
-        job_id: 1,
-        application_id: 1,
-        job_title: 'Senior React Developer',
-        candidate_name: 'John Smith',
-        candidate_email: 'john.smith@email.com',
-        status: 'approved',
-        generated_at: '2024-01-30T11:44:00Z',
-        mode: 'preview',
-        main_topics: ['React', 'JavaScript', 'System Design'],
-        total_questions: 10,
-        experience: '5+ years',
-        questions: []
-      },
-      {
-        id: 'set-2',
-        job_id: 2,
-        application_id: 2,
-        job_title: 'Python Backend Developer',
-        candidate_name: 'Sarah Johnson',
-        candidate_email: 'sarah.johnson@email.com',
-        status: 'approved',
-        generated_at: '2024-01-30T11:46:00Z',
-        mode: 'preview',
-        main_topics: ['Python', 'Django', 'API Development'],
-        total_questions: 8,
-        experience: '3+ years',
-        questions: []
-      }
-    ];
-  };
 
   const handleViewQuestions = (questionSet: QuestionSet) => {
     navigate(`/interview-outline/${questionSet.id}`);
@@ -500,8 +467,8 @@ const ExpertReview: React.FC = () => {
                       <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>
                         Experience
                       </Typography>
-                      <Typography sx={{ fontSize: '13px', color: '#1e293b' }}>
-                        {questionSet.experience || '2+ years'}
+                      <Typography sx={{ fontSize: '13px', color: questionSet.experience ? '#1e293b' : '#aaa' }}>
+                        {questionSet.experience || 'N/A'}
                       </Typography>
                     </Box>
                     <Box>
@@ -653,8 +620,8 @@ const ExpertReview: React.FC = () => {
                   {paginatedData.map((questionSet) => (
                     <TableRow key={questionSet.id} sx={{ '&:hover': { backgroundColor: '#fafafa' } }}>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
-                          {questionSet.experience || '2+ years'}
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: questionSet.experience ? '#333' : '#aaa' }}>
+                          {questionSet.experience || 'N/A'}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -678,12 +645,16 @@ const ExpertReview: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Box sx={{ width: 4, height: 4, backgroundColor: '#4caf50', borderRadius: '50%' }} />
-                          <Typography variant="body2" sx={{ color: '#666' }}>
-                            New York
-                          </Typography>
-                        </Box>
+                        {questionSet.location ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Box sx={{ width: 4, height: 4, backgroundColor: '#4caf50', borderRadius: '50%' }} />
+                            <Typography variant="body2" sx={{ color: '#666' }}>
+                              {questionSet.location}
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" sx={{ color: '#aaa' }}>N/A</Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ color: '#666' }}>

@@ -5,6 +5,7 @@ import {
   VideoTrack,
   useLocalParticipant,
   useRemoteParticipants,
+  useRoomContext,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import {
@@ -26,6 +27,8 @@ import {
   ContentCopy,
   BrandingWatermark,
   Close,
+  ClosedCaption,
+  ClosedCaptionDisabled,
 } from '@mui/icons-material';
 
 interface FloatingReaction {
@@ -74,6 +77,7 @@ export const VideoTilesGrid: React.FC<{
 }> = ({ onEndCall, onExitCall, captionEntries = [], isCandidate = false }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
+  const room = useRoomContext();
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -105,7 +109,17 @@ export const VideoTilesGrid: React.FC<{
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [mirrorSelfView, setMirrorSelfView] = useState(true);
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const reactionIdRef = useRef(0);
+
+  // Fraud detection status (received from candidate via DataChannel — recruiter only)
+  const [fraudStatus, setFraudStatus] = useState<{
+    faceCount: number;
+    faceChanged: boolean;
+    movementScore: string;
+    cameraOff: boolean;
+    status: string;
+  } | null>(null);
 
   // Self-view drag
   const [selfViewPos, setSelfViewPos] = useState<{ x: number; y: number } | null>(null);
@@ -278,7 +292,34 @@ export const VideoTilesGrid: React.FC<{
     setFloatingReactions(prev => [...prev, { id, emoji, x }]);
     setShowEmojiPicker(false);
     setTimeout(() => { setFloatingReactions(prev => prev.filter(r => r.id !== id)); }, 2000);
+    // Broadcast to remote participants via DataChannel
+    try {
+      room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify({ type: 'reaction', emoji })),
+        { reliable: true }
+      );
+    } catch {}
   };
+
+  // Receive remote emoji reactions
+  useEffect(() => {
+    if (!room) return;
+    const handler = (data: Uint8Array) => {
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(data));
+        if (msg.type === 'reaction') {
+          const id = ++reactionIdRef.current;
+          const x = 20 + Math.random() * 60;
+          setFloatingReactions(prev => [...prev, { id, emoji: msg.emoji, x }]);
+          setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== id)), 2000);
+        } else if (msg.type === 'fraud_status' && !isCandidate) {
+          setFraudStatus(msg);
+        }
+      } catch {}
+    };
+    room.on('dataReceived', handler);
+    return () => { room.off('dataReceived', handler); };
+  }, [room]);
 
   const toggleMic = async () => {
     if (!localParticipant) return;
@@ -380,6 +421,68 @@ export const VideoTilesGrid: React.FC<{
           {r.emoji}
         </Box>
       ))}
+
+      {/* Fraud Detection Status Chips — Recruiter only (received from candidate via DataChannel) */}
+      {!isCandidate && fraudStatus && fraudStatus.status === 'running' && (() => {
+        let label = '';
+        let bg = '';
+        let color = '';
+        let dotColor = '';
+        let show = false;
+
+        if (fraudStatus.faceChanged) {
+          label = 'Different Person Detected';
+          bg = 'rgba(220,38,38,0.85)'; color = '#fca5a5'; dotColor = '#ef4444'; show = true;
+        } else if (fraudStatus.faceCount > 1) {
+          label = `${fraudStatus.faceCount} faces detected`;
+          bg = 'rgba(220,38,38,0.85)'; color = '#fca5a5'; dotColor = '#ef4444'; show = true;
+        } else if (fraudStatus.cameraOff) {
+          label = 'Candidate Camera Off';
+          bg = 'rgba(220,38,38,0.85)'; color = '#fca5a5'; dotColor = '#ef4444'; show = true;
+        } else if (fraudStatus.faceCount === 0) {
+          label = 'No face detected';
+          bg = 'rgba(217,119,6,0.85)'; color = '#fde68a'; dotColor = '#f59e0b'; show = true;
+        } else {
+          label = 'AI Monitoring Active';
+          bg = 'rgba(0,0,0,0.5)'; color = '#86efac'; dotColor = '#22c55e'; show = true;
+        }
+
+        const movementLabel = fraudStatus.movementScore === 'HIGH' ? 'High Movement'
+          : fraudStatus.movementScore === 'MODERATE' ? 'Moderate Movement' : '';
+
+        return show ? (
+          <Box sx={{ position: 'absolute', top: 12, right: 16, zIndex: 40, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5,
+              borderRadius: '14px', backgroundColor: bg, backdropFilter: 'blur(8px)',
+            }}>
+              <Box sx={{
+                width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor,
+                animation: fraudStatus.faceCount === 1 && !fraudStatus.faceChanged ? 'none' : 'pulse-dot 1.5s ease-in-out infinite',
+                '@keyframes pulse-dot': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
+              }} />
+              <Typography sx={{ color, fontSize: '11px', fontWeight: 600 }}>{label}</Typography>
+            </Box>
+            {movementLabel && (
+              <Box sx={{
+                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5,
+                borderRadius: '14px', backdropFilter: 'blur(8px)',
+                backgroundColor: fraudStatus.movementScore === 'HIGH' ? 'rgba(220,38,38,0.85)' : 'rgba(217,119,6,0.85)',
+              }}>
+                <Box sx={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  backgroundColor: fraudStatus.movementScore === 'HIGH' ? '#ef4444' : '#f59e0b',
+                  animation: 'pulse-dot 1.5s ease-in-out infinite',
+                }} />
+                <Typography sx={{
+                  color: fraudStatus.movementScore === 'HIGH' ? '#fca5a5' : '#fde68a',
+                  fontSize: '11px', fontWeight: 600,
+                }}>{movementLabel}</Typography>
+              </Box>
+            )}
+          </Box>
+        ) : null;
+      })()}
 
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* ===== MAIN VIDEO AREA ===== */}
@@ -490,6 +593,48 @@ export const VideoTilesGrid: React.FC<{
           )}
         </Box>
 
+        {/* ===== SCREEN SHARE SIDEBAR — both participants stacked ===== */}
+        {screenShareTrack && (
+          <Box sx={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#202124' }}>
+            {/* TOP: Remote participant */}
+            <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#3c4043', borderLeft: '1px solid #3c4043', borderBottom: '1px solid #202124' }}>
+              {remoteCameraTrack ? (
+                <VideoTrack
+                  trackRef={{ participant: remoteCameraTrack.participant, source: remoteCameraTrack.source, publication: remoteCameraTrack.publication! }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: remoteAvatarColor }}>
+                  <Box sx={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography sx={{ color: 'white', fontSize: 36, fontWeight: 400 }}>{remoteInitial}</Typography>
+                  </Box>
+                </Box>
+              )}
+              <Box sx={{ position: 'absolute', bottom: 8, left: 10 }}>
+                <Typography sx={{ color: '#e8eaed', fontSize: '14px', fontWeight: 500, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{remoteName}</Typography>
+              </Box>
+            </Box>
+            {/* BOTTOM: Local participant */}
+            <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#3c4043', borderLeft: '1px solid #3c4043' }}>
+              {isCamOn && localCameraTrack?.publication ? (
+                <VideoTrack
+                  trackRef={{ participant: localCameraTrack.participant, source: localCameraTrack.source, publication: localCameraTrack.publication }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirrorSelfView ? 'scaleX(-1)' : 'none' }}
+                />
+              ) : (
+                <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: localAvatarColor }}>
+                  <Box sx={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography sx={{ color: 'white', fontSize: 36, fontWeight: 400 }}>{localInitial}</Typography>
+                  </Box>
+                </Box>
+              )}
+              <Box sx={{ position: 'absolute', bottom: 8, left: 10 }}>
+                <Typography sx={{ color: '#e8eaed', fontSize: '14px', fontWeight: 500, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{localName} (You)</Typography>
+              </Box>
+            </Box>
+          </Box>
+        )}
+
         {/* ===== RIGHT PANELS ===== */}
         {showParticipants && (
           <Box sx={{
@@ -586,8 +731,8 @@ export const VideoTilesGrid: React.FC<{
         )}
       </Box>
 
-      {/* ===== SELF-VIEW (Draggable) — only show when remote participant exists ===== */}
-      {remoteParticipant && <Box
+      {/* ===== SELF-VIEW (Draggable) — only show when remote participant exists and no screen share ===== */}
+      {remoteParticipant && !screenShareTrack && <Box
         onMouseDown={handleDragStart}
         sx={{
           position: 'absolute',
@@ -615,6 +760,18 @@ export const VideoTilesGrid: React.FC<{
               <Typography sx={{ color: 'white', fontSize: 24 }}>{localInitial}</Typography>
             </Box>
             <Typography sx={{ color: '#e8eaed', fontSize: '12px', mt: 0.8 }}>{localName}</Typography>
+          </Box>
+        )}
+        {/* Speaking indicator for local participant */}
+        {localParticipant?.isSpeaking && isMicOn && (
+          <Box sx={{ position: 'absolute', bottom: 8, right: 10, display: 'flex', gap: 0.5, alignItems: 'flex-end' }}>
+            {[0, 1, 2].map(i => (
+              <Box key={i} sx={{
+                width: 3, height: 14, borderRadius: '2px', bgcolor: '#8ab4f8',
+                '@keyframes eqBar': { '0%,100%': { transform: 'scaleY(0.3)' }, '50%': { transform: 'scaleY(1)' } },
+                animation: `eqBar 0.6s ease-in-out ${i * 0.15}s infinite`, transformOrigin: 'bottom',
+              }} />
+            ))}
           </Box>
         )}
         {!isMicOn && (
@@ -647,7 +804,7 @@ export const VideoTilesGrid: React.FC<{
       )}
 
       {/* ===== LIVE CAPTIONS OVERLAY ===== */}
-      {captionEntries.length > 0 && (
+      {captionsEnabled && captionEntries.length > 0 && (
         <Box sx={{
           position: 'absolute',
           bottom: { xs: '68px', md: '80px' },
@@ -733,6 +890,22 @@ export const VideoTilesGrid: React.FC<{
               bgcolor: showEmojiPicker ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
             }}>
               <EmojiEmotions />
+            </IconButton>
+          </Tooltip>
+
+          {/* Captions toggle */}
+          <Tooltip title={captionsEnabled ? 'Hide captions' : 'Show captions'} arrow>
+            <IconButton onClick={() => setCaptionsEnabled(v => !v)} sx={{
+              width: { xs: 40, md: 48 }, height: { xs: 40, md: 48 },
+              borderRadius: '50%',
+              color: captionsEnabled ? '#fff' : '#9aa0a6',
+              bgcolor: captionsEnabled ? 'rgba(138,180,248,0.15)' : 'transparent',
+              '&:hover': { bgcolor: captionsEnabled ? 'rgba(138,180,248,0.25)' : 'rgba(255,255,255,0.08)' },
+              transition: 'all 0.2s ease',
+            }}>
+              {captionsEnabled
+                ? <ClosedCaption sx={{ fontSize: { xs: 20, md: 24 } }} />
+                : <ClosedCaptionDisabled sx={{ fontSize: { xs: 20, md: 24 } }} />}
             </IconButton>
           </Tooltip>
 

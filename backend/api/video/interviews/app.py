@@ -10,7 +10,7 @@ fraud analysis records.
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, load_only
 from typing import List
 from datetime import datetime, timezone, timedelta
 
@@ -473,9 +473,15 @@ def list_video_interviews(
     """
     try:
         query = db.query(VideoInterview).options(
-            joinedload(VideoInterview.candidate),
-            joinedload(VideoInterview.interviewer),
-            joinedload(VideoInterview.job),
+            joinedload(VideoInterview.candidate).load_only(
+                User.id, User.email, User.full_name, User.username
+            ),
+            joinedload(VideoInterview.interviewer).load_only(
+                User.id, User.email, User.full_name, User.username
+            ),
+            joinedload(VideoInterview.job).load_only(
+                Job.id, Job.title
+            ),
         )
         if current_user.role == UserRole.CANDIDATE:
             query = query.filter(VideoInterview.candidate_id == current_user.id)
@@ -3040,6 +3046,53 @@ def stream_recording(video_id: int, db: Session = Depends(get_db)):
     if os.path.exists(file_path):
         mime = "video/mp4" if file_path.endswith(".mp4") else "video/webm"
         return FileResponse(file_path, media_type=mime)
+
+    raise HTTPException(status_code=404, detail="Recording file not found")
+
+
+@router.get("/api/video/interviews/{video_id}/recording-download")
+def download_recording(video_id: int, db: Session = Depends(get_db)):
+    """Force-download the recording file."""
+    import httpx
+
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi or not vi.recording_url:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    ext = "mp4" if (vi.recording_url.endswith(".mp4") or "mp4" in vi.recording_url) else "webm"
+    filename = f"interview_{video_id}.{ext}"
+    mime = "video/mp4" if ext == "mp4" else "video/webm"
+
+    if vi.recording_url.startswith("http"):
+        # Stream from Cloudinary and forward with attachment header
+        from fastapi.responses import StreamingResponse
+        url = vi.recording_url
+        # Cloudinary: inject fl_attachment to force download at CDN level
+        if "cloudinary.com" in url:
+            # Insert fl_attachment into the URL path after /upload/
+            url = url.replace("/upload/", "/upload/fl_attachment/", 1)
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=url)
+        # Non-Cloudinary: proxy stream with attachment header
+        def stream():
+            with httpx.stream("GET", url) as r:
+                for chunk in r.iter_bytes(chunk_size=65536):
+                    yield chunk
+        return StreamingResponse(
+            stream(),
+            media_type=mime,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+    # Local file
+    file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", vi.recording_url.lstrip("/"))
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path,
+            media_type=mime,
+            filename=filename,
+            content_disposition_type="attachment"
+        )
 
     raise HTTPException(status_code=404, detail="Recording file not found")
 

@@ -24,6 +24,94 @@ function loadScript(url: string): Promise<void> {
 const HOLISTIC_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js';
 const FACE_DETECTION_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/face_detection.js';
 
+// --- Face Identity Signature ---
+// Uses biometric ratios from MediaPipe face landmarks to detect person changes.
+// These ratios are stable for the same person but differ between people.
+interface FaceSignature {
+  eyeDistanceRatio: number;   // inter-eye / face height
+  noseLengthRatio: number;    // nose tip to bridge / face height
+  mouthWidthRatio: number;    // mouth width / face width
+  faceAspectRatio: number;    // face width / face height
+  eyeToNoseRatio: number;     // eye center to nose tip / face height
+}
+
+function computeFaceSignature(landmarks: any[]): FaceSignature | null {
+  if (!landmarks || landmarks.length < 200) return null;
+
+  // Safely access landmarks — Holistic gives 468, but check key indices exist
+  const maxIdx = Math.max(454, 362, 291, 263, 234, 168, 152, 133, 61, 33, 10, 1);
+  if (landmarks.length <= maxIdx) return null;
+
+  const foreheadTop = landmarks[10];
+  const chinBottom  = landmarks[152];
+  const leftCheek   = landmarks[234];
+  const rightCheek  = landmarks[454];
+  const leftEyeIn   = landmarks[133];
+  const rightEyeIn  = landmarks[263];
+  const leftEyeOut  = landmarks[33];
+  const rightEyeOut = landmarks[362];
+  const noseTip     = landmarks[1];
+  const noseBridge  = landmarks[168];
+  const leftMouth   = landmarks[61];
+  const rightMouth  = landmarks[291];
+
+  // Verify all landmarks have x,y coordinates
+  const all = [foreheadTop, chinBottom, leftCheek, rightCheek, leftEyeIn, rightEyeIn,
+               leftEyeOut, rightEyeOut, noseTip, noseBridge, leftMouth, rightMouth];
+  if (all.some(l => !l || l.x === undefined || l.y === undefined)) return null;
+
+  const dist = (a: any, b: any) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+
+  const faceHeight = dist(foreheadTop, chinBottom);
+  const faceWidth  = dist(leftCheek, rightCheek);
+  if (faceHeight < 0.01 || faceWidth < 0.01) return null;
+
+  return {
+    eyeDistanceRatio: dist(leftEyeIn, rightEyeIn) / faceHeight,
+    noseLengthRatio:  dist(noseTip, noseBridge) / faceHeight,
+    mouthWidthRatio:  dist(leftMouth, rightMouth) / faceWidth,
+    faceAspectRatio:  faceWidth / faceHeight,
+    eyeToNoseRatio:   dist(noseTip, {
+      x: (leftEyeOut.x + rightEyeOut.x) / 2,
+      y: (leftEyeOut.y + rightEyeOut.y) / 2,
+    }) / faceHeight,
+  };
+}
+
+function averageSignatures(sigs: FaceSignature[]): FaceSignature {
+  const n = sigs.length;
+  const sum = sigs.reduce((acc, s) => ({
+    eyeDistanceRatio: acc.eyeDistanceRatio + s.eyeDistanceRatio,
+    noseLengthRatio:  acc.noseLengthRatio  + s.noseLengthRatio,
+    mouthWidthRatio:  acc.mouthWidthRatio  + s.mouthWidthRatio,
+    faceAspectRatio:  acc.faceAspectRatio  + s.faceAspectRatio,
+    eyeToNoseRatio:   acc.eyeToNoseRatio   + s.eyeToNoseRatio,
+  }), { eyeDistanceRatio: 0, noseLengthRatio: 0, mouthWidthRatio: 0, faceAspectRatio: 0, eyeToNoseRatio: 0 });
+  return {
+    eyeDistanceRatio: sum.eyeDistanceRatio / n,
+    noseLengthRatio:  sum.noseLengthRatio  / n,
+    mouthWidthRatio:  sum.mouthWidthRatio  / n,
+    faceAspectRatio:  sum.faceAspectRatio  / n,
+    eyeToNoseRatio:   sum.eyeToNoseRatio   / n,
+  };
+}
+
+/** Returns similarity 0-1 (1 = same person, <0.70 = likely different person) */
+function compareFaceSignatures(a: FaceSignature, b: FaceSignature): number {
+  const diffs = [
+    Math.abs(a.eyeDistanceRatio - b.eyeDistanceRatio),
+    Math.abs(a.noseLengthRatio  - b.noseLengthRatio),
+    Math.abs(a.mouthWidthRatio  - b.mouthWidthRatio),
+    Math.abs(a.faceAspectRatio  - b.faceAspectRatio),
+    Math.abs(a.eyeToNoseRatio   - b.eyeToNoseRatio),
+  ];
+  const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  return Math.max(0, 1 - avgDiff * 10);
+}
+
+const FACE_CHANGE_THRESHOLD = 0.82; // Below this = different person
+const REFERENCE_FRAMES = 5;         // Frames to build initial reference
+
 // --- Types ---
 export interface MovementFlags {
   left_frame: boolean;
@@ -61,6 +149,7 @@ export interface UnifiedDetectionPayload {
   inconsistent_seconds: number;
   looking_away_count: number;
   looking_away_seconds: number;
+  face_changed_count: number;
   movement_score: 'CALM' | 'MODERATE' | 'HIGH';
   movement_intensity: number;
   flags: MovementFlags;
@@ -133,6 +222,7 @@ export function useDetection({
   const [lipMoving, setLipMoving] = useState(false);
   const [audioActive, setAudioActive] = useState(false);
   const [movementScore, setMovementScore] = useState<'CALM' | 'MODERATE' | 'HIGH'>('CALM');
+  const [faceChanged, setFaceChanged] = useState(false);
 
   // Stats accumulator (resets every 5 seconds for the payload window)
   const windowStatsRef = useRef<Omit<UnifiedDetectionPayload, 'interview_id' | 'timestamp' | 'flags'>>({
@@ -162,6 +252,7 @@ export function useDetection({
     inconsistent_seconds: 0,
     looking_away_count: 0,
     looking_away_seconds: 0,
+    face_changed_count: 0,
     movement_score: 'CALM',
     movement_intensity: 0,
   });
@@ -181,8 +272,8 @@ export function useDetection({
   // Liveness detection — track face landmark movement between frames
   const prevNoseRef = useRef<{ x: number; y: number } | null>(null);
   const staticFrameCountRef = useRef(0);
-  const STATIC_THRESHOLD = 0.002; // Minimum nose movement to count as "alive"
-  const STATIC_FRAMES_LIMIT = 10; // After 10 static frames (~10s), treat as not a real face
+  const STATIC_THRESHOLD = 0.003; // Minimum nose movement to count as "alive"
+  const STATIC_FRAMES_LIMIT = 3; // After 3 static frames (~1.5s at 500ms), treat as not a real face
   
   // Audio Trackers
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -197,6 +288,12 @@ export function useDetection({
   const lastPoseRef = useRef<any>(null);
   const lastHandsRef = useRef<{left: any, right: any}>({left: null, right: null});
   const movementHistoryRef = useRef<number[]>([]); // stores intensity values
+
+  // Face Identity Trackers
+  const referenceFaceSigsRef = useRef<FaceSignature[]>([]);   // first N frames to build reference
+  const referenceFaceRef = useRef<FaceSignature | null>(null); // locked-in reference
+  const faceChangedConsecutiveRef = useRef(0);                 // consecutive mismatches (debounce)
+  const recentSimilaritiesRef = useRef<number[]>([]);          // sliding window of last 5 similarities
   const slouchReferenceYRef = useRef<number | null>(null);
 
   // Payload extraction helper
@@ -256,6 +353,7 @@ export function useDetection({
       inconsistent_seconds: 0,
       looking_away_count: 0,
       looking_away_seconds: 0,
+      face_changed_count: 0,
       movement_score: 'CALM',
       movement_intensity: 0,
     };
@@ -431,6 +529,41 @@ export function useDetection({
         }
       }
       if (faceCountCurrent > w.max_faces_detected) w.max_faces_detected = faceCountCurrent;
+
+      // --- FACE IDENTITY TRACKING ---
+      // Compare current face biometric ratios with the reference (first 5 frames)
+      // --- FACE IDENTITY TRACKING ---
+      const faceLm = results.faceLandmarks;
+      if (hasFace && faceLm && faceLm.length > 100) {
+        const sig = computeFaceSignature(faceLm);
+        if (sig) {
+          if (!referenceFaceRef.current) {
+            referenceFaceSigsRef.current.push(sig);
+            if (referenceFaceSigsRef.current.length >= REFERENCE_FRAMES) {
+              referenceFaceRef.current = averageSignatures(referenceFaceSigsRef.current);
+            }
+          } else {
+            const similarity = compareFaceSignatures(referenceFaceRef.current, sig);
+            recentSimilaritiesRef.current.push(similarity);
+            if (recentSimilaritiesRef.current.length > 5) recentSimilaritiesRef.current.shift();
+
+            const avgSimilarity = recentSimilaritiesRef.current.length >= 3
+              ? recentSimilaritiesRef.current.reduce((a, b) => a + b, 0) / recentSimilaritiesRef.current.length
+              : similarity;
+
+            if (avgSimilarity < FACE_CHANGE_THRESHOLD) {
+              faceChangedConsecutiveRef.current += 1;
+              if (faceChangedConsecutiveRef.current >= 2) {
+                w.face_changed_count += 1;
+                setFaceChanged(true);
+              }
+            } else {
+              faceChangedConsecutiveRef.current = 0;
+              setFaceChanged(false);
+            }
+          }
+        }
+      }
 
       // --- LIP SYNC ---
       w.total_frames += 1;
@@ -672,6 +805,7 @@ export function useDetection({
   return {
     status,
     faceCount,
+    faceChanged,
     lipMoving,
     audioActive,
     movementScore,

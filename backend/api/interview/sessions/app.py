@@ -4,7 +4,7 @@ Handles interview execution: create session, submit answers, score, recommend.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, load_only
 from typing import List
 from datetime import datetime
 from pydantic import BaseModel as PydanticBase
@@ -17,6 +17,7 @@ from database import get_db
 from models import (
     User, Job, JobApplication, InterviewQuestion, InterviewSession,
     InterviewAnswer, InterviewSessionStatus, Recommendation, UserRole,
+    VideoInterview, FraudAnalysis,
 )
 from schemas import (
     InterviewSessionCreate,
@@ -25,6 +26,7 @@ from schemas import (
     InterviewAnswerSubmit,
     InterviewAnswerResponse,
     InterviewQuestionResponse,
+    IntegrityCheckData,
 )
 from api.auth.jwt_handler import get_current_active_user
 from services.answer_scorer import score_answer, score_all_answers_with_ai
@@ -55,7 +57,7 @@ def _answer_response(a: InterviewAnswer) -> InterviewAnswerResponse:
     )
 
 
-def _session_response(s: InterviewSession, include_answers: bool = True) -> InterviewSessionResponse:
+def _session_response(s: InterviewSession, include_answers: bool = True, db: Session = None) -> InterviewSessionResponse:
     # For recruiter-driven sessions, get name from application
     if hasattr(s, 'application') and s.application:
         candidate_name = s.application.applicant_name
@@ -63,6 +65,32 @@ def _session_response(s: InterviewSession, include_answers: bool = True) -> Inte
         candidate_name = s.candidate.full_name or s.candidate.username
     else:
         candidate_name = None
+
+    # Fetch integrity check data from FraudAnalysis (via VideoInterview)
+    integrity = None
+    if db:
+        try:
+            fraud = (
+                db.query(FraudAnalysis)
+                .join(VideoInterview, FraudAnalysis.video_interview_id == VideoInterview.id)
+                .filter(
+                    VideoInterview.candidate_id == s.candidate_id,
+                    VideoInterview.job_id == s.job_id,
+                )
+                .order_by(FraudAnalysis.analyzed_at.desc().nullslast())
+                .first()
+            )
+            if fraud:
+                integrity = IntegrityCheckData(
+                    voice_consistency_score=fraud.voice_consistency_score,
+                    lip_sync_score=fraud.lip_sync_score,
+                    body_movement_score=fraud.body_movement_score,
+                    face_detection_score=fraud.face_detection_score,
+                    overall_trust_score=fraud.overall_trust_score,
+                    flag_count=fraud.flag_count or 0,
+                )
+        except Exception:
+            pass
 
     return InterviewSessionResponse(
         id=s.id,
@@ -78,6 +106,7 @@ def _session_response(s: InterviewSession, include_answers: bool = True) -> Inte
         job_title=s.job.title if s.job else None,
         candidate_name=candidate_name,
         answers=[_answer_response(a) for a in s.answers] if include_answers else [],
+        integrity_check=integrity,
     )
 
 
@@ -196,7 +225,7 @@ def create_interview_session(
         .first()
     )
     if existing:
-        return _session_response(existing)
+        return _session_response(existing, db=db)
 
     session = InterviewSession(
         job_id=body.job_id,
@@ -206,7 +235,7 @@ def create_interview_session(
     db.add(session)
     db.commit()
     db.refresh(session)
-    return _session_response(session)
+    return _session_response(session, db=db)
 
 
 # ─── GET /api/interview/sessions/candidate/me ──────────────────────────────────
@@ -229,23 +258,26 @@ def get_my_sessions(
     if not sessions:
         return []
 
-    # Bulk pre-fetch question counts per job_id
-    job_ids = list(set(s.job_id for s in sessions))
-    q_counts = (
-        db.query(InterviewQuestion.job_id, sa_func.count(InterviewQuestion.id))
-        .filter(
-            InterviewQuestion.job_id.in_(job_ids),
-            InterviewQuestion.is_approved == True,
+    # Bulk pre-fetch question counts per candidate (application_id)
+    # Each candidate gets ~10 questions, not the entire job's pool
+    app_ids = [s.application_id for s in sessions if s.application_id]
+    q_counts_by_app = {}
+    if app_ids:
+        app_q = (
+            db.query(InterviewQuestion.candidate_id, sa_func.count(InterviewQuestion.id))
+            .filter(
+                InterviewQuestion.candidate_id.in_(app_ids),
+                InterviewQuestion.is_approved == True,
+            )
+            .group_by(InterviewQuestion.candidate_id)
+            .all()
         )
-        .group_by(InterviewQuestion.job_id)
-        .all()
-    )
-    q_count_map = {jid: cnt for jid, cnt in q_counts}
+        q_counts_by_app = {aid: cnt for aid, cnt in app_q}
 
     result = []
     for s in sessions:
-        total_q = q_count_map.get(s.job_id, 0)
-        answered = len(s.answers)
+        total_q = q_counts_by_app.get(s.application_id, len(s.answers)) if s.application_id else len(s.answers)
+        answered = sum(1 for a in s.answers if a.score and a.score > 0)
         result.append(
             InterviewSessionListResponse(
                 id=s.id,
@@ -287,7 +319,7 @@ def get_session(
         and session.candidate_id != current_user.id
     ):
         raise HTTPException(status_code=403, detail="Access denied")
-    return _session_response(session)
+    return _session_response(session, db=db)
 
 
 # ─── POST /api/interview/sessions/{id}/answers ─────────────────────────────────
@@ -432,7 +464,7 @@ def complete_session(
     except Exception as email_err:
         print(f"[complete-session] ⚠️ Failed to send result email: {email_err}")
 
-    return _session_response(session)
+    return _session_response(session, db=db)
 
 
 # ─── GET /api/interview/sessions/{id}/results ──────────────────────────────────
@@ -456,7 +488,7 @@ def get_session_results(
         and session.candidate_id != current_user.id
     ):
         raise HTTPException(status_code=403, detail="Access denied")
-    return _session_response(session)
+    return _session_response(session, db=db)
 
 
 # ─── GET /api/interviews ───────────────────────────────────────────────────────
@@ -474,9 +506,11 @@ def list_interviews(
     from sqlalchemy import func as sa_func
 
     query = db.query(InterviewSession).options(
-        joinedload(InterviewSession.job),
-        joinedload(InterviewSession.candidate),
-        joinedload(InterviewSession.answers),
+        joinedload(InterviewSession.job).load_only(Job.id, Job.title, Job.created_by),
+        joinedload(InterviewSession.candidate).load_only(User.id, User.full_name, User.username, User.email),
+        joinedload(InterviewSession.answers).load_only(
+            InterviewAnswer.id, InterviewAnswer.session_id, InterviewAnswer.score
+        ),
     )
     if current_user.role == UserRole.CANDIDATE:
         query = query.filter(InterviewSession.candidate_id == current_user.id)
@@ -499,30 +533,36 @@ def list_interviews(
                 InterviewSession.id.in_(interviewer_subq),
             )
         )
-    # Only show sessions that have been completed or have answers (not empty/in-progress)
+    # Only show sessions that have meaningful results (not blank/empty from video interview auto-creation)
     sessions = query.order_by(InterviewSession.started_at.desc()).all()
-    sessions = [s for s in sessions if s.status in ("completed", InterviewSessionStatus.COMPLETED) or (s.answers and len(s.answers) > 0) or s.overall_score is not None]
+    sessions = [s for s in sessions if
+        ((s.answers and len(s.answers) > 0) or s.overall_score is not None)
+        and (s.status in ("completed", InterviewSessionStatus.COMPLETED) or (s.answers and len(s.answers) > 0))
+    ]
 
     if not sessions:
         return []
 
-    # Bulk pre-fetch question counts per job_id
-    job_ids = list(set(s.job_id for s in sessions))
-    q_counts = (
-        db.query(InterviewQuestion.job_id, sa_func.count(InterviewQuestion.id))
-        .filter(
-            InterviewQuestion.job_id.in_(job_ids),
-            InterviewQuestion.is_approved == True,
+    # Bulk pre-fetch question counts per candidate (application_id)
+    # Each candidate gets ~10 questions, not the entire job's pool
+    app_ids = [s.application_id for s in sessions if s.application_id]
+    q_counts_by_app = {}
+    if app_ids:
+        app_q = (
+            db.query(InterviewQuestion.candidate_id, sa_func.count(InterviewQuestion.id))
+            .filter(
+                InterviewQuestion.candidate_id.in_(app_ids),
+                InterviewQuestion.is_approved == True,
+            )
+            .group_by(InterviewQuestion.candidate_id)
+            .all()
         )
-        .group_by(InterviewQuestion.job_id)
-        .all()
-    )
-    q_count_map = {jid: cnt for jid, cnt in q_counts}
+        q_counts_by_app = {aid: cnt for aid, cnt in app_q}
 
     result = []
     for s in sessions:
-        total_q = q_count_map.get(s.job_id, 0)
-        answered = len(s.answers)
+        total_q = q_counts_by_app.get(s.application_id, len(s.answers)) if s.application_id else len(s.answers)
+        answered = sum(1 for a in s.answers if a.score and a.score > 0)
         result.append(
             InterviewSessionListResponse(
                 id=s.id,

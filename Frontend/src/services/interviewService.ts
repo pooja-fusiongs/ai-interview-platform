@@ -16,6 +16,15 @@ export interface ApprovedQuestion {
   skill_focus: string | null;
 }
 
+export interface IntegrityCheckData {
+  voice_consistency_score: number | null;
+  lip_sync_score: number | null;
+  body_movement_score: number | null;
+  face_detection_score: number | null;
+  overall_trust_score: number | null;
+  flag_count: number;
+}
+
 export interface InterviewSession {
   id: number;
   job_id: number;
@@ -30,6 +39,7 @@ export interface InterviewSession {
   job_title: string | null;
   candidate_name: string | null;
   answers: InterviewAnswer[];
+  integrity_check: IntegrityCheckData | null;
 }
 
 export interface InterviewAnswer {

@@ -1149,38 +1149,44 @@ const VideoInterviewRoom: React.FC = () => {
     // 3) Clean up video call
     cleanupVideoCall();
 
-    // 4) Upload recording BEFORE calling /end (so backend has recording for transcription)
-    //    Skip upload if candidate never joined — no useful content to transcribe
+    // 4+5) Upload recording and call endInterview IN PARALLEL — don't block end on upload
     const candidateJoined = maxParticipantsRef.current >= 2;
-    if (recordingBlob && candidateJoined) {
-      try {
-        const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
-        console.log(`🎬 [handleEnd] Uploading recording: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB...`);
-        const uploadResult = await upload(Number(videoId), recordingBlob);
-        console.log('✅ [handleEnd] Recording uploaded:', uploadResult);
-      } catch (err) {
-        console.error('❌ [handleEnd] Recording upload failed:', err);
-      }
-    } else if (recordingBlob && !candidateJoined) {
-      console.log('⏭️ [handleEnd] Skipping recording upload — candidate never joined (maxParticipants=1)');
-    } else {
-      console.error('❌ [handleEnd] NO recording blob to upload! Possible causes: recording never started, mic not available, or MediaRecorder failed.');
-    }
 
-    // 5) Tell backend — after upload completes
-    try {
-      let result;
-      if (isGuest) {
-        result = await videoInterviewService.guestEndInterview(Number(videoId));
+    const uploadPromise = (async () => {
+      if (recordingBlob && candidateJoined) {
+        try {
+          const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
+          console.log(`🎬 [handleEnd] Uploading recording: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB...`);
+          const uploadResult = await upload(Number(videoId), recordingBlob);
+          console.log('✅ [handleEnd] Recording uploaded:', uploadResult);
+        } catch (err) {
+          console.error('❌ [handleEnd] Recording upload failed:', err);
+        }
+      } else if (recordingBlob && !candidateJoined) {
+        console.log('⏭️ [handleEnd] Skipping recording upload — candidate never joined (maxParticipants=1)');
       } else {
-        result = await videoInterviewService.endInterview(Number(videoId), {
-          max_participants: maxParticipantsRef.current
-        });
+        console.error('❌ [handleEnd] NO recording blob to upload!');
       }
-      setInterview({ ...interview, ...result });
-    } catch (err: any) {
-      console.error('End interview API failed:', err);
-    }
+    })();
+
+    const endPromise = (async () => {
+      try {
+        let result;
+        if (isGuest) {
+          result = await videoInterviewService.guestEndInterview(Number(videoId));
+        } else {
+          result = await videoInterviewService.endInterview(Number(videoId), {
+            max_participants: maxParticipantsRef.current
+          });
+        }
+        setInterview({ ...interview, ...result });
+      } catch (err: any) {
+        console.error('End interview API failed:', err);
+      }
+    })();
+
+    // Wait for both — endInterview returns fast, upload may take longer
+    await Promise.all([uploadPromise, endPromise]);
 
     // 6) Show appropriate toast and handle report
     if (candidateEverJoined) {

@@ -30,6 +30,8 @@ export const fraudDetectionService = {
     multiple_face_seconds: number;
     max_faces_detected: number;
     detection_interval_ms: number;
+    camera_disabled_count?: number;
+    face_changed?: boolean;
   }) => {
     const response = await apiClient.post(`/api/video/fraud/${videoInterviewId}/face-events`, data);
     return response.data;
