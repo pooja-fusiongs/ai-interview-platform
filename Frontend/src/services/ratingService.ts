@@ -72,7 +72,7 @@ export const ratingService = {
     jobId: number,
     candidateId: number,
     questionId: number,
-    data: { rating: number; notes?: string }
+    data: { rating: number; notes?: string; source?: string }
   ): Promise<Rating> => {
     const response = await apiClient.post(
       `/api/jobs/${jobId}/candidates/${candidateId}/questions/${questionId}/rate`,
@@ -101,11 +101,12 @@ export const ratingService = {
   deleteRating: async (
     jobId: number,
     candidateId: number,
-    questionId: number
+    questionId: number,
+    source?: string
   ): Promise<void> => {
     await apiClient.delete(
       `/api/jobs/${jobId}/candidates/${candidateId}/questions/${questionId}/rate`,
-      { timeout: 10000 }
+      { timeout: 10000, params: source ? { source } : undefined }
     );
   },
 

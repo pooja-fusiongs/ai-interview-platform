@@ -76,9 +76,11 @@ async def rate_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Check if rating already exists
+    # Check if rating already exists for this source
+    source = rating_data.source or "ai_questions"
     existing_rating = db.query(InterviewRating).filter(
-        InterviewRating.question_id == question.id
+        InterviewRating.question_id == question.id,
+        InterviewRating.source == source,
     ).first()
 
     if existing_rating:
@@ -91,7 +93,8 @@ async def rate_question(
     new_rating = InterviewRating(
         question_id=question.id,
         rating=rating_data.rating,
-        notes=rating_data.notes
+        notes=rating_data.notes,
+        source=source,
     )
     db.add(new_rating)
     db.commit()
@@ -105,6 +108,7 @@ async def delete_rating(
     job_id: int,
     candidate_id: int,
     question_id: int,
+    source: str = "ai_questions",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -119,7 +123,8 @@ async def delete_rating(
         raise HTTPException(status_code=404, detail="Question not found")
 
     rating = db.query(InterviewRating).filter(
-        InterviewRating.question_id == question.id
+        InterviewRating.question_id == question.id,
+        InterviewRating.source == source,
     ).first()
     if not rating:
         return {"status": "ok", "message": "No rating to delete"}
@@ -220,6 +225,7 @@ async def submit_transcript(
             job_description = jd_text
 
     # Prepare report card data upfront (DB queries before LLM calls)
+    # Include ratings from both sources for scoring/report generation
     all_ratings = (
         db.query(InterviewRating)
         .join(InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id)
@@ -326,10 +332,14 @@ async def get_interview_summary(
         .all()
     )
 
+    # Only show AI Questions page ratings in summary (not video interview ratings)
     all_ratings = (
         db.query(InterviewRating)
         .join(InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id)
-        .filter(InterviewQuestion.candidate_id == candidate.id)
+        .filter(
+            InterviewQuestion.candidate_id == candidate.id,
+            InterviewRating.source == "ai_questions",
+        )
         .all()
     )
     rating_map = {r.question_id: r for r in all_ratings}

@@ -404,6 +404,9 @@ export const VideoTilesGrid: React.FC<{
     <Box ref={containerRef} sx={{
       width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
       background: '#202124', overflow: 'hidden', position: 'relative', userSelect: 'none',
+      // Disable LiveKit's default speaking border indicator (we have custom equalizer bars)
+      '& .lk-participant-tile::after': { display: 'none !important' },
+      '& .lk-participant-tile[data-lk-speaking=true]::after': { display: 'none !important' },
     }}>
 
       {/* Floating Emoji Reactions */}

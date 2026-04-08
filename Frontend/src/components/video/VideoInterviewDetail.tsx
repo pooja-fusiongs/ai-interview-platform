@@ -237,7 +237,7 @@ const VideoInterviewDetail: React.FC = () => {
                       justifyContent: 'center',
                       flexShrink: 0
                     }}>
-                      <Videocam sx={{ fontSize: { xs: 20, sm: 24 } }} />
+                      <Videocam sx={{ fontSize: { xs: 20, sm: 24 }, color: '#ffffff' }} />
                     </Box>
                     <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
                       <Typography sx={{ fontSize: { xs: '16px', sm: '20px' }, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -357,12 +357,14 @@ const VideoInterviewDetail: React.FC = () => {
                       border: '1px solid #e2e8f0',
                       mb: 2
                     }}>
-                      {transcript.split('\n').some(l => /^(Recruiter|Candidate):/.test(l.trim())) ? (
+                      {transcript.split('\n').some(l => /^(\*\*)?(Recruiter|Candidate):(\*\*)?/.test(l.trim())) ? (
                         // Formatted speaker-labeled transcript
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                           {transcript.split('\n').filter(l => l.trim()).map((line, i) => {
-                            const recruiterMatch = line.match(/^Recruiter:\s*(.*)/)
-                            const candidateMatch = line.match(/^Candidate:\s*(.*)/)
+                            // Handle both plain "Recruiter:" and markdown "**Recruiter:**" formats
+                            const cleanLine = line.replace(/\*\*(Recruiter|Candidate):\*\*/g, '$1:').replace(/\*\*(Recruiter|Candidate):/g, '$1:').replace(/(Recruiter|Candidate):\*\*/g, '$1:')
+                            const recruiterMatch = cleanLine.match(/^Recruiter:\s*(.*)/)
+                            const candidateMatch = cleanLine.match(/^Candidate:\s*(.*)/)
                             if (recruiterMatch) {
                               return (
                                 <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
@@ -451,6 +453,7 @@ const VideoInterviewDetail: React.FC = () => {
                           borderRadius: '10px',
                           fontWeight: 600,
                           textTransform: 'none',
+                          color: '#ffffff',
                           backgroundColor: '#020291',
                           '&:hover': {
                             backgroundColor: '#01016d'
@@ -662,7 +665,7 @@ const VideoInterviewDetail: React.FC = () => {
                       startIcon={<Assessment />}
                       onClick={() => navigate(scoreResult.interview_session_id ? `/results?session=${scoreResult.interview_session_id}` : '/results')}
                       sx={{
-                        background: 'white',
+                        background: '#020291',
                         color: '#ffffff',
                         padding: { xs: '12px 24px', sm: '12px 30px' },
                         borderRadius: '12px',

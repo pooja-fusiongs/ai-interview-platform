@@ -32,6 +32,9 @@ if CLOUD_SQL_CONNECTION_NAME:
 
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
+        connect_args={
+            "options": "-c statement_timeout=120000 -c idle_in_transaction_session_timeout=60000",
+        },
         pool_pre_ping=True,
         pool_size=3,
         max_overflow=5,
@@ -68,7 +71,7 @@ elif DATABASE_URL:
             "keepalives_idle": 30,
             "keepalives_interval": 10,
             "keepalives_count": 5,
-            "options": "-c statement_timeout=60000",
+            "options": "-c statement_timeout=60000 -c idle_in_transaction_session_timeout=60000",
         }
         engine = create_engine(
             SQLALCHEMY_DATABASE_URL,
@@ -86,7 +89,7 @@ elif DATABASE_URL:
         # Non-Supabase (GCP Cloud SQL via private IP, Render, etc.)
         connect_args = {
             "connect_timeout": 10,
-            "options": "-c statement_timeout=60000",
+            "options": "-c statement_timeout=60000 -c idle_in_transaction_session_timeout=60000",
         }
         # Only require SSL for remote connections (not proxy/localhost)
         if not is_local_or_proxy:

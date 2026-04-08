@@ -841,81 +841,70 @@ def list_all_analyses(
     from sqlalchemy import outerjoin
 
     # 1) Interviews WITH fraud analysis (completed/in_progress)
-    analyses = (
-        db.query(FraudAnalysis)
-        .join(VideoInterview, FraudAnalysis.video_interview_id == VideoInterview.id)
-        .options(
-            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.candidate).load_only(
-                User.id, User.full_name, User.username
-            ),
-            joinedload(FraudAnalysis.video_interview).joinedload(VideoInterview.job).load_only(
-                Job.id, Job.title
-            ),
-        )
-        .filter(VideoInterview.status.notin_(["scheduled"]))
-        .order_by(FraudAnalysis.analyzed_at.desc().nullslast())
-        .limit(100)
-        .all()
-    )
+    # Use lightweight raw SQL: avoids loading heavy transcript/recording_data columns
+    from sqlalchemy import text as _text
+    # Increase timeout for this heavy query
+    db.execute(_text("SET LOCAL statement_timeout = '120s'"))
+    rows = db.execute(_text("""
+        SELECT
+            fa.id, fa.video_interview_id, fa.overall_trust_score, fa.flag_count, fa.flags,
+            fa.voice_consistency_score, fa.lip_sync_score, fa.body_movement_score,
+            fa.face_detection_score, fa.face_detection_details, fa.analysis_status, fa.analyzed_at,
+            vi.status as vi_status, vi.started_at as vi_started_at,
+            u.full_name as candidate_name, u.username as candidate_username,
+            j.title as job_title
+        FROM fraud_analyses fa
+        JOIN video_interviews vi ON fa.video_interview_id = vi.id
+        LEFT JOIN users u ON u.id = vi.candidate_id
+        LEFT JOIN jobs j ON j.id = vi.job_id
+        WHERE vi.status != 'scheduled'
+        ORDER BY fa.analyzed_at DESC NULLS LAST
+        LIMIT 100
+    """)).fetchall()
 
     seen_vi_ids = set()
     results = []
-    for fa in analyses:
-        vi = fa.video_interview
-        seen_vi_ids.add(fa.video_interview_id)
-        candidate_name = ""
-        job_title = ""
-        if vi:
-            if vi.candidate:
-                candidate_name = vi.candidate.full_name or vi.candidate.username or ""
-            if vi.job:
-                job_title = vi.job.title or ""
-        interview_status = ""
-        if vi:
-            interview_status = vi.status.value if hasattr(vi.status, "value") else (vi.status or "")
+    for row in rows:
+        seen_vi_ids.add(row.video_interview_id)
+        candidate_name = row.candidate_name or row.candidate_username or ""
+        job_title = row.job_title or ""
+        interview_status = row.vi_status or ""
         results.append({
-            "fraud_analysis_id": fa.id,
-            "video_interview_id": fa.video_interview_id,
+            "fraud_analysis_id": row.id,
+            "video_interview_id": row.video_interview_id,
             "candidate_name": candidate_name,
             "job_title": job_title,
-            "overall_trust_score": fa.overall_trust_score,
-            "flag_count": fa.flag_count,
-            "flags": fa.flags,
-            "voice_consistency_score": fa.voice_consistency_score,
-            "lip_sync_score": fa.lip_sync_score,
-            "body_movement_score": fa.body_movement_score,
-            "face_detection_score": fa.face_detection_score,
-            "face_detection_details": fa.face_detection_details,
-            "analysis_status": fa.analysis_status,
+            "overall_trust_score": row.overall_trust_score,
+            "flag_count": row.flag_count,
+            "flags": row.flags,
+            "voice_consistency_score": row.voice_consistency_score,
+            "lip_sync_score": row.lip_sync_score,
+            "body_movement_score": row.body_movement_score,
+            "face_detection_score": row.face_detection_score,
+            "face_detection_details": row.face_detection_details,
+            "analysis_status": row.analysis_status,
             "interview_status": interview_status,
-            "analyzed_at": fa.analyzed_at.isoformat() if fa.analyzed_at else None,
+            "analyzed_at": row.analyzed_at.isoformat() if row.analyzed_at else None,
         })
 
     # 2) Live interviews WITHOUT fraud analysis yet (just started)
-    live_interviews = (
-        db.query(VideoInterview)
-        .options(
-            joinedload(VideoInterview.candidate).load_only(
-                User.id, User.full_name, User.username
-            ),
-            joinedload(VideoInterview.job).load_only(
-                Job.id, Job.title
-            ),
-        )
-        .filter(VideoInterview.status.in_(["in_progress", "waiting"]))
-        .filter(VideoInterview.id.notin_(seen_vi_ids) if seen_vi_ids else sql_func.true())
-        .order_by(VideoInterview.started_at.desc().nullslast())
-        .limit(20)
-        .all()
-    )
-    for vi in live_interviews:
-        candidate_name = ""
-        job_title = ""
-        if vi.candidate:
-            candidate_name = vi.candidate.full_name or vi.candidate.username or ""
-        if vi.job:
-            job_title = vi.job.title or ""
-        interview_status = vi.status.value if hasattr(vi.status, "value") else (vi.status or "")
+    excluded = ",".join(str(x) for x in seen_vi_ids) if seen_vi_ids else "0"
+    live_rows = db.execute(_text(f"""
+        SELECT vi.id, vi.status, vi.started_at,
+               u.full_name as candidate_name, u.username as candidate_username,
+               j.title as job_title
+        FROM video_interviews vi
+        LEFT JOIN users u ON u.id = vi.candidate_id
+        LEFT JOIN jobs j ON j.id = vi.job_id
+        WHERE vi.status IN ('in_progress', 'waiting')
+          AND vi.id NOT IN ({excluded})
+        ORDER BY vi.started_at DESC NULLS LAST
+        LIMIT 20
+    """)).fetchall()
+    for vi in live_rows:
+        candidate_name = vi.candidate_name or vi.candidate_username or ""
+        job_title = vi.job_title or ""
+        interview_status = vi.status or ""
         results.append({
             "fraud_analysis_id": None,
             "video_interview_id": vi.id,

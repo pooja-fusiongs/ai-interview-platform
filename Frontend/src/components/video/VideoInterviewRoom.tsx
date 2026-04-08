@@ -711,18 +711,27 @@ const VideoInterviewRoom: React.FC = () => {
       const { questionId, rating } = ratingQueueRef.current.shift()!;
       setSavingRating(questionId);
 
+      let saved = false;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating, source: 'video_interview' });
           questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
           setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
+          saved = true;
           break;
         } catch (err: any) {
           if (attempt < 3) {
             await new Promise(r => setTimeout(r, attempt * 1000)); // Wait 1s, 2s before retry
           }
-          // Never show error toast — silently retry, UI already shows the selected score
         }
+      }
+      // All retries failed — revert optimistic update so UI doesn't show unsaved score
+      if (!saved) {
+        const reverted = { ...questionRatingsRef.current };
+        delete reverted[questionId];
+        questionRatingsRef.current = reverted;
+        setQuestionRatings(prev => { const u = { ...prev }; delete u[questionId]; return u; });
+        toast.error(`Failed to save rating for Q${questionId}. Please try again.`, { id: `rating-fail-${questionId}`, duration: 4000 });
       }
     }
 
@@ -758,7 +767,7 @@ const VideoInterviewRoom: React.FC = () => {
     // Remove from queue (don't send any pending rating for this question)
     ratingQueueRef.current = ratingQueueRef.current.filter(r => r.questionId !== questionId);
     // Delete rating from backend
-    ratingService.deleteRating(interviewJobId, applicationId, questionId).catch(() => {
+    ratingService.deleteRating(interviewJobId, applicationId, questionId, 'video_interview').catch(() => {
       // If delete fails, silently ignore — rating stays on backend
       console.warn('Failed to delete rating for question', questionId);
     });
@@ -826,6 +835,19 @@ const VideoInterviewRoom: React.FC = () => {
         }
 
         const response = await videoInterviewService.checkGracePeriod(Number(videoId), 10); // 10 minutes grace
+
+        // Backend says status is IN_PROGRESS = candidate already joined on backend
+        // Even if recruiter's LiveKit didn't detect them (connection issues)
+        if (response.status === 'in_progress') {
+          maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 2);
+          if (graceCheckIntervalRef.current) {
+            clearInterval(graceCheckIntervalRef.current);
+            graceCheckIntervalRef.current = null;
+            setGracePeriodTimer(null);
+          }
+          console.log('✅ Backend confirms candidate joined (status=in_progress), stopping grace period check');
+          return;
+        }
 
         if (response.grace_period_expired) {
           // Grace period expired, candidate didn't join — stop everything
@@ -1043,11 +1065,32 @@ const VideoInterviewRoom: React.FC = () => {
     console.log(`🛑 [StopRecorder] Called — mediaRecorder exists: ${!!mediaRecorderRef.current}, state: ${mediaRecorderRef.current?.state || 'N/A'}, chunks: ${recordedChunksRef.current.length}`);
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
       console.error('❌ [StopRecorder] NO active MediaRecorder! Recording was never started or already stopped.');
+      // Still return existing chunks if any (recorder may have been stopped by browser)
+      if (recordedChunksRef.current.length > 0) {
+        const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'video/webm' });
+        console.log(`✅ [StopRecorder] Blob from existing chunks: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+        recordedChunksRef.current = [];
+        return Promise.resolve(blob);
+      }
       return Promise.resolve(null);
     }
     return new Promise((resolve) => {
+      // Safety timeout: if onstop never fires, resolve with whatever chunks we have
+      const timeout = setTimeout(() => {
+        console.warn('⚠️ [StopRecorder] onstop timeout (5s) — resolving with existing chunks');
+        setIsRecording(false);
+        if (recordedChunksRef.current.length > 0) {
+          const blob = new Blob(recordedChunksRef.current, { type: recordedChunksRef.current[0]?.type || 'video/webm' });
+          recordedChunksRef.current = [];
+          resolve(blob);
+        } else {
+          resolve(null);
+        }
+      }, 5000);
+
       const recorder = mediaRecorderRef.current!;
       recorder.onstop = () => {
+        clearTimeout(timeout);
         setIsRecording(false);
         console.log(`🛑 [StopRecorder] Stopped. Total chunks: ${recordedChunksRef.current.length}`);
         if (recordedChunksRef.current.length === 0) {
@@ -1062,7 +1105,14 @@ const VideoInterviewRoom: React.FC = () => {
         recordedChunksRef.current = [];
         resolve(blob);
       };
-      recorder.stop();
+      try {
+        recorder.stop();
+      } catch (err) {
+        console.warn('⚠️ [StopRecorder] recorder.stop() threw:', err);
+        clearTimeout(timeout);
+        setIsRecording(false);
+        resolve(null);
+      }
     });
   };
 
@@ -1116,9 +1166,9 @@ const VideoInterviewRoom: React.FC = () => {
     setCallJoined(false);
     setIsRecording(false);
     setEnding(false);
+    // Don't assume no_show from frontend maxParticipants — backend has the truth
+    // (candidate may have joined on backend even if recruiter's connection kept failing)
     const candidateEverJoined = maxParticipantsRef.current >= 2;
-    // Show appropriate status instantly while backend processes
-    setInterview((prev: any) => prev ? { ...prev, status: candidateEverJoined ? 'completed' : 'no_show' } : prev);
 
     // 1.5) Flush pending rating queue — save all unsaved ratings before ending
     if (ratingQueueRef.current.length > 0 && interviewJobId && applicationId) {
@@ -1127,7 +1177,7 @@ const VideoInterviewRoom: React.FC = () => {
       ratingQueueRef.current = [];
       for (const { questionId, rating } of pendingRatings) {
         try {
-          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating });
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating, source: 'video_interview' });
           questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
           console.log(`💾 Saved pending rating: Q${questionId} = ${rating}`);
         } catch (err) {
@@ -1169,28 +1219,37 @@ const VideoInterviewRoom: React.FC = () => {
       }
     })();
 
+    let endResult: any = null;
     const endPromise = (async () => {
       try {
-        let result;
         if (isGuest) {
-          result = await videoInterviewService.guestEndInterview(Number(videoId));
+          endResult = await videoInterviewService.guestEndInterview(Number(videoId));
         } else {
-          result = await videoInterviewService.endInterview(Number(videoId), {
+          endResult = await videoInterviewService.endInterview(Number(videoId), {
             max_participants: maxParticipantsRef.current
           });
         }
-        setInterview({ ...interview, ...result });
+        setInterview({ ...interview, ...endResult });
       } catch (err: any) {
         console.error('End interview API failed:', err);
       }
     })();
 
-    // Wait for both — endInterview returns fast, upload may take longer
-    await Promise.all([uploadPromise, endPromise]);
+    // endInterview must complete; upload can continue in background (don't block user)
+    await endPromise;
+    // Don't await upload — let it finish in background so user isn't stuck
+    uploadPromise.catch(() => {});
 
-    // 6) Show appropriate toast and handle report
-    if (candidateEverJoined) {
-      toast.success('Interview completed!');
+    // 6) Use backend status (truth) — not frontend-only maxParticipants
+    const backendStatus = (endResult?.status || '').toLowerCase();
+    const actuallyCompleted = backendStatus === 'completed' || candidateEverJoined;
+
+    if (actuallyCompleted) {
+      if (!recordingBlob && candidateEverJoined) {
+        toast('Interview completed but recording was not captured. Only transcript will be available.', { icon: '⚠️', duration: 6000 });
+      } else {
+        toast.success('Interview completed!');
+      }
       // Auto-generate report from recruiter ratings
       if (!isGuest && interviewJobId && applicationId && Object.keys(questionRatings).length > 0) {
         try {
@@ -1214,7 +1273,7 @@ const VideoInterviewRoom: React.FC = () => {
     sessionStorage.removeItem(`interview_token_${videoId}`);
 
     // 8) Navigate to detail page (recruiter only, only if interview completed — not no_show)
-    if (!isGuest && candidateEverJoined) {
+    if (!isGuest && actuallyCompleted) {
       setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
     }
     } finally {
@@ -1669,6 +1728,13 @@ const VideoInterviewRoom: React.FC = () => {
                         options={{
                           adaptiveStream: true,
                           dynacast: true,
+                          reconnectPolicy: {
+                            nextRetryDelayInMs: (context: { retryCount: number }) => {
+                              // Retry up to 5 times with increasing delay (1s, 2s, 4s, 8s, 10s)
+                              if (context.retryCount > 5) return null; // give up
+                              return Math.min(1000 * Math.pow(2, context.retryCount), 10000);
+                            },
+                          },
                           videoCaptureDefaults: {
                             resolution: VideoPresets.h360.resolution,
                             facingMode: 'user',
@@ -1702,6 +1768,11 @@ const VideoInterviewRoom: React.FC = () => {
 
                           // Candidate disconnected (recruiter ended the call)
                           if (isUserCandidate) {
+                            // If handleEnd is already running, let it finish — don't duplicate work
+                            if (endingRef.current) {
+                              console.log('[onDisconnected] Candidate: handleEnd already running, skipping');
+                              return;
+                            }
                             endingRef.current = true;
                             setIsActive(false);
                             setCallJoined(false);
@@ -1742,18 +1813,30 @@ const VideoInterviewRoom: React.FC = () => {
                                 const data = await fetchFn(Number(videoId));
                                 if (data) setInterview(data);
                               } catch {}
-                            })();
+                            })().finally(() => {
+                              endingRef.current = false;
+                            });
                             return;
                           }
 
-                          // Only reconnect for unexpected disconnects (not after interview ended)
-                          if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-                            reconnectAttemptsRef.current += 1;
-                            const attempt = reconnectAttemptsRef.current;
-                            toast.error(`Connection lost. Reconnecting (${attempt}/${MAX_RECONNECT_ATTEMPTS})...`);
-                            setLkToken(null);
+                          // LiveKit already tried its built-in reconnect before firing onDisconnected.
+                          // Instead of destroying the component (setLkToken=null), let user retry manually.
+                          // This avoids the connect-disconnect loop on mobile/slow networks.
+                          reconnectAttemptsRef.current += 1;
+                          const attempt = reconnectAttemptsRef.current;
+                          if (attempt <= MAX_RECONNECT_ATTEMPTS) {
+                            toast.error(`Connection lost. Retrying (${attempt}/${MAX_RECONNECT_ATTEMPTS})...`, { id: 'reconnect-toast' });
+                            // Wait briefly, then re-fetch token (gives network time to stabilize)
+                            await new Promise(r => setTimeout(r, attempt * 2000)); // 2s, 4s, 6s
+                            if (!endingRef.current) {
+                              setLkToken(null); // triggers token re-fetch and LiveKitRoom re-mount
+                            }
                           } else {
-                            toast.error('Connection lost. Please refresh the page to rejoin.');
+                            toast.error('Connection lost. Click "Rejoin Interview" to try again.', { id: 'reconnect-toast', duration: 8000 });
+                            setIsActive(false);
+                            setCallJoined(false);
+                            setHasExited(true); // show rejoin button instead of being stuck
+                            cleanupVideoCall();
                           }
                         }}
                         onError={(error: Error) => {

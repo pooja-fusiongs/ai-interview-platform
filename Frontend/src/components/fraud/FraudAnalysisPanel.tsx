@@ -349,7 +349,7 @@ const FraudAnalysisPanel: React.FC = () => {
                 width: 48,
                 height: 48,
                 borderRadius: '12px',
-                background: ' #020291',
+                background: '#020291',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

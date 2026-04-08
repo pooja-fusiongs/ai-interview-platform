@@ -1190,15 +1190,14 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 }
 
                                 if (st === 'Interview Completed') {
+                                  const hasReport = candidate.ai_score != null || candidate.overall_score != null || candidate.final_score != null
                                   return (
                                     <>
-                                      <Button className="job-action-btn" onClick={() => {
-                                        const sessionId = candidateQuestionSets[candidate.id]
-                                        if (sessionId) navigate(`/results?session=${sessionId}`)
-                                        else hotToast.error('No results found for this candidate')
-                                      }} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
-                                        <i className="fas fa-download" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Report</span>
-                                      </Button>
+                                      {hasReport && candidateVideoIds[candidate.id] && (
+                                        <Button className="job-action-btn" onClick={() => navigate(`/video-detail/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                          <i className="fas fa-download" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Report</span>
+                                        </Button>
+                                      )}
                                       <Button className="job-action-btn" onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                         <i className="fas fa-paper-plane" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Offer</span>
                                       </Button>
@@ -1350,15 +1349,14 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                           )
                         }
                         if (st === 'Interview Completed') {
+                          const hasReport = candidate.ai_score != null || candidate.overall_score != null || candidate.final_score != null
                           return (
                             <>
-                              <Button onClick={() => {
-                                const sessionId = candidateQuestionSets[candidate.id]
-                                if (sessionId) navigate(`/results?session=${sessionId}`)
-                                else hotToast.error('No results found')
-                              }} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
-                                <i className="fas fa-download" style={{ marginRight: 4, fontSize: 10 }}></i>Report
-                              </Button>
+                              {hasReport && candidateVideoIds[candidate.id] && (
+                                <Button onClick={() => navigate(`/video-detail/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                  <i className="fas fa-download" style={{ marginRight: 4, fontSize: 10 }}></i>Report
+                                </Button>
+                              )}
                               <Button onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                 <i className="fas fa-paper-plane" style={{ marginRight: 4, fontSize: 10 }}></i>Offer
                               </Button>

@@ -140,7 +140,7 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
                 if q_session:
                     question_session_id = q_session.id
 
-                # Combined count query
+                # Combined count query — only video_interview ratings for this page
                 total_q = db.query(sa_func.count(InterviewQuestion.id)).filter(
                     InterviewQuestion.job_id == vi.job_id,
                     InterviewQuestion.candidate_id == application.id,
@@ -150,11 +150,20 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
                         InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
                     ).filter(
                         InterviewQuestion.candidate_id == application.id,
+                        InterviewRating.source == "video_interview",
                     ).scalar() or 0
                     if rated_q > 0:
                         total_questions = total_q
                         rated_questions = rated_q
-                        recruiter_score = application.overall_score
+                        # Calculate score from video_interview ratings only
+                        from sqlalchemy import func as _fn
+                        vi_avg = db.query(_fn.avg(InterviewRating.rating)).join(
+                            InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
+                        ).filter(
+                            InterviewQuestion.candidate_id == application.id,
+                            InterviewRating.source == "video_interview",
+                        ).scalar()
+                        recruiter_score = round(float(vi_avg), 1) if vi_avg else None
         response = VideoInterviewResponse(
             id=vi.id,
             session_id=vi.session_id,
@@ -427,7 +436,17 @@ def list_video_interviews(
     Recruiters/Admins see all; Candidates see only their own.
     """
     try:
+        from sqlalchemy.orm import load_only as _lo
         query = db.query(VideoInterview).options(
+            # Exclude heavy columns (transcript, recording_data) from list query
+            _lo(
+                VideoInterview.id, VideoInterview.session_id, VideoInterview.job_id,
+                VideoInterview.candidate_id, VideoInterview.interviewer_id,
+                VideoInterview.status, VideoInterview.scheduled_at, VideoInterview.duration_minutes,
+                VideoInterview.started_at, VideoInterview.ended_at, VideoInterview.recording_url,
+                VideoInterview.recording_consent, VideoInterview.transcript_source,
+                VideoInterview.candidate_joined_at, VideoInterview.created_at,
+            ),
             joinedload(VideoInterview.candidate).load_only(
                 User.id, User.email, User.full_name, User.username
             ),
@@ -903,13 +922,10 @@ async def join_video_interview(
         print(f"❌ Error in join_video_interview (token): {e}")
         import traceback
         traceback.print_exc()
-        return {
-            "success": True,
-            "message": "Interview started, but token generation failed",
-            "video_id": video_id,
-            "status": vi.status,
-            "error": str(e)
-        }
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate video token: {str(e)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1142,42 +1158,20 @@ async def guest_end_interview(
         vi.ended_at = datetime.now(timezone.utc)
 
     # Mark ALL fraud analyses as completed
-    pending_fas = db.query(FraudAnalysis).filter(
+    db.query(FraudAnalysis).filter(
         FraudAnalysis.video_interview_id == video_id,
         FraudAnalysis.analysis_status == "pending"
-    ).all()
-    for fa in pending_fas:
-        fa.analysis_status = "completed"
-        fa.analyzed_at = datetime.now(timezone.utc)
+    ).update({"analysis_status": "completed", "analyzed_at": datetime.now(timezone.utc)}, synchronize_session=False)
 
-    # Create InterviewSession only if one doesn't already exist (avoid duplicates when both sides call /end)
-    if not vi.session_id:
-        try:
-            application = None
-            if vi.candidate:
-                application = db.query(JobApplication).filter(
-                    JobApplication.job_id == vi.job_id,
-                    JobApplication.applicant_email == vi.candidate.email
-                ).first()
-                if application:
-                    application.status = "Interview Completed"
-
-            session = InterviewSession(
-                job_id=vi.job_id,
-                candidate_id=vi.candidate_id,
-                application_id=application.id if application else None,
-                status=InterviewSessionStatus.COMPLETED,
-                interview_mode="video_interview",
-                started_at=vi.started_at or vi.scheduled_at,
-            )
-            db.add(session)
-            db.flush()
-            vi.session_id = session.id
-            print(f"[guest_end] Created InterviewSession id={session.id}")
-        except Exception as e:
-            print(f"[guest_end] Failed to create InterviewSession: {e}")
-    else:
-        print(f"[guest_end] InterviewSession already exists (id={vi.session_id}), skipping creation")
+    # Candidate side: don't create InterviewSession (recruiter's /end creates it)
+    # Candidate side: only update application status (recruiter's /end creates InterviewSession)
+    if vi.candidate:
+        application = db.query(JobApplication).filter(
+            JobApplication.job_id == vi.job_id,
+            JobApplication.applicant_email == vi.candidate.email
+        ).first()
+        if application and application.status != "Interview Completed":
+            application.status = "Interview Completed"
 
     db.commit()
     db.refresh(vi)
@@ -1539,13 +1533,16 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                     fraud_db.close()
             except Exception as fraud_err:
                 print(f"[BG Fraud] Failed for vi_id={vi_id}: {fraud_err}")
-                # Even if analysis fails, mark as completed so dashboard doesn't show "pending" forever
+                # Mark as failed (not completed) so dashboard can distinguish crash from real results
                 try:
                     err_db = get_safe_db()
                     fa = err_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
                     if fa and fa.analysis_status == "pending":
-                        fa.analysis_status = "completed"
+                        fa.analysis_status = "failed"
                         fa.analyzed_at = datetime.now(timezone.utc)
+                        import json as _jf
+                        fa.flags = _jf.dumps([f"Analysis failed: {str(fraud_err)[:200]}"])
+                        fa.flag_count = 1
                         err_db.commit()
                     err_db.close()
                 except Exception:
@@ -1635,7 +1632,7 @@ def end_video_interview(
     - If recruiter leaves but candidate hasn't joined: Keep status as WAITING
     - Only mark as NO_SHOW if grace period expired or explicitly set
     """
-    from models import InterviewQuestion, JobApplication, InterviewSessionStatus
+    from models import InterviewQuestion, JobApplication, InterviewSession, InterviewSessionStatus
 
     vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
     if not vi:
@@ -1692,10 +1689,13 @@ def end_video_interview(
     # Refresh to get latest recording_url (uploaded in separate request)
     db.refresh(vi)
 
-    # If already completed (other side called /end first), just return
+    # If already completed (other side called /end first), still create session if missing
     if vi.status == VideoInterviewStatus.COMPLETED.value:
-        print(f"[end_interview] Already COMPLETED, skipping duplicate end")
-        return _build_response(vi, db)
+        print(f"[end_interview] Already COMPLETED")
+        if not vi.session_id:
+            print(f"[end_interview] But session_id is None, creating session...")
+        else:
+            return _build_response(vi, db)
 
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
@@ -1708,7 +1708,8 @@ def end_video_interview(
 
     print(f"[end_interview] recording_url={vi.recording_url}")
 
-    # Create InterviewSession only if one doesn't already exist (avoid duplicates when both sides call /end)
+    # Re-read from DB to get latest state (candidate may have already created session)
+    db.refresh(vi)
     if not vi.session_id:
         try:
             application = None

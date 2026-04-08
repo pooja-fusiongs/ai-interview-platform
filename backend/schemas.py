@@ -447,6 +447,7 @@ class RecruiterCandidateResponse(BaseModel):
 class RatingCreate(BaseModel):
     rating: int
     notes: Optional[str] = None
+    source: Optional[str] = "ai_questions"  # "ai_questions" or "video_interview"
 
     @classmethod
     def validate_rating_range(cls, v):
@@ -463,6 +464,7 @@ class RatingResponse(BaseModel):
     question_id: int
     rating: int
     notes: Optional[str] = None
+    source: Optional[str] = "ai_questions"
     created_at: datetime
 
     class Config:

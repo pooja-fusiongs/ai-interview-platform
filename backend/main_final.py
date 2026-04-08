@@ -134,6 +134,7 @@ def run_migrations():
                 ("interview_answers", "question_text_override", "TEXT"),
                 ("video_interviews", "recording_data", "BYTEA"),
                 ("video_interviews", "reminder_sent_at", "TIMESTAMP WITH TIME ZONE"),
+                ("interview_ratings", "source", "VARCHAR(30) DEFAULT 'ai_questions'"),
             ]
             with engine.begin() as conn:
                 for table, column, col_type in expected_columns:
@@ -207,10 +208,111 @@ def run_migrations():
         except Exception:
             pass
 
+        # Migrate interview_ratings: drop old unique(question_id), add unique(question_id, source)
+        try:
+            from sqlalchemy import text as _t_rating
+            with engine.begin() as conn:
+                # Drop old unique constraint on question_id (try common constraint names)
+                for constraint_name in [
+                    'interview_ratings_question_id_key',
+                    'uq_interview_ratings_question_id',
+                    'ix_interview_ratings_question_id',
+                ]:
+                    try:
+                        conn.execute(_t_rating(f'ALTER TABLE interview_ratings DROP CONSTRAINT IF EXISTS {constraint_name}'))
+                    except Exception:
+                        pass
+                # Also try dropping unique index
+                try:
+                    conn.execute(_t_rating('DROP INDEX IF EXISTS interview_ratings_question_id_key'))
+                except Exception:
+                    pass
+                # Add new composite unique constraint
+                try:
+                    conn.execute(_t_rating(
+                        'ALTER TABLE interview_ratings ADD CONSTRAINT uq_rating_question_source UNIQUE (question_id, source)'
+                    ))
+                    print("  Migrated interview_ratings: unique(question_id, source)")
+                except Exception:
+                    pass  # Already exists
+        except Exception as e:
+            print(f"⚠️ Rating constraint migration: {e}")
+
         print("All migrations done.")
 
     # Run in background thread so server starts immediately
     threading.Thread(target=_migrate, daemon=True).start()
+
+
+@app.on_event("startup")
+def start_stale_interview_cleanup():
+    """Background thread that auto-marks stale WAITING/IN_PROGRESS interviews as NO_SHOW or COMPLETED."""
+    import threading, time
+    from datetime import datetime, timezone, timedelta
+
+    WAITING_TIMEOUT_MINUTES = 15     # WAITING > 15 min without candidate → NO_SHOW
+    IN_PROGRESS_TIMEOUT_HOURS = 3    # IN_PROGRESS > 3 hours → auto-complete (stuck interview)
+
+    def _cleanup_loop():
+        time.sleep(60)  # Wait for DB to be ready
+        print("🧹 Stale interview cleanup started (checks every 5 min)")
+
+        while True:
+            try:
+                from database import SessionLocal
+                from models import VideoInterview, VideoInterviewStatus
+
+                db = SessionLocal()
+                try:
+                    now = datetime.now(timezone.utc)
+
+                    from sqlalchemy.orm import load_only as _lo
+
+                    # 1) WAITING interviews where candidate never joined (grace period expired)
+                    waiting_cutoff = now - timedelta(minutes=WAITING_TIMEOUT_MINUTES)
+                    stale_waiting = db.query(VideoInterview).options(
+                        _lo(VideoInterview.id, VideoInterview.status, VideoInterview.started_at,
+                            VideoInterview.ended_at, VideoInterview.candidate_joined_at)
+                    ).filter(
+                        VideoInterview.status == VideoInterviewStatus.WAITING.value,
+                        VideoInterview.started_at != None,
+                        VideoInterview.started_at < waiting_cutoff,
+                    ).all()
+
+                    for vi in stale_waiting:
+                        # Double-check candidate never joined
+                        if not vi.candidate_joined_at:
+                            vi.status = VideoInterviewStatus.NO_SHOW.value
+                            vi.ended_at = now
+                            print(f"🧹 Interview {vi.id}: WAITING → NO_SHOW (waited {int((now - vi.started_at.replace(tzinfo=timezone.utc) if vi.started_at.tzinfo is None else now - vi.started_at).total_seconds() / 60)} min)")
+
+                    # 2) IN_PROGRESS interviews stuck for too long (browser closed, crash, etc.)
+                    progress_cutoff = now - timedelta(hours=IN_PROGRESS_TIMEOUT_HOURS)
+                    stale_progress = db.query(VideoInterview).options(
+                        _lo(VideoInterview.id, VideoInterview.status, VideoInterview.started_at, VideoInterview.ended_at)
+                    ).filter(
+                        VideoInterview.status == VideoInterviewStatus.IN_PROGRESS.value,
+                        VideoInterview.started_at != None,
+                        VideoInterview.started_at < progress_cutoff,
+                    ).all()
+
+                    for vi in stale_progress:
+                        vi.status = VideoInterviewStatus.COMPLETED.value
+                        vi.ended_at = now
+                        print(f"🧹 Interview {vi.id}: IN_PROGRESS → COMPLETED (running {int((now - vi.started_at.replace(tzinfo=timezone.utc) if vi.started_at.tzinfo is None else now - vi.started_at).total_seconds() / 3600)} hrs)")
+
+                    if stale_waiting or stale_progress:
+                        db.commit()
+                        print(f"🧹 Cleaned up {len(stale_waiting)} waiting + {len(stale_progress)} stuck interviews")
+
+                finally:
+                    db.close()
+            except Exception as e:
+                print(f"⚠️ Stale interview cleanup error: {e}")
+
+            time.sleep(300)  # Check every 5 minutes
+
+    threading.Thread(target=_cleanup_loop, daemon=True).start()
 
 
 @app.on_event("startup")

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey, Float, LargeBinary
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text, ForeignKey, Float, LargeBinary, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, deferred
 from database import Base
@@ -347,11 +347,15 @@ class InterviewAnswer(Base):
 class InterviewRating(Base):
     """Per-question recruiter rating (1-10 scale) from client's iHire system."""
     __tablename__ = "interview_ratings"
+    __table_args__ = (
+        UniqueConstraint("question_id", "source", name="uq_rating_question_source"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False, unique=True)
+    question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False)
     rating = Column(Integer, nullable=False)  # 1-10 scale
     notes = Column(Text, nullable=True)
+    source = Column(String(30), nullable=False, server_default="ai_questions")  # "ai_questions" or "video_interview"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     question = relationship("InterviewQuestion", back_populates="rating")

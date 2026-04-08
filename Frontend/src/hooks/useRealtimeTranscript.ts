@@ -72,6 +72,8 @@ export function useRealtimeTranscript({
           );
           entriesRef.current = [...withoutInterim, entry];
         }
+        // Sort by timestamp so both participants' chunks appear in chronological order
+        entriesRef.current.sort((a, b) => a.timestamp - b.timestamp);
         setEntries([...entriesRef.current]);
       }
     } catch {}
