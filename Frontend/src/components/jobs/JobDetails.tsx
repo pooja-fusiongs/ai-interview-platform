@@ -115,6 +115,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
   // Question generation & transcript state per candidate
   const [candidateQuestionSets, setCandidateQuestionSets] = useState<Record<number, string>>({})
   const [candidateVideoIds, setCandidateVideoIds] = useState<Record<number, number>>({})
+  const [candidateSessionIds, setCandidateSessionIds] = useState<Record<number, number>>({})
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false)
   const [transcriptCandidate, setTranscriptCandidate] = useState<any>(null)
   const [transcriptText, setTranscriptText] = useState('')
@@ -182,6 +183,7 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       // Map video interviews
       const interviews = viRes.data || []
       const vMapping: Record<number, number> = {}
+      const sMapping: Record<number, number> = {}
       for (const vi of interviews) {
         if (vi.job_id === selectedJob.id) {
           // Match by application_id first (most reliable), then fallback to email
@@ -191,10 +193,16 @@ const JobDetails: React.FC<JobDetailsProps> = ({
               c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
             )
           }
-          if (matched) vMapping[matched.id] = vi.id
+          if (matched) {
+            vMapping[matched.id] = vi.id
+            // Only overwrite session_id if not already set (keep the first/latest one with score)
+            if (vi.session_id && !sMapping[matched.id]) sMapping[matched.id] = vi.session_id
+          }
         }
       }
       setCandidateVideoIds(vMapping)
+
+      setCandidateSessionIds(sMapping)
     } catch (error) {
       console.error('Error fetching candidates:', error)
     } finally {
@@ -1190,11 +1198,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                 }
 
                                 if (st === 'Interview Completed') {
-                                  const hasReport = candidate.ai_score != null || candidate.overall_score != null || candidate.final_score != null
+                                  const hasReport = candidate.ai_score != null || candidate.overall_score != null || (candidate.final_score != null && candidate.final_score > 0)
                                   return (
                                     <>
-                                      {hasReport && candidateVideoIds[candidate.id] && (
-                                        <Button className="job-action-btn" onClick={() => navigate(`/video-detail/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                                      {hasReport && candidateSessionIds[candidate.id] && (
+                                        <Button className="job-action-btn" onClick={() => navigate(`/results?session=${candidateSessionIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
                                           <i className="fas fa-download" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Report</span>
                                         </Button>
                                       )}
@@ -1349,11 +1357,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                           )
                         }
                         if (st === 'Interview Completed') {
-                          const hasReport = candidate.ai_score != null || candidate.overall_score != null || candidate.final_score != null
+                          const hasReport = candidate.ai_score != null || candidate.overall_score != null || (candidate.final_score != null && candidate.final_score > 0)
                           return (
                             <>
-                              {hasReport && candidateVideoIds[candidate.id] && (
-                                <Button onClick={() => navigate(`/video-detail/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
+                              {hasReport && (
+                                <Button onClick={() => navigate('/results')} size="small" variant="outlined" sx={btnSx('#020291', '#020291', '#020291')}>
                                   <i className="fas fa-download" style={{ marginRight: 4, fontSize: 10 }}></i>Report
                                 </Button>
                               )}

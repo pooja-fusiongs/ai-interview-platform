@@ -731,6 +731,7 @@ class VideoInterviewUpdate(BaseModel):
 
 class VideoInterviewListResponse(BaseModel):
     id: int
+    session_id: Optional[int] = None
     job_id: Optional[int] = None
     candidate_id: Optional[int] = None
     candidate_email: Optional[str] = None

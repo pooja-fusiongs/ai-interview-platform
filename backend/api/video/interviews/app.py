@@ -523,6 +523,20 @@ def list_video_interviews(
                 if key_lower not in app_by_job_email_lower:
                     app_by_job_email_lower[key_lower] = a
 
+        # Pre-fetch scored session IDs (find latest SCORED session per candidate+job)
+        from models import InterviewSession, InterviewSessionStatus
+        candidate_job_pairs = list(set((vi.candidate_id, vi.job_id) for vi in interviews if vi.candidate_id and vi.job_id))
+        scored_session_map = {}  # (candidate_id, job_id) -> session_id
+        if candidate_job_pairs:
+            for cid, jid in candidate_job_pairs:
+                scored = db.query(InterviewSession.id).filter(
+                    InterviewSession.candidate_id == cid,
+                    InterviewSession.job_id == jid,
+                    InterviewSession.overall_score.isnot(None),
+                ).order_by(InterviewSession.created_at.desc()).first()
+                if scored:
+                    scored_session_map[(cid, jid)] = scored[0]
+
         # Build responses with pre-fetched data
         result = []
         for vi in interviews:
@@ -547,8 +561,11 @@ def list_video_interviews(
 
             job_title = vi.job.title if vi.job else ""
 
+            # Prefer scored session over video interview's session (which may not have score yet)
+            best_session_id = scored_session_map.get((vi.candidate_id, vi.job_id)) or vi.session_id
             result.append(VideoInterviewListResponse(
                 id=vi.id,
+                session_id=best_session_id,
                 job_id=vi.job_id,
                 candidate_id=vi.candidate_id,
                 candidate_email=candidate_email,
