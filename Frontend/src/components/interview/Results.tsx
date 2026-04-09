@@ -159,7 +159,7 @@ const Results = () => {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;border:1px solid #E8EAF5;border-collapse:separate;">
 <thead><tr style="background:#F7F8FE;"><th style="padding:6px 10px;font-size:7px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#B0B3CC;text-align:left;width:30px;border-bottom:1px solid #EEF0FA;">#</th><th style="padding:6px 4px;font-size:7px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#B0B3CC;text-align:left;border-bottom:1px solid #EEF0FA;">Question &amp; Feedback</th><th style="padding:6px 10px;font-size:7px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#B0B3CC;text-align:center;width:40px;border-bottom:1px solid #EEF0FA;">Score</th></tr></thead>
 <tbody>${qItems}</tbody>
-<tfoot><tr><td colspan="3" style="padding:6px 10px;border-top:1px solid #EEF0FA;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:7px;color:#B0B3CC;">iHire AI Interview Platform</td><td style="text-align:center;font-size:7px;color:#C8CADD;letter-spacing:1px;text-transform:uppercase;">Confidential</td><td style="text-align:right;font-size:7px;color:#B0B3CC;">Auto-generated</td></tr></table></td></tr></tfoot>
+<tfoot><tr><td colspan="3" style="padding:6px 10px;border-top:1px solid #EEF0FA;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:7px;color:#B0B3CC;">FGS Interview Platform</td><td style="text-align:center;font-size:7px;color:#C8CADD;letter-spacing:1px;text-transform:uppercase;">Confidential</td><td style="text-align:right;font-size:7px;color:#B0B3CC;">Auto-generated</td></tr></table></td></tr></tfoot>
 </table></div>`
   }
 

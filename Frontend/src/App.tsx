@@ -47,6 +47,7 @@ import VideoInterviewScheduler from './components/video/VideoInterviewScheduler'
 import VideoInterviewList from './components/video/VideoInterviewList'
 import VideoInterviewRoom from './components/video/VideoInterviewRoom'
 import VideoInterviewDetail from './components/video/VideoInterviewDetail'
+import TestVideoUpload from './components/video/TestVideoUpload'
 // Fraud Detection Components
 import FraudDashboard from './components/fraud/FraudDashboard'
 import FraudAnalysisPanel from './components/fraud/FraudAnalysisPanel'
@@ -470,6 +471,15 @@ function App(): JSX.Element {
               </ProtectedRoute>
             } />
 
+
+            {/* Test Video Upload (admin — fraud detection testing) */}
+            <Route path="/test-upload" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin', 'recruiter']}>
+                  <TestVideoUpload />
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
             {/* Post-Hire Feedback Routes */}
             <Route path="/feedback-form" element={

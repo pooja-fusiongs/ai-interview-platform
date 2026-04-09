@@ -1226,9 +1226,14 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                         </Button>
                                       )}
                                       {candidateVideoIds[candidate.id] ? (
+                                        <>
                                         <Button className="job-action-btn" onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
                                           <i className="fas fa-video" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Interview</span>
                                         </Button>
+                                        <Button className="job-action-btn" onClick={() => navigate(`/fraud-analysis/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#dc6b09', '#dc6b09', '#dc6b09')}>
+                                          <i className="fas fa-shield-alt" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Fraud</span>
+                                        </Button>
+                                        </>
                                       ) : (
                                         <Button className="job-action-btn" onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }} size="small" variant="outlined" sx={btnSx('#16a34a', '#16a34a', '#16a34a')}>
                                           <i className="fas fa-calendar-plus" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Schedule</span>

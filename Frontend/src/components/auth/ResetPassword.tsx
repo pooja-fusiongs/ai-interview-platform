@@ -360,7 +360,7 @@ const ResetPassword = () => {
         <Box
           component="img"
           src="/right_login(NEW).png"
-          alt="AI Interview Platform"
+          alt="FGS Interview Platform"
           sx={{ width: '100%', height: '100%' }}
         />
       </Box>

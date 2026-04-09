@@ -222,8 +222,13 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
         )
     )
 
-    # Sample every ~0.5 sec
+    # Sample frames — cap for performance (enough for fraud detection)
+    MAX_FRAMES = 60
     sample_interval = max(1, int(fps * 0.5))
+    # If video is long, increase interval to stay under MAX_FRAMES
+    estimated_samples = total_frames // sample_interval
+    if estimated_samples > MAX_FRAMES:
+        sample_interval = max(1, total_frames // MAX_FRAMES)
     mouth_openness = []
     audio_energy = []
     frames_analyzed = 0
@@ -346,7 +351,12 @@ def analyze_body_movement(video_path: str) -> Dict[str, Any]:
     LEFT_SHOULDER = mp.tasks.vision.PoseLandmark.LEFT_SHOULDER
     RIGHT_SHOULDER = mp.tasks.vision.PoseLandmark.RIGHT_SHOULDER
 
+    # Sample frames — cap for performance (enough for fraud detection)
+    MAX_FRAMES = 60
     sample_interval = max(1, int(fps * 0.5))
+    estimated_samples = total_frames // sample_interval
+    if estimated_samples > MAX_FRAMES:
+        sample_interval = max(1, total_frames // MAX_FRAMES)
     shoulder_midpoints = []
     nose_positions = []
     eye_contact_frames = 0

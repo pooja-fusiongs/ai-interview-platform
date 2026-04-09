@@ -82,7 +82,7 @@ def send_password_reset_email(email: str, reset_link: str) -> bool:
                         If you didn't request this, you can safely ignore this email.
                     </p>
                     <p style="color:#6b7280; font-size:14px; margin-top:20px;">
-                        - <strong>AI Interview Platform Team</strong>
+                        - <strong>FGS Interview Platform Team</strong>
                     </p>
                 </td></tr>
             </table>
@@ -99,9 +99,9 @@ def send_password_reset_email(email: str, reset_link: str) -> bool:
                 "api-key": BREVO_API_KEY,
             },
             json={
-                "sender": {"name": "AI Interview Platform", "email": SENDER_EMAIL},
+                "sender": {"name": "FGS Interview Platform", "email": SENDER_EMAIL},
                 "to": [{"email": email}],
-                "subject": "Reset Your Password - AI Interview Platform",
+                "subject": "Reset Your Password - FGS Interview Platform",
                 "htmlContent": html_content,
             },
         )

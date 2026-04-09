@@ -846,7 +846,7 @@ def list_all_analyses(
     # Increase timeout for this heavy query
     db.execute(_text("SET LOCAL statement_timeout = '120s'"))
     rows = db.execute(_text("""
-        SELECT
+        SELECT DISTINCT ON (fa.video_interview_id)
             fa.id, fa.video_interview_id, fa.overall_trust_score, fa.flag_count, fa.flags,
             fa.voice_consistency_score, fa.lip_sync_score, fa.body_movement_score,
             fa.face_detection_score, fa.face_detection_details, fa.analysis_status, fa.analyzed_at,
@@ -858,7 +858,7 @@ def list_all_analyses(
         LEFT JOIN users u ON u.id = vi.candidate_id
         LEFT JOIN jobs j ON j.id = vi.job_id
         WHERE vi.status != 'scheduled'
-        ORDER BY fa.analyzed_at DESC NULLS LAST
+        ORDER BY fa.video_interview_id, fa.analyzed_at DESC NULLS LAST
         LIMIT 100
     """)).fetchall()
 

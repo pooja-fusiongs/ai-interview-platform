@@ -74,9 +74,16 @@ export const getRouteAccess = (): RouteAccess[] => [
     label: 'Candidates',
     icon: 'fas fa-users'
   },
+    // Test Video Upload (fraud testing)
+  {
+    path: '/test-upload',
+    allowedRoles: ['recruiter', 'admin'],
+    label: 'Video Upload',
+    icon: 'fas fa-upload'
+  },
   {
     path: '/ai-questions',
-    allowedRoles: ['recruiter', 'domain_expert', 'admin'],
+    allowedRoles: ['admin'],
     label: 'AI Questions',
     icon: 'fas fa-robot'
   },

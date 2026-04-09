@@ -309,6 +309,55 @@ const FraudAnalysisPanel: React.FC = () => {
     );
   }
 
+  // No analysis data — show "not enough data" screen
+  if (!analysis) {
+    return (
+      <Navigation>
+        <Box sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(180deg, #f8f9fb 0%, #eef2f6 100%)',
+          padding: '24px'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+            <IconButton
+              onClick={() => navigate(-1)}
+              sx={{ background: 'white', border: '1px solid #e2e8f0', '&:hover': { background: '#f8fafc' } }}
+            >
+              <ArrowBack sx={{ color: '#64748b' }} />
+            </IconButton>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
+              Fraud Analysis
+            </Typography>
+          </Box>
+          {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }}>{error}</Alert>}
+          <Box sx={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            minHeight: '50vh', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', p: 5
+          }}>
+            <Shield sx={{ fontSize: 64, color: '#cbd5e1', mb: 2 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#475569', mb: 1 }}>
+              Not Enough Data
+            </Typography>
+            <Typography sx={{ color: '#94a3b8', textAlign: 'center', maxWidth: 400, mb: 3 }}>
+              No fraud analysis is available for this interview. The candidate may not have completed the interview yet, or the recording has not been processed.
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={handleTriggerAnalysis}
+              disabled={analyzing}
+              sx={{
+                background: '#020291', textTransform: 'none', fontWeight: 600, borderRadius: '10px', px: 4,
+                '&:hover': { background: '#01016e' }
+              }}
+            >
+              Run Analysis
+            </Button>
+          </Box>
+        </Box>
+      </Navigation>
+    );
+  }
+
   const overallScore = Math.round((analysis?.overall_trust_score || 0) * 100);
   // Parse flags - may be JSON string or array
   let flags: any[] = [];

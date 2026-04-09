@@ -445,7 +445,7 @@ const Login = () => {
           <Box
             component="img"
             src="/right_login(NEW).png"
-            alt="AI Interview Platform Illustration"
+            alt="FGS Interview Platform Illustration"
             sx={{
               width: '100%',
               height: '100%',

@@ -1823,8 +1823,8 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               </Box>
 
               {/* Footer */}
-              {candidateQuestionSessions[detailCandidate.id] && (
-                <Box sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+              <Box sx={{ p: 2.5, borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {candidateQuestionSessions[detailCandidate.id] && (
                   <Button
                     fullWidth
                     onClick={() => { navigate(`/interview-outline/${candidateQuestionSessions[detailCandidate.id]}`); handleCloseDetails() }}
@@ -1832,8 +1832,19 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                   >
                     Review Questions
                   </Button>
-                </Box>
-              )}
+                )}
+                <Button
+                  fullWidth
+                  onClick={() => { navigate(`/fraud-dashboard?search=${encodeURIComponent(detailCandidate.name || '')}`); handleCloseDetails() }}
+                  sx={{
+                    background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0',
+                    textTransform: 'none', fontWeight: 600, borderRadius: '10px', py: 1.2,
+                    '&:hover': { background: '#f1f5f9', borderColor: '#cbd5e1' }
+                  }}
+                >
+                  View Fraud Analysis
+                </Button>
+              </Box>
             </Box>
           )}
         </Drawer>

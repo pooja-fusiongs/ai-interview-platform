@@ -7,7 +7,7 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-interview-platform-2bov.onrender.com';
 const guestClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000,
+  timeout: 90000, // 90s — Render cold starts can be slow
 });
 
 export const videoInterviewService = {

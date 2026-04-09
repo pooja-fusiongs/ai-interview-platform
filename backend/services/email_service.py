@@ -8,7 +8,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 
-def _send_brevo_email(to_email: str, to_name: str, subject: str, html_content: str, sender_name: str = "AI Interview Platform") -> bool:
+def _send_brevo_email(to_email: str, to_name: str, subject: str, html_content: str, sender_name: str = "FGS Interview Platform") -> bool:
     """Send an email via Brevo (formerly Sendinblue) API."""
     BREVO_API_KEY = os.getenv("BREVO_API_KEY")
     SENDER_EMAIL = os.getenv("SENDER_EMAIL", "pooja@fusiongs.com")
@@ -123,7 +123,7 @@ def send_interview_notification(candidate_email: str, candidate_name: str, job_t
                                 Please be prepared and join on time. Good luck!
                             </p>
                             <p style="margin:20px 0 0 0; font-size:14px; color:#6b7280;">
-                                - <strong>AI Interview Platform Team</strong>
+                                - <strong>FGS Interview Platform Team</strong>
                             </p>
                         </td>
                     </tr>
@@ -167,7 +167,7 @@ def send_expert_review_request(expert_email: str, expert_name: str, job_title: s
                         </td></tr>
                     </table>
                     <p style="color:#374151; font-size:14px;">Please log in to the platform to review and approve these questions.</p>
-                    <p style="color:#6b7280; font-size:14px; margin-top:20px;">- <strong>AI Interview Platform Team</strong></p>
+                    <p style="color:#6b7280; font-size:14px; margin-top:20px;">- <strong>FGS Interview Platform Team</strong></p>
                 </td></tr>
             </table>
         </td></tr>
@@ -199,7 +199,7 @@ def send_review_completed_notification(recruiter_email: str, recruiter_name: str
                         </td></tr>
                     </table>
                     <p style="color:#374151; font-size:14px;">You can now proceed with scheduling the interview.</p>
-                    <p style="color:#6b7280; font-size:14px; margin-top:20px;">- <strong>AI Interview Platform Team</strong></p>
+                    <p style="color:#6b7280; font-size:14px; margin-top:20px;">- <strong>FGS Interview Platform Team</strong></p>
                 </td></tr>
             </table>
         </td></tr>
@@ -314,7 +314,7 @@ def send_interview_result_notification(
                                 Thank you for participating in the interview process. We appreciate your time and effort.
                             </p>
                             <p style="margin:20px 0 0 0; font-size:14px; color:#6b7280;">
-                                - <strong>AI Interview Platform Team</strong>
+                                - <strong>FGS Interview Platform Team</strong>
                             </p>
                         </td>
                     </tr>
@@ -447,7 +447,7 @@ def send_offer_email(
                                 Decline: {reject_url}
                             </p>
                             <p style="margin:25px 0 0 0; font-size:14px; color:#6b7280;">
-                                - <strong>AI Interview Platform Team</strong>
+                                - <strong>FGS Interview Platform Team</strong>
                             </p>
                         </td>
                     </tr>

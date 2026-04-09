@@ -533,6 +533,7 @@ const VideoInterviewRoom: React.FC = () => {
   const [showTranscriptInput, setShowTranscriptInput] = useState(false);
   const [submittingClassic, setSubmittingClassic] = useState(false);
   const [hasExited, setHasExited] = useState(false);
+  const [interviewEnded, setInterviewEnded] = useState(false);
   const [gracePeriodTimer, setGracePeriodTimer] = useState<number | null>(null);
   const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [, setTranscriptConnected] = useState(false);
@@ -549,7 +550,7 @@ const VideoInterviewRoom: React.FC = () => {
   const MAX_RECONNECT_ATTEMPTS = 3;
 
   useEffect(() => {
-    const fetchInterview = async () => {
+    const fetchInterview = async (retryCount = 0) => {
       try {
         const data = isGuest
           ? await videoInterviewService.guestGetInterview(Number(videoId))
@@ -562,8 +563,15 @@ const VideoInterviewRoom: React.FC = () => {
         }
         const s = (data.status || '').toLowerCase();
 
-        // Terminal states — don't start anything, redirect to detail page
+        // Terminal states — don't start anything
         if (['completed', 'cancelled', 'no_show'].includes(s)) {
+          const isCandidate = isGuest || isCandidateLink || user?.role === 'candidate';
+          if (isCandidate) {
+            // Candidates stay on a "thank you" screen — never redirect to login/dashboard
+            setInterviewEnded(true);
+            setLoading(false);
+            return;
+          }
           toast(
             s === 'no_show' ? 'Interview expired — candidate did not join'
               : s === 'cancelled' ? 'This interview was cancelled'
@@ -592,9 +600,15 @@ const VideoInterviewRoom: React.FC = () => {
           // Interview is waiting for candidate - start grace period check
           startGracePeriodCheck();
         }
+        setLoading(false);
       } catch (err: any) {
+        // Retry once on timeout/network error (cold start on Render can be slow)
+        if (retryCount < 1 && (!err.response || err.code === 'ECONNABORTED')) {
+          console.warn('⚠️ Initial fetch failed, retrying...', err.message);
+          setTimeout(() => fetchInterview(retryCount + 1), 2000);
+          return;
+        }
         setError(err.response?.data?.detail || err.message || 'Failed to load interview.');
-      } finally {
         setLoading(false);
       }
     };
@@ -1272,8 +1286,10 @@ const VideoInterviewRoom: React.FC = () => {
     // 7) Clean up session token
     sessionStorage.removeItem(`interview_token_${videoId}`);
 
-    // 8) Navigate to detail page (recruiter only, only if interview completed — not no_show)
-    if (!isGuest && actuallyCompleted) {
+    // 8) Navigate to detail page (recruiter) or show thank-you screen (candidate)
+    if (isGuest || isCandidateLink || user?.role === 'candidate') {
+      setInterviewEnded(true);
+    } else if (actuallyCompleted) {
       setTimeout(() => navigate(`/video-detail/${videoId}`), 2000);
     }
     } finally {
@@ -1289,6 +1305,42 @@ const VideoInterviewRoom: React.FC = () => {
       setShowConsentDialog(true);
     }
   }, [interview, isGuest, user, isActive, showConsentDialog]);
+
+  // Candidate finished / already completed — show thank-you screen (never expose login)
+  if (interviewEnded && (isGuest || isCandidateLink || user?.role === 'candidate')) {
+    const status = (interview?.status || '').toLowerCase();
+    return (
+      <Box sx={{
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+        minHeight: '100dvh', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
+      }}>
+        <Paper sx={{
+          p: 5, textAlign: 'center', maxWidth: 480, mx: 2,
+          borderRadius: 3, boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+        }}>
+          <Check sx={{ fontSize: 64, color: status === 'completed' ? '#22c55e' : '#f59e0b', mb: 2 }} />
+          <Typography variant="h5" fontWeight={700} gutterBottom>
+            {status === 'completed' ? 'Interview Completed' :
+             status === 'cancelled' ? 'Interview Cancelled' :
+             status === 'no_show' ? 'Interview Session Expired' :
+             'Interview Ended'}
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            {status === 'completed'
+              ? 'Thank you for completing your interview. Our team will review your responses and get back to you soon.'
+              : status === 'cancelled'
+              ? 'This interview has been cancelled. Please contact the recruiter for more information.'
+              : status === 'no_show'
+              ? 'The interview session has expired. Please contact the recruiter if you need to reschedule.'
+              : 'The interview has ended. You may now close this window.'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            You can safely close this browser tab.
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   if (loading) {
     return (

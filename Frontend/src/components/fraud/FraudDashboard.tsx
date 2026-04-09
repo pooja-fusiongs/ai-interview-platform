@@ -40,6 +40,7 @@ import {
   Clear,
   FilterList,
 } from '@mui/icons-material';
+import { useSearchParams } from 'react-router-dom';
 import Navigation from '../layout/Sidebar';
 import fraudDetectionService from '../../services/fraudDetectionService';
 
@@ -238,12 +239,13 @@ const EmptyState = () => (
 );
 
 const FraudDashboard: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [stats, setStats] = useState<any>(null);
   const [flagged, setFlagged] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 10;

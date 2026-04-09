@@ -537,7 +537,7 @@ def list_interviews(
     sessions = query.order_by(InterviewSession.started_at.desc()).all()
     sessions = [s for s in sessions if
         ((s.answers and len(s.answers) > 0) or s.overall_score is not None)
-        and (s.status in ("completed", InterviewSessionStatus.COMPLETED) or (s.answers and len(s.answers) > 0))
+        and (s.status in ("completed", "scored", InterviewSessionStatus.COMPLETED, InterviewSessionStatus.SCORED) or (s.answers and len(s.answers) > 0))
     ]
 
     if not sessions:
