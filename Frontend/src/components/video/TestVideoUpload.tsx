@@ -239,7 +239,7 @@ const TestVideoUpload: React.FC = () => {
               View Interview
             </Button>
             <Button fullWidth variant="outlined" endIcon={<Security sx={{ fontSize: 16 }} />}
-              onClick={() => window.open(`/fraud-analysis/${result.video_interview_id}`, '_blank')}
+              onClick={() => navigate(`/fraud-analysis/${result.video_interview_id}`)}
               sx={{ borderColor: '#e2e8f0', color: '#475569', borderRadius: '8px', textTransform: 'none', fontWeight: 600, height: 44, '&:hover': { borderColor: '#020291', color: '#020291' } }} >
               Fraud Analysis
             </Button>
