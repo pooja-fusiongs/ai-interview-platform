@@ -110,9 +110,11 @@ def upload_interview_from_url(
     # Resolve candidate
     actual_candidate_id = current_user.id
     candidate_name = current_user.full_name or current_user.username or "Unknown"
+    application_id = None
     if candidate_id:
         application = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
         if application:
+            application_id = application.id
             candidate_name = application.applicant_name or candidate_name
             candidate_user = db.query(User).filter(User.email == application.applicant_email).first()
             if candidate_user:
@@ -137,7 +139,7 @@ def upload_interview_from_url(
         candidate_id=actual_candidate_id,
         interviewer_id=current_user.id,
         scheduled_at=now, started_at=now, ended_at=now,
-        duration_minutes=0,
+        duration_minutes=0,  # Updated later after audio extraction
         status=VideoInterviewStatus.COMPLETED.value,
         recording_url=video_url,
         recording_consent=True,
@@ -148,6 +150,7 @@ def upload_interview_from_url(
     session = InterviewSession(
         job_id=job_id,
         candidate_id=actual_candidate_id,
+        application_id=application_id,
         status=InterviewSessionStatus.IN_PROGRESS,
         interview_mode="video_interview",
         started_at=now,
@@ -189,6 +192,25 @@ def upload_interview_from_url(
             if result.returncode != 0 or not os.path.exists(audio_path):
                 raise Exception(f"ffmpeg failed: {result.stderr[-300:]}")
             print(f"[TestUpload URL] Audio extracted: {os.path.getsize(audio_path) / 1024:.0f} KB")
+
+            # Extract duration from audio and update DB
+            try:
+                from pydub import AudioSegment
+                audio = AudioSegment.from_file(audio_path)
+                audio_dur_sec = len(audio) / 1000.0
+                dur_min = max(1, int(round(audio_dur_sec / 60)))
+                db_dur = SessionLocal()
+                try:
+                    vi_rec = db_dur.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+                    if vi_rec:
+                        vi_rec.duration_minutes = dur_min
+                        db_dur.commit()
+                        print(f"[TestUpload URL] Duration set: {audio_dur_sec:.0f}s = {dur_min}min")
+                finally:
+                    db_dur.close()
+            except Exception as dur_err:
+                print(f"[TestUpload URL] Duration extraction failed: {dur_err}")
+
         except Exception as e:
             print(f"[TestUpload URL] Audio extraction failed: {e}")
             _processing_status[vi_id]["status"] = "failed"
@@ -196,7 +218,8 @@ def upload_interview_from_url(
             return
 
         # Step 2: Transcript + Scoring using audio (fast — ~1 min)
-        _run_background_processing(vi_id, session_id, job_id, audio_path, now)
+        # skip_final_status=True: don't mark "completed" yet — Step 3 (fraud) still pending
+        _run_background_processing(vi_id, session_id, job_id, audio_path, now, skip_final_status=True)
 
         # Step 3: Download full video for fraud/face detection (runs after transcript+scoring done)
         video_path = None
@@ -217,34 +240,51 @@ def upload_interview_from_url(
             # Run fraud analysis on video
             from services.biometric_analyzer import run_real_analysis
             fraud_results = run_real_analysis(video_interview_id=vi_id, recording_path=video_path)
-            _processing_status[vi_id]["fraud"] = "completed"
-            print(f"[TestUpload URL] Fraud analysis completed")
 
-            # Save fraud to DB
-            db2 = SessionLocal()
-            try:
-                fraud = FraudAnalysis(
-                    video_interview_id=vi_id,
-                    voice_consistency_score=fraud_results.get("voice_consistency_score"),
-                    voice_consistency_details=fraud_results.get("voice_consistency_details"),
-                    lip_sync_score=fraud_results.get("lip_sync_score"),
-                    lip_sync_details=fraud_results.get("lip_sync_details"),
-                    body_movement_score=fraud_results.get("body_movement_score"),
-                    body_movement_details=fraud_results.get("body_movement_details"),
-                    overall_trust_score=fraud_results.get("overall_trust_score"),
-                    flags=fraud_results.get("flags", "[]"),
-                    flag_count=len(json.loads(fraud_results.get("flags", "[]")) if isinstance(fraud_results.get("flags"), str) else (fraud_results.get("flags") or [])),
-                    face_detection_score=fraud_results.get("face_detection_score"),
-                    face_detection_details=fraud_results.get("face_detection_details"),
-                    analysis_status="completed",
-                    consent_granted=True,
-                    analyzed_at=datetime.now(timezone.utc),
-                )
-                db2.add(fraud)
-                db2.commit()
-                print(f"[TestUpload URL] Fraud saved to DB")
-            finally:
-                db2.close()
+            # Check for error response
+            if fraud_results and isinstance(fraud_results, dict) and "_error" in fraud_results:
+                print(f"[TestUpload URL] Fraud analysis returned error: {fraud_results.get('_error')}")
+                _processing_status[vi_id]["fraud"] = "failed"
+                fraud_results = None
+            else:
+                _processing_status[vi_id]["fraud"] = "completed"
+                print(f"[TestUpload URL] Fraud analysis completed")
+
+            # Save fraud to DB (update existing or create new)
+            if fraud_results:
+                db2 = SessionLocal()
+                try:
+                    existing_fa = db2.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
+                    if existing_fa:
+                        for k in ('voice_consistency_score', 'voice_consistency_details', 'lip_sync_score', 'lip_sync_details', 'body_movement_score', 'body_movement_details', 'face_detection_score', 'face_detection_details', 'overall_trust_score'):
+                            setattr(existing_fa, k, fraud_results.get(k))
+                        existing_fa.flags = fraud_results.get("flags", "[]")
+                        existing_fa.flag_count = len(json.loads(fraud_results.get("flags", "[]")) if isinstance(fraud_results.get("flags"), str) else (fraud_results.get("flags") or []))
+                        existing_fa.analysis_status = "completed"
+                        existing_fa.analyzed_at = datetime.now(timezone.utc)
+                    else:
+                        fraud = FraudAnalysis(
+                            video_interview_id=vi_id,
+                            voice_consistency_score=fraud_results.get("voice_consistency_score"),
+                            voice_consistency_details=fraud_results.get("voice_consistency_details"),
+                            lip_sync_score=fraud_results.get("lip_sync_score"),
+                            lip_sync_details=fraud_results.get("lip_sync_details"),
+                            body_movement_score=fraud_results.get("body_movement_score"),
+                            body_movement_details=fraud_results.get("body_movement_details"),
+                            overall_trust_score=fraud_results.get("overall_trust_score"),
+                            flags=fraud_results.get("flags", "[]"),
+                            flag_count=len(json.loads(fraud_results.get("flags", "[]")) if isinstance(fraud_results.get("flags"), str) else (fraud_results.get("flags") or [])),
+                            face_detection_score=fraud_results.get("face_detection_score"),
+                            face_detection_details=fraud_results.get("face_detection_details"),
+                            analysis_status="completed",
+                            consent_granted=True,
+                            analyzed_at=datetime.now(timezone.utc),
+                        )
+                        db2.add(fraud)
+                    db2.commit()
+                    print(f"[TestUpload URL] Fraud saved to DB")
+                finally:
+                    db2.close()
         except Exception as e:
             print(f"[TestUpload URL] Fraud analysis failed: {e}")
             _processing_status[vi_id]["fraud"] = "failed"
@@ -386,6 +426,17 @@ async def upload_test_interview(
     recording_url = f"/uploads/recordings/{filename}"
     print(f"[TestUpload] Recording saved: {filename} ({file_size_mb} MB)")
 
+    # Extract actual duration from uploaded file
+    actual_duration = 0
+    try:
+        from services.biometric_analyzer import load_audio_from_file
+        audio = load_audio_from_file(file_path)
+        audio_duration_sec = len(audio) / 1000.0
+        actual_duration = max(1, int(round(audio_duration_sec / 60)))
+        print(f"[TestUpload] Extracted duration: {audio_duration_sec:.0f}s = {actual_duration}min")
+    except Exception as dur_err:
+        print(f"[TestUpload] Could not extract duration: {dur_err}")
+
     # --- 2. Create VideoInterview record ---
     vi = VideoInterview(
         job_id=job_id,
@@ -394,7 +445,7 @@ async def upload_test_interview(
         scheduled_at=now,
         started_at=now,
         ended_at=now,
-        duration_minutes=0,
+        duration_minutes=actual_duration,
         status=VideoInterviewStatus.COMPLETED.value,
         recording_url=recording_url,
         recording_consent=True,
@@ -406,6 +457,7 @@ async def upload_test_interview(
     session = InterviewSession(
         job_id=job_id,
         candidate_id=actual_candidate_id,
+        application_id=application_id,
         status=InterviewSessionStatus.IN_PROGRESS,
         interview_mode="video_interview",
         started_at=now,
@@ -430,13 +482,31 @@ async def upload_test_interview(
         "error": None,
     }
 
-    def _background_process(vi_id, session_id, job_id, file_path, now):
-        _run_background_processing(vi_id, session_id, job_id, file_path, now)
+    thread = threading.Thread(
+        target=_run_background_processing,
+        args=(vi_id, session_id, job_id, file_path, now),
+        daemon=True,
+    )
+    thread.start()
+
+    return {
+        "status": "processing",
+        "video_interview_id": vi_id,
+        "job_title": job_title,
+        "candidate_name": candidate_name,
+        "file_size_mb": file_size_mb,
+        "recording_url": recording_url,
+        "session_id": session_id,
+        "message": "Interview created! Transcript & fraud analysis are processing in background.",
+    }
 
 
-def _run_background_processing(vi_id, session_id, job_id, file_path, now):
+def _run_background_processing(vi_id, session_id, job_id, file_path, now, skip_final_status=False):
     """Shared background processing: transcript → fraud → scoring. Uses fresh DB connections per step."""
     import traceback
+    # Ensure _processing_status entry exists (may be lost if container restarted)
+    if vi_id not in _processing_status:
+        _processing_status[vi_id] = {"status": "processing", "transcript": "processing", "fraud": "pending", "scoring": "pending", "error": None}
     print(f"[TestUpload BG] Background thread started for vi_id={vi_id}")
 
     # --- Fetch questions BEFORE long transcript operation ---
@@ -515,43 +585,71 @@ def _run_background_processing(vi_id, session_id, job_id, file_path, now):
         try:
             from services.biometric_analyzer import run_real_analysis
             fraud_results = run_real_analysis(video_interview_id=vi_id, recording_path=file_path)
-            _processing_status[vi_id]["fraud"] = "completed"
-            print(f"[TestUpload BG] Fraud analysis completed for interview {vi_id}")
+            # Check if analysis returned an error
+            if fraud_results and isinstance(fraud_results, dict) and "_error" in fraud_results:
+                err_detail = fraud_results.get("_error", "unknown")
+                print(f"[TestUpload BG] Fraud analysis returned error: {err_detail}")
+                _processing_status[vi_id]["fraud"] = "failed"
+                _processing_status[vi_id]["fraud_error"] = err_detail
+                fraud_results = None  # Don't save error dict as results
+            else:
+                _processing_status[vi_id]["fraud"] = "completed"
+                print(f"[TestUpload BG] Fraud analysis completed for interview {vi_id}")
         except Exception as e:
             print(f"[TestUpload BG] Fraud analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
             _processing_status[vi_id]["fraud"] = "failed"
 
     if fraud_results:
         db2 = SessionLocal()
         try:
-            fraud = FraudAnalysis(
-                video_interview_id=vi_id,
-                voice_consistency_score=fraud_results.get("voice_consistency_score"),
-                voice_consistency_details=fraud_results.get("voice_consistency_details"),
-                lip_sync_score=fraud_results.get("lip_sync_score"),
-                lip_sync_details=fraud_results.get("lip_sync_details"),
-                body_movement_score=fraud_results.get("body_movement_score"),
-                body_movement_details=fraud_results.get("body_movement_details"),
-                overall_trust_score=fraud_results.get("overall_trust_score"),
-                flags=fraud_results.get("flags", "[]"),
-                flag_count=len(json.loads(fraud_results.get("flags", "[]")) if isinstance(fraud_results.get("flags"), str) else (fraud_results.get("flags") or [])),
-                analysis_status="completed",
-                consent_granted=True,
-                analyzed_at=now,
-            )
-            db2.add(fraud)
+            existing_fa = db2.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
+            if existing_fa:
+                existing_fa.voice_consistency_score = fraud_results.get("voice_consistency_score")
+                existing_fa.voice_consistency_details = fraud_results.get("voice_consistency_details")
+                existing_fa.lip_sync_score = fraud_results.get("lip_sync_score")
+                existing_fa.lip_sync_details = fraud_results.get("lip_sync_details")
+                existing_fa.body_movement_score = fraud_results.get("body_movement_score")
+                existing_fa.body_movement_details = fraud_results.get("body_movement_details")
+                existing_fa.face_detection_score = fraud_results.get("face_detection_score")
+                existing_fa.face_detection_details = fraud_results.get("face_detection_details")
+                existing_fa.overall_trust_score = fraud_results.get("overall_trust_score")
+                existing_fa.flags = fraud_results.get("flags", "[]")
+                existing_fa.flag_count = len(json.loads(fraud_results.get("flags", "[]")) if isinstance(fraud_results.get("flags"), str) else (fraud_results.get("flags") or []))
+                existing_fa.analysis_status = "completed"
+                existing_fa.analyzed_at = now
+                print(f"[TestUpload BG] Fraud updated (existing record)")
+            else:
+                fraud = FraudAnalysis(
+                    video_interview_id=vi_id,
+                    voice_consistency_score=fraud_results.get("voice_consistency_score"),
+                    voice_consistency_details=fraud_results.get("voice_consistency_details"),
+                    lip_sync_score=fraud_results.get("lip_sync_score"),
+                    lip_sync_details=fraud_results.get("lip_sync_details"),
+                    body_movement_score=fraud_results.get("body_movement_score"),
+                    body_movement_details=fraud_results.get("body_movement_details"),
+                    overall_trust_score=fraud_results.get("overall_trust_score"),
+                    flags=fraud_results.get("flags", "[]"),
+                    flag_count=len(json.loads(fraud_results.get("flags", "[]")) if isinstance(fraud_results.get("flags"), str) else (fraud_results.get("flags") or [])),
+                    analysis_status="completed",
+                    consent_granted=True,
+                    analyzed_at=now,
+                )
+                db2.add(fraud)
+                print(f"[TestUpload BG] Fraud created (new record)")
             db2.commit()
-            print(f"[TestUpload BG] Fraud saved to DB")
         finally:
             db2.close()
 
     # --- Auto Score Generation ---
     llm_result = None
     if transcript_text:
-        _processing_status[vi_id]["scoring"] = "processing"
         try:
-            from services.groq_service import score_transcript_directly
-
+            _processing_status[vi_id]["scoring"] = "processing"
+        except Exception:
+            _processing_status[vi_id] = {"status": "processing", "scoring": "processing", "transcript": "completed", "fraud": "skipped"}
+        try:
             db3 = SessionLocal()
             try:
                 job = db3.query(Job).filter(Job.id == job_id).first()
@@ -561,16 +659,78 @@ def _run_background_processing(vi_id, session_id, job_id, file_path, now):
             finally:
                 db3.close()
 
+            # Try Groq first, fallback to Gemini if rate limited
             print(f"[TestUpload BG] Starting auto score generation from transcript...")
-            llm_result = score_transcript_directly(
-                transcript_text=transcript_text,
-                job_title=job_title,
-                job_description=job_desc,
-                skills_required=job_skills,
-            )
+            try:
+                from services.groq_service import score_transcript_directly
+                llm_result = score_transcript_directly(
+                    transcript_text=transcript_text,
+                    job_title=job_title,
+                    job_description=job_desc,
+                    skills_required=job_skills,
+                )
+            except Exception as groq_err:
+                err_msg = str(groq_err).lower()
+                if '429' in err_msg or 'rate_limit' in err_msg or 'rate limit' in err_msg:
+                    print(f"[TestUpload BG] Groq rate limited, trying Gemini fallback...")
+                    try:
+                        import google.generativeai as genai
+                        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+                        model = genai.GenerativeModel("gemini-2.0-flash")
+                        prompt = f"""Score this interview transcript for the job: {job_title}
+Job Description: {job_desc}
+Required Skills: {job_skills}
+
+Transcript:
+{transcript_text[:8000]}
+
+Return ONLY valid JSON with this structure:
+{{"overall_score": <number 0-100>, "recommendation": "<select|next_round|reject>", "strengths": "<text>", "weaknesses": "<text>", "per_question": []}}"""
+                        resp = model.generate_content(prompt)
+                        text = resp.text.strip()
+                        # Extract JSON from response
+                        if '```' in text:
+                            text = text.split('```')[1].replace('json', '', 1).strip()
+                        parsed = json.loads(text)
+                        if parsed and 'overall_score' in parsed:
+                            llm_result = parsed
+                            print(f"[TestUpload BG] Gemini fallback succeeded! Score: {parsed.get('overall_score')}")
+                        else:
+                            print(f"[TestUpload BG] Gemini returned invalid format")
+                    except Exception as gemini_err:
+                        print(f"[TestUpload BG] Gemini fallback failed: {gemini_err}, trying OpenAI...")
+                        try:
+                            from openai import OpenAI as _OAI
+                            oai_client = _OAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                            oai_resp = oai_client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[{"role": "user", "content": f"""Score this interview transcript for: {job_title}
+Job Description: {job_desc}
+Skills: {job_skills}
+
+Transcript:
+{transcript_text[:8000]}
+
+Return ONLY valid JSON: {{"overall_score": <0-100>, "recommendation": "<select|next_round|reject>", "strengths": "<text>", "weaknesses": "<text>", "per_question": []}}"""}],
+                                max_tokens=2000,
+                            )
+                            oai_text = oai_resp.choices[0].message.content.strip()
+                            if '```' in oai_text:
+                                oai_text = oai_text.split('```')[1].replace('json', '', 1).strip()
+                            oai_parsed = json.loads(oai_text)
+                            if oai_parsed and 'overall_score' in oai_parsed:
+                                llm_result = oai_parsed
+                                print(f"[TestUpload BG] OpenAI fallback succeeded! Score: {oai_parsed.get('overall_score')}")
+                        except Exception as oai_err:
+                            print(f"[TestUpload BG] OpenAI fallback also failed: {oai_err}")
+                else:
+                    print(f"[TestUpload BG] Groq scoring failed (non-rate-limit): {groq_err}")
         except Exception as e:
             print(f"[TestUpload BG] Auto scoring failed: {e}")
-            _processing_status[vi_id]["scoring"] = "failed"
+            try:
+                _processing_status[vi_id]["scoring"] = "failed"
+            except Exception:
+                pass
 
         if llm_result:
             db4 = SessionLocal()
@@ -614,26 +774,16 @@ def _run_background_processing(vi_id, session_id, job_id, file_path, now):
     else:
         print(f"[TestUpload BG] Skipping auto scoring — no transcript available")
 
-    _processing_status[vi_id]["status"] = "completed"
-    print(f"[TestUpload BG] Thread finished for vi_id={vi_id}")
+    if not skip_final_status:
+        try:
+            _processing_status[vi_id]["status"] = "completed"
+        except Exception:
+            pass
+    print(f"[TestUpload BG] Thread finished for vi_id={vi_id} (skip_final_status={skip_final_status})")
+    import sys
+    sys.stdout.flush()
 
-    thread = threading.Thread(
-        target=_background_process,
-        args=(vi_id, session_id, job_id, file_path, now),
-        daemon=True,
-    )
-    thread.start()
 
-    return {
-        "status": "processing",
-        "video_interview_id": vi_id,
-        "job_title": job_title,
-        "candidate_name": candidate_name,
-        "file_size_mb": file_size_mb,
-        "recording_url": recording_url,
-        "session_id": session_id,
-        "message": "Interview created! Transcript & fraud analysis are processing in background.",
-    }
 
 
 @router.get("/processing-status/{video_interview_id}")
@@ -665,6 +815,15 @@ def get_processing_status(
                 "fraud_analysis_done": fraud is not None and fraud.analysis_status == "completed",
             }
 
+        # Check DB for scoring (InterviewSession linked to this video)
+        session_score = None
+        session_rec = None
+        if vi.session_id:
+            session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
+            if session and session.overall_score is not None:
+                session_score = session.overall_score
+                session_rec = session.recommendation.value if hasattr(session.recommendation, 'value') else str(session.recommendation) if session.recommendation else None
+
         return {
             "status": "completed",
             "transcript": "completed" if vi.transcript else "failed",
@@ -673,9 +832,9 @@ def get_processing_status(
             "transcript_length": len(vi.transcript) if vi.transcript else 0,
             "transcript_error": getattr(vi, 'transcript_error', None),
             "fraud_analysis_done": fraud is not None and fraud.analysis_status == "completed",
-            "scoring_done": False,
-            "overall_score": None,
-            "recommendation": None,
+            "scoring_done": session_score is not None,
+            "overall_score": session_score,
+            "recommendation": session_rec,
         }
 
     result = {**status}
@@ -686,10 +845,27 @@ def get_processing_status(
             result["transcript_generated"] = vi.transcript is not None
             result["transcript_length"] = len(vi.transcript) if vi.transcript else 0
             result["transcript_error"] = getattr(vi, 'transcript_error', None)
-            result["fraud_analysis_done"] = status.get("fraud") == "completed"
-            result["scoring_done"] = status.get("scoring") == "completed"
-            result["overall_score"] = status.get("overall_score")
-            result["recommendation"] = status.get("recommendation")
+            # Check DB for fraud (in case in-memory status is stale)
+            if status.get("fraud") != "completed":
+                fraud = db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == video_interview_id).first()
+                result["fraud_analysis_done"] = fraud is not None and fraud.analysis_status == "completed"
+            else:
+                result["fraud_analysis_done"] = True
+            # Check DB for scoring (in case in-memory status is stale)
+            if status.get("scoring") != "completed" and vi.session_id:
+                session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
+                if session and session.overall_score is not None:
+                    result["scoring_done"] = True
+                    result["overall_score"] = session.overall_score
+                    result["recommendation"] = session.recommendation.value if hasattr(session.recommendation, 'value') else str(session.recommendation) if session.recommendation else None
+                else:
+                    result["scoring_done"] = False
+                    result["overall_score"] = status.get("overall_score")
+                    result["recommendation"] = status.get("recommendation")
+            else:
+                result["scoring_done"] = status.get("scoring") == "completed"
+                result["overall_score"] = status.get("overall_score")
+                result["recommendation"] = status.get("recommendation")
 
     return result
 

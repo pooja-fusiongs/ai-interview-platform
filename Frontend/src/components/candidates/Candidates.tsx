@@ -34,11 +34,15 @@ import {
   Tooltip,
   TablePagination,
   Skeleton,
-  CircularProgress
+  CircularProgress,
+  Tabs,
+  Tab,
+  LinearProgress,
 } from '@mui/material'
 import Navigation from '../layout/Sidebar'
-import { CloudUpload as CloudUploadIcon } from '@mui/icons-material'
+import { CloudUpload as CloudUploadIcon, Security, CheckCircle } from '@mui/icons-material'
 import { recruiterService } from '../../services/recruiterService'
+import fraudDetectionService from '../../services/fraudDetectionService'
 
 const pastelColors = [
   '#6C7A89', '#7E8C8D', '#5B7FA5', '#6B8E7B', '#8B7B8E',
@@ -90,6 +94,11 @@ const Candidates = () => {
   const [editSaving, setEditSaving] = useState(false)
   const [, setCandidateInterviews] = useState<any[]>([])
   const [candidateQuestionSessions, setCandidateQuestionSessions] = useState<Record<number, string>>({})
+
+  // Drawer tab & fraud state
+  const [drawerTab, setDrawerTab] = useState<number>(0)
+  const [fraudData, setFraudData] = useState<any>(null)
+  const [fraudLoading, setFraudLoading] = useState(false)
 
   // Add candidate state
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -280,12 +289,39 @@ const Candidates = () => {
   const handleViewDetails = (candidate: Candidate) => {
     setDetailCandidate(candidate)
     setIsDetailOpen(true)
+    setDrawerTab(0)
+    setFraudData(null)
     fetchCandidateInterviews(candidate.id)
   }
 
   const handleCloseDetails = () => {
     setIsDetailOpen(false)
     setDetailCandidate(null)
+    setDrawerTab(0)
+    setFraudData(null)
+  }
+
+  // Fetch fraud data for candidate's interviews
+  const fetchFraudForCandidate = async (candidate: Candidate) => {
+    setFraudLoading(true)
+    try {
+      const response = await fraudDetectionService.getAllAnalyses()
+      const allAnalyses = response?.analyses || response || []
+      if (!Array.isArray(allAnalyses)) { setFraudData(null); setFraudLoading(false); return }
+      // Match by candidate name (case-insensitive) or email
+      const name = (candidate.name || '').toLowerCase().trim()
+      const email = (candidate.email || '').toLowerCase().trim()
+      const matched = allAnalyses.filter((a: any) => {
+        const aName = (a.candidate_name || '').toLowerCase().trim()
+        return aName === name || (email && a.candidate_email?.toLowerCase()?.trim() === email)
+      })
+      setFraudData(matched.length > 0 ? matched : null)
+    } catch (err) {
+      console.error('Fraud fetch error:', err)
+      setFraudData(null)
+    } finally {
+      setFraudLoading(false)
+    }
   }
 
   const handleToggleStatus = async (candidate: Candidate) => {
@@ -1731,7 +1767,23 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
 
               <Divider />
 
-              {/* Body */}
+              {/* Tabs */}
+              <Tabs value={drawerTab} onChange={(_, v) => {
+                setDrawerTab(v)
+                if (v === 1 && !fraudData && detailCandidate) fetchFraudForCandidate(detailCandidate)
+              }} sx={{
+                minHeight: 40, px: 2,
+                '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, fontSize: '13px', color: '#64748b', minHeight: 40, py: 1 },
+                '& .Mui-selected': { color: '#020291 !important' },
+                '& .MuiTabs-indicator': { backgroundColor: '#020291', height: 2.5 },
+              }}>
+                <Tab label="Profile" />
+                <Tab label="Fraud Analysis" icon={<Security sx={{ fontSize: 14 }} />} iconPosition="end" />
+              </Tabs>
+              <Divider />
+
+              {/* Tab: Profile */}
+              {drawerTab === 0 && (
               <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
                 {/* Status, Score, Experience cards */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5, mb: 3 }}>
@@ -1821,6 +1873,121 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                   )}
                 </Box>
               </Box>
+              )}
+
+              {/* Tab: Fraud Analysis */}
+              {drawerTab === 1 && (
+              <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
+                {fraudLoading ? (
+                  <Box sx={{ textAlign: 'center', py: 5 }}>
+                    <CircularProgress size={22} sx={{ color: '#020291', mb: 1.5 }} />
+                    <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Loading analysis...</Typography>
+                  </Box>
+                ) : !fraudData ? (
+                  <Box sx={{ textAlign: 'center', py: 5 }}>
+                    <Box sx={{ width: 52, height: 52, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', mb: 1.5 }}>
+                      <Security sx={{ fontSize: 24, color: '#cbd5e1' }} />
+                    </Box>
+                    <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#475569', mb: 0.5 }}>No Fraud Data</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>No fraud analysis available for<br />this candidate's interviews.</Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                    {fraudData.map((fa: any, idx: number) => {
+                      const trust = Math.round((fa.overall_trust_score || 0) * 100)
+                      const trustColor = trust >= 80 ? '#10b981' : trust >= 60 ? '#d97706' : '#ef4444'
+                      const trustBg = trust >= 80 ? '#ecfdf5' : trust >= 60 ? '#fffbeb' : '#fef2f2'
+                      const trustLabel = trust >= 80 ? 'Low Risk' : trust >= 60 ? 'Moderate Risk' : 'High Risk'
+                      let flags: any[] = []
+                      try { flags = typeof fa.flags === 'string' ? JSON.parse(fa.flags) : (fa.flags || []) } catch { flags = [] }
+                      flags = flags.filter((f: any) => f && typeof f === 'object' && f.flag_type)
+
+                      const scores = [
+                        { label: 'Face', score: fa.face_detection_score, icon: '👤' },
+                        { label: 'Voice', score: fa.voice_consistency_score, icon: '🎙' },
+                        { label: 'Lip Sync', score: fa.lip_sync_score, icon: '👄' },
+                        { label: 'Movement', score: fa.body_movement_score, icon: '🏃' },
+                      ]
+
+                      return (
+                        <Box key={idx}>
+                          {/* Interview header with trust score */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                            <Box>
+                              <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                                {fa.job_title || 'Interview'} <span style={{ fontSize: '11px', fontWeight: 500, color: '#94a3b8' }}>#{fa.video_interview_id}</span>
+                              </Typography>
+                              <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
+                                {fa.analyzed_at ? new Date(fa.analyzed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                              </Typography>
+                            </Box>
+                            <Chip size="small" label={`${trust}% ${trustLabel}`}
+                              sx={{ fontWeight: 700, fontSize: '11px', background: trustBg, color: trustColor, border: `1px solid ${trustColor}25` }} />
+                          </Box>
+
+                          {/* Score grid - 2x2 */}
+                          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1.5 }}>
+                            {scores.map((item, i) => {
+                              const pct = Math.round((item.score || 0) * 100)
+                              const c = pct >= 80 ? '#10b981' : pct >= 60 ? '#d97706' : '#ef4444'
+                              return (
+                                <Box key={i} sx={{ p: 1.2, borderRadius: '8px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography sx={{ fontSize: '11px', color: '#64748b' }}>{item.icon} {item.label}</Typography>
+                                    <Typography sx={{ fontSize: '12px', fontWeight: 800, color: c }}>{pct}%</Typography>
+                                  </Box>
+                                  <LinearProgress variant="determinate" value={pct} sx={{
+                                    height: 3, borderRadius: 2, backgroundColor: '#e2e8f0',
+                                    '& .MuiLinearProgress-bar': { borderRadius: 2, backgroundColor: c },
+                                  }} />
+                                </Box>
+                              )
+                            })}
+                          </Box>
+
+                          {/* Flags */}
+                          {flags.length > 0 && (
+                            <Box sx={{ mb: 1.5 }}>
+                              {flags.map((flag: any, fi: number) => {
+                                const sevColor = flag.severity === 'high' ? '#ef4444' : flag.severity === 'medium' ? '#d97706' : '#3b82f6'
+                                const sevBg = flag.severity === 'high' ? '#fef2f2' : flag.severity === 'medium' ? '#fffbeb' : '#eff6ff'
+                                return (
+                                  <Box key={fi} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1, mb: 0.5, borderRadius: '6px', background: sevBg }}>
+                                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: sevColor, mt: 0.7, flexShrink: 0 }} />
+                                    <Typography sx={{ fontSize: '11px', color: '#475569', lineHeight: 1.4 }}>
+                                      {flag.description || (flag.flag_type || '').replace(/_/g, ' ')}
+                                    </Typography>
+                                  </Box>
+                                )
+                              })}
+                            </Box>
+                          )}
+                          {flags.length === 0 && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1.5, p: 1, borderRadius: '6px', background: '#ecfdf5' }}>
+                              <CheckCircle sx={{ fontSize: 13, color: '#10b981' }} />
+                              <Typography sx={{ fontSize: '11px', color: '#059669', fontWeight: 500 }}>No flags detected</Typography>
+                            </Box>
+                          )}
+
+                          {/* View full */}
+                          <Button size="small" fullWidth variant="outlined"
+                            onClick={() => { navigate(`/fraud-analysis/${fa.video_interview_id}`); handleCloseDetails() }}
+                            sx={{
+                              textTransform: 'none', fontSize: '12px', fontWeight: 600, color: '#020291',
+                              borderColor: '#e2e8f0', borderRadius: '8px', py: 0.8,
+                              '&:hover': { borderColor: '#020291', background: '#EEF0FF' },
+                            }}>
+                            View Full Analysis
+                          </Button>
+
+                          {idx < fraudData.length - 1 && <Divider sx={{ mt: 2.5 }} />}
+                        </Box>
+                      )
+                    })}
+                  </Box>
+                )}
+              </Box>
+              )}
 
               {/* Footer */}
               <Box sx={{ p: 2.5, borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -1833,17 +2000,6 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                     Review Questions
                   </Button>
                 )}
-                <Button
-                  fullWidth
-                  onClick={() => { navigate(`/fraud-dashboard?search=${encodeURIComponent(detailCandidate.name || '')}`); handleCloseDetails() }}
-                  sx={{
-                    background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0',
-                    textTransform: 'none', fontWeight: 600, borderRadius: '10px', py: 1.2,
-                    '&:hover': { background: '#f1f5f9', borderColor: '#cbd5e1' }
-                  }}
-                >
-                  View Fraud Analysis
-                </Button>
               </Box>
             </Box>
           )}

@@ -13,6 +13,8 @@ const theme = createTheme({
   typography: { button: { textTransform: 'none' } },
 })
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { UploadProvider } from './contexts/UploadContext'
+import PersistentUploadToast from './components/video/PersistentUploadToast'
 import { getDefaultRoute } from './utils/roleUtils'
 import LandingPage from './components/LandingPage'
 import Login from './components/auth/SignIn'
@@ -214,7 +216,10 @@ function App(): JSX.Element {
       />
       <AuthProvider>
         <Router>
+          <UploadProvider>
           <div className="App" style={{ height: '100vh', overflow: 'hidden' }}>
+            {/* Persistent Upload Toast - shows on all pages */}
+            <PersistentUploadToast />
             {/* Toast Notifications */}
             <Toaster
             position="top-right"
@@ -533,6 +538,7 @@ function App(): JSX.Element {
             } />
           </Routes>
         </div>
+          </UploadProvider>
       </Router>
     </AuthProvider>
     </ThemeProvider>

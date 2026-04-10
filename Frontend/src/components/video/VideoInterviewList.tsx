@@ -12,6 +12,17 @@ import videoInterviewService from '../../services/videoInterviewService';
 import { apiClient } from '../../services/api';
 
 
+const getDuration = (row: any): string => {
+  if (row.duration_minutes && row.duration_minutes > 1) return `${row.duration_minutes} min`;
+  if (row.started_at && row.ended_at) {
+    const mins = Math.round((new Date(row.ended_at).getTime() - new Date(row.started_at).getTime()) / 60000);
+    if (mins >= 2) return `${mins} min`;
+  }
+  if (row.status === 'completed') return 'Completed'; 
+  if (row.status === 'scheduled') return `${row.duration_minutes || 30} min`;
+  return '-';
+};
+
 const getStatusColor = (status: string): 'primary' | 'warning' | 'success' | 'error' | 'default' => {
   const s = status.toLowerCase();
   if (s === 'scheduled') return 'primary';
@@ -475,7 +486,7 @@ const VideoInterviewList: React.FC = () => {
                           Duration
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500 }}>
-                          {row.duration_minutes} min
+                          {getDuration(row)}
                         </Typography>
                       </Box>
                       
@@ -618,7 +629,7 @@ const VideoInterviewList: React.FC = () => {
                           <Chip label={getStatusLabel(row.status)} color={getStatusColor(row.status)} size="small" />
                         </TableCell>
                         <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{new Date(row.scheduled_at).toLocaleString()}</TableCell>
-                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.duration_minutes} min</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{getDuration(row)}</TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{row.flag_count ?? 0}</TableCell>
                         <TableCell>
                           <Tooltip title="View Details"><IconButton onClick={() => navigate(`/video-detail/${row.id}`)}><Visibility /></IconButton></Tooltip>

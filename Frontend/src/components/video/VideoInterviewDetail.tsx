@@ -244,7 +244,18 @@ const VideoInterviewDetail: React.FC = () => {
                         {interview.job_title || 'Video Interview'}
                       </Typography>
                       <Typography sx={{ fontSize: { xs: '12px', sm: '14px' }, opacity: 0.9 }}>
-                        {interview.duration_minutes} minutes session
+                        {(() => {
+                          if (interview.duration_minutes && interview.duration_minutes > 1) {
+                            return `${interview.duration_minutes} minute${interview.duration_minutes === 1 ? '' : 's'} session`;
+                          }
+                          if (interview.started_at && interview.ended_at) {
+                            const diffMs = new Date(interview.ended_at).getTime() - new Date(interview.started_at).getTime();
+                            const mins = Math.round(diffMs / 60000);
+                            if (mins >= 2) return `${mins} minutes session`;
+                          }
+                          if (interview.status === 'completed') return 'Completed session';
+                          return 'Duration calculating...';
+                        })()}
                       </Typography>
                     </Box>
                   </Box>

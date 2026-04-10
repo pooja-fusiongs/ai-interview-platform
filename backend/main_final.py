@@ -1182,11 +1182,12 @@ def get_candidates(
         for r in all_resumes:
             app_id_to_resume[r.candidate_id] = r
 
-        # 2. Interview sessions (for scores)
+        # 2. Interview sessions (for scores) — by application_id
         all_sessions = db.query(
             InterviewSession.id,
             InterviewSession.job_id,
             InterviewSession.application_id,
+            InterviewSession.candidate_id,
             InterviewSession.overall_score,
             InterviewSession.interview_mode,
             InterviewSession.status,
@@ -1199,6 +1200,7 @@ def get_candidates(
         app_id_to_sessions = {}
         for s in all_sessions:
             app_id_to_sessions.setdefault(s.application_id, []).append(s)
+
 
         # 3. Question generation sessions
         all_q_sessions = db.query(QuestionGenerationSession).filter(
@@ -1215,12 +1217,38 @@ def get_candidates(
         all_jobs = db.query(Job).filter(Job.id.in_(job_ids)).all() if job_ids else []
         job_id_to_title = {j.id: j.title for j in all_jobs}
 
-        # 5. User accounts (for is_active status)
+        # 5. User accounts (for is_active status + user IDs for session lookup)
         all_emails = list(email_to_apps.keys())
-        all_users = db.query(User.email, User.is_active).filter(
+        all_users = db.query(User.id, User.email, User.is_active).filter(
             func.lower(User.email).in_(all_emails)
         ).all() if all_emails else []
         email_to_active = {u.email.lower(): u.is_active for u in all_users}
+        email_to_user_id = {u.email.lower(): u.id for u in all_users}
+
+        # 6. Fetch orphan sessions (video upload interviews without application_id)
+        candidate_user_ids = list(set(uid for uid in email_to_user_id.values() if uid))
+        if candidate_user_ids:
+            orphan_sessions = db.query(
+                InterviewSession.id, InterviewSession.job_id, InterviewSession.candidate_id,
+                InterviewSession.overall_score, InterviewSession.interview_mode,
+                InterviewSession.status, InterviewSession.recommendation, InterviewSession.created_at,
+            ).filter(
+                InterviewSession.candidate_id.in_(candidate_user_ids),
+                InterviewSession.application_id.is_(None),
+                InterviewSession.overall_score.isnot(None),
+            ).all()
+            user_id_to_apps = {}
+            for email, apps_list in email_to_apps.items():
+                uid = email_to_user_id.get(email)
+                if uid:
+                    user_id_to_apps[uid] = apps_list
+            for s in orphan_sessions:
+                matched_apps = user_id_to_apps.get(s.candidate_id, [])
+                matched_app = next((a for a in matched_apps if a.job_id == s.job_id), None)
+                if not matched_app and matched_apps:
+                    matched_app = matched_apps[0]
+                if matched_app:
+                    app_id_to_sessions.setdefault(matched_app.id, []).append(s)
 
         # --- Build deduplicated candidate list ---
         candidate_list = []

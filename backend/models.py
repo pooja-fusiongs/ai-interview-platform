@@ -576,9 +576,13 @@ class VideoInterview(Base):
 
 class FraudAnalysis(Base):
     __tablename__ = "fraud_analyses"
+    __table_args__ = (
+        UniqueConstraint('video_interview_id', name='uq_fraud_analysis_video_interview'),
+        {'extend_existing': True},
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    video_interview_id = Column(Integer, ForeignKey("video_interviews.id"), nullable=False)
+    video_interview_id = Column(Integer, ForeignKey("video_interviews.id"), nullable=False, unique=True)
 
     voice_consistency_score = Column(Float, nullable=True)
     voice_consistency_details = Column(Text, nullable=True)

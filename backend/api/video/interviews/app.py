@@ -1174,6 +1174,12 @@ async def guest_end_interview(
         vi.status = VideoInterviewStatus.COMPLETED.value
         vi.ended_at = datetime.now(timezone.utc)
 
+        # Calculate actual duration from started_at → ended_at
+        if vi.started_at and vi.ended_at:
+            diff_seconds = (vi.ended_at - vi.started_at).total_seconds()
+            if diff_seconds > 0:
+                vi.duration_minutes = max(1, int(round(diff_seconds / 60)))
+
     # Mark ALL fraud analyses as completed
     db.query(FraudAnalysis).filter(
         FraudAnalysis.video_interview_id == video_id,
@@ -1474,6 +1480,26 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
             bg_vi.transcript_source = chosen_source
             bg_vi.transcript_generated_at = datetime.now(timezone.utc)
 
+            # Calculate and save actual duration from timestamps or recording file
+            actual_duration_minutes = None
+            if bg_vi.started_at and bg_vi.ended_at:
+                diff_seconds = (bg_vi.ended_at - bg_vi.started_at).total_seconds()
+                if diff_seconds > 0:
+                    actual_duration_minutes = max(1, int(round(diff_seconds / 60)))
+            if not actual_duration_minutes and recording_path:
+                try:
+                    from services.biometric_analyzer import load_audio_from_file
+                    audio = load_audio_from_file(recording_path)
+                    audio_duration_sec = len(audio) / 1000.0
+                    if audio_duration_sec > 0:
+                        actual_duration_minutes = max(1, int(round(audio_duration_sec / 60)))
+                        print(f"[BG Transcription] Duration from audio: {audio_duration_sec:.0f}s = {actual_duration_minutes}min")
+                except Exception as dur_err:
+                    print(f"[BG Transcription] Could not extract audio duration: {dur_err}")
+            if actual_duration_minutes:
+                bg_vi.duration_minutes = actual_duration_minutes
+                print(f"[BG Transcription] Set duration_minutes={actual_duration_minutes} for vi_id={vi_id}")
+
             # Update InterviewSession
             sid = session_id or bg_vi.session_id
             if sid:
@@ -1502,6 +1528,24 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                 # Run analysis WITHOUT DB connection (CPU-bound, takes 30-60 sec)
                 print(f"[BG Fraud] Running biometric analysis for vi_id={vi_id}")
                 results = run_real_analysis(vi_id, recording_path)
+
+                # Check if analysis returned an error (e.g. missing deps, file not found)
+                if not results or (isinstance(results, dict) and "_error" in results):
+                    err_detail = results.get("_error", "unknown") if results else "no results"
+                    print(f"[BG Fraud] Analysis returned error for vi_id={vi_id}: {err_detail}")
+                    err_db = get_safe_db()
+                    try:
+                        fa = err_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
+                        if fa and fa.analysis_status in ("pending", "processing"):
+                            fa.analysis_status = "failed"
+                            fa.analyzed_at = datetime.now(timezone.utc)
+                            import json as _jf
+                            fa.flags = _jf.dumps([{"flag_type": "analysis_error", "severity": "low", "description": f"Biometric analysis failed: {err_detail}"}])
+                            fa.flag_count = 1
+                            err_db.commit()
+                    finally:
+                        err_db.close()
+                    return
 
                 # Open fresh DB connection only for saving results
                 fraud_db = get_safe_db()
@@ -1537,6 +1581,8 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                             lip_sync_details=results["lip_sync_details"],
                             body_movement_score=results["body_movement_score"],
                             body_movement_details=results["body_movement_details"],
+                            face_detection_score=results.get("face_detection_score"),
+                            face_detection_details=results.get("face_detection_details"),
                             overall_trust_score=results["overall_trust_score"],
                             flags=results["flags"],
                             flag_count=results["flag_count"],
@@ -1550,15 +1596,17 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                     fraud_db.close()
             except Exception as fraud_err:
                 print(f"[BG Fraud] Failed for vi_id={vi_id}: {fraud_err}")
+                import traceback
+                traceback.print_exc()
                 # Mark as failed (not completed) so dashboard can distinguish crash from real results
                 try:
                     err_db = get_safe_db()
                     fa = err_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
-                    if fa and fa.analysis_status == "pending":
+                    if fa and fa.analysis_status in ("pending", "processing"):
                         fa.analysis_status = "failed"
                         fa.analyzed_at = datetime.now(timezone.utc)
                         import json as _jf
-                        fa.flags = _jf.dumps([f"Analysis failed: {str(fraud_err)[:200]}"])
+                        fa.flags = _jf.dumps([{"flag_type": "analysis_error", "severity": "low", "description": f"Analysis failed: {str(fraud_err)[:200]}"}])
                         fa.flag_count = 1
                         err_db.commit()
                     err_db.close()
@@ -1716,6 +1764,13 @@ def end_video_interview(
 
     vi.status = VideoInterviewStatus.COMPLETED.value
     vi.ended_at = datetime.now(timezone.utc)
+
+    # Calculate actual duration from started_at → ended_at
+    if vi.started_at and vi.ended_at:
+        diff_seconds = (vi.ended_at - vi.started_at).total_seconds()
+        if diff_seconds > 0:
+            vi.duration_minutes = max(1, int(round(diff_seconds / 60)))
+            print(f"[end_interview] Set duration_minutes={vi.duration_minutes} from timestamps")
 
     # Batch-update fraud analyses to completed (single query, no loop)
     db.query(FraudAnalysis).filter(
@@ -3024,6 +3079,17 @@ async def upload_and_complete_interview(
     vi.ended_at = now
     vi.recording_consent = True
 
+    # Extract actual duration from uploaded recording file
+    try:
+        from services.biometric_analyzer import load_audio_from_file
+        audio = load_audio_from_file(file_path)
+        audio_duration_sec = len(audio) / 1000.0
+        if audio_duration_sec > 0:
+            vi.duration_minutes = max(1, int(round(audio_duration_sec / 60)))
+            print(f"🎥 Extracted duration from upload: {audio_duration_sec:.0f}s = {vi.duration_minutes}min")
+    except Exception as dur_err:
+        print(f"🎥 Could not extract duration from upload: {dur_err}")
+
     session = None
     if not vi.session_id:
         session = InterviewSession(
@@ -3056,12 +3122,51 @@ async def upload_and_complete_interview(
     def _bg_fraud():
         import time
         time.sleep(5)
+        from database import SessionLocal
+        bg_db = SessionLocal()
         try:
-            from database import SessionLocal
             from services.biometric_analyzer import run_real_analysis
-            bg_db = SessionLocal()
             results = run_real_analysis(video_interview_id=_vi_id, recording_path=_file_path)
-            if results and "_error" not in results:
+
+            # Check for existing record (may have been created by upload-complete before thread started)
+            existing_fa = bg_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == _vi_id).first()
+
+            if not results or (isinstance(results, dict) and "_error" in results):
+                err_detail = results.get("_error", "unknown") if results else "no results"
+                print(f"⚠️ Fraud analysis returned error for VI {_vi_id}: {err_detail}")
+                if existing_fa:
+                    existing_fa.analysis_status = "failed"
+                    existing_fa.analyzed_at = datetime.now(timezone.utc)
+                else:
+                    import json as _jf
+                    existing_fa = FraudAnalysis(
+                        video_interview_id=_vi_id,
+                        analysis_status="failed",
+                        consent_granted=True,
+                        analyzed_at=datetime.now(timezone.utc),
+                        flags=_jf.dumps([{"flag_type": "analysis_error", "severity": "low", "description": f"Biometric analysis failed: {err_detail}"}]),
+                        flag_count=1,
+                    )
+                    bg_db.add(existing_fa)
+                bg_db.commit()
+                return
+
+            if existing_fa:
+                existing_fa.voice_consistency_score = results.get("voice_consistency_score")
+                existing_fa.voice_consistency_details = results.get("voice_consistency_details")
+                existing_fa.lip_sync_score = results.get("lip_sync_score")
+                existing_fa.lip_sync_details = results.get("lip_sync_details")
+                existing_fa.body_movement_score = results.get("body_movement_score")
+                existing_fa.body_movement_details = results.get("body_movement_details")
+                existing_fa.face_detection_score = results.get("face_detection_score")
+                existing_fa.face_detection_details = results.get("face_detection_details")
+                existing_fa.overall_trust_score = results.get("overall_trust_score")
+                existing_fa.flags = results.get("flags", "[]")
+                existing_fa.flag_count = results.get("flag_count", 0)
+                existing_fa.analysis_status = "completed"
+                existing_fa.consent_granted = True
+                existing_fa.analyzed_at = datetime.now(timezone.utc)
+            else:
                 fraud = FraudAnalysis(
                     video_interview_id=_vi_id,
                     voice_consistency_score=results.get("voice_consistency_score"),
@@ -3080,11 +3185,22 @@ async def upload_and_complete_interview(
                     analyzed_at=datetime.now(timezone.utc),
                 )
                 bg_db.add(fraud)
-                bg_db.commit()
-                print(f"✅ Fraud analysis completed for VI {_vi_id}")
-            bg_db.close()
+            bg_db.commit()
+            print(f"✅ Fraud analysis completed for VI {_vi_id}")
         except Exception as e:
             print(f"⚠️ Fraud analysis failed for VI {_vi_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                fa = bg_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == _vi_id).first()
+                if fa and fa.analysis_status in ("pending", "processing"):
+                    fa.analysis_status = "failed"
+                    fa.analyzed_at = datetime.now(timezone.utc)
+                    bg_db.commit()
+            except Exception:
+                bg_db.rollback()
+        finally:
+            bg_db.close()
 
     threading.Thread(target=_bg_fraud, daemon=True).start()
 
@@ -3325,6 +3441,33 @@ def download_recording(video_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/video/interviews/backfill-duration
+# One-time: calculate duration from started_at/ended_at for existing interviews
+# ---------------------------------------------------------------------------
+
+@router.post("/api/video/interviews/backfill-duration")
+def backfill_duration(
+    current_user: User = Depends(require_any_role([UserRole.ADMIN])),
+    db: Session = Depends(get_db),
+):
+    """Backfill duration_minutes for existing interviews that have 0 or NULL duration."""
+    interviews = db.query(VideoInterview).filter(
+        VideoInterview.started_at.isnot(None),
+        VideoInterview.ended_at.isnot(None),
+        (VideoInterview.duration_minutes == 0) | (VideoInterview.duration_minutes.is_(None))
+    ).all()
+
+    updated = 0
+    for vi in interviews:
+        diff_seconds = (vi.ended_at - vi.started_at).total_seconds()
+        if diff_seconds >= 120:  # Only set if >= 2 minutes (avoids bad data from same-time timestamps)
+            vi.duration_minutes = max(1, int(round(diff_seconds / 60)))
+            updated += 1
+
+    db.commit()
+    return {"message": f"Updated {updated} of {len(interviews)} interviews with 0/null duration"}
+
+
 # POST /api/video/interviews/migrate-recordings-to-cloudinary
 # One-time migration: upload local recordings to Cloudinary & update DB URLs
 # ---------------------------------------------------------------------------
