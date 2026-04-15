@@ -57,6 +57,33 @@ def _answer_response(a: InterviewAnswer) -> InterviewAnswerResponse:
     )
 
 
+_NOT_ASKED_PHRASES = (
+    "not answered", "not asked", "no answer", "not covered",
+    "not discussed", "question not answered", "question not asked",
+    "answer not extracted",
+)
+
+
+def _was_actually_answered(a: InterviewAnswer) -> bool:
+    """Return True only if the candidate actually answered this question.
+
+    Scoring services create an InterviewAnswer row for every approved question
+    (even ones never asked in the interview). Those placeholder rows carry
+    marker phrases in answer_text/feedback and typically a score of 0. Filter
+    them out so the results page shows only questions the candidate actually
+    answered.
+    """
+    text = (a.answer_text or "").strip().lower()
+    if not text:
+        return False
+    if any(p in text for p in _NOT_ASKED_PHRASES):
+        return False
+    fb = (a.feedback or "").strip().lower()
+    if any(p in fb for p in _NOT_ASKED_PHRASES) and (a.score or 0) == 0:
+        return False
+    return True
+
+
 def _session_response(s: InterviewSession, include_answers: bool = True, db: Session = None) -> InterviewSessionResponse:
     # For recruiter-driven sessions, get name from application
     if hasattr(s, 'application') and s.application:
@@ -105,7 +132,7 @@ def _session_response(s: InterviewSession, include_answers: bool = True, db: Ses
         completed_at=s.completed_at,
         job_title=s.job.title if s.job else None,
         candidate_name=candidate_name,
-        answers=[_answer_response(a) for a in s.answers] if include_answers else [],
+        answers=[_answer_response(a) for a in s.answers if _was_actually_answered(a)] if include_answers else [],
         integrity_check=integrity,
     )
 

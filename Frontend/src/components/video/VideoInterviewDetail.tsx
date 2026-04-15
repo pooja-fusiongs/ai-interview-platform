@@ -467,8 +467,17 @@ const VideoInterviewDetail: React.FC = () => {
                           color: '#ffffff',
                           backgroundColor: '#020291',
                           '&:hover': {
-                            backgroundColor: '#01016d'
-                          }
+                            backgroundColor: '#01016d',
+                            color:'white'
+                          },
+                          // MUI applies a muted grey text color to disabled
+                          // buttons which made "Scoring with AI..." look black
+                          // on the dark blue background during loading.
+                          '&.Mui-disabled': {
+                            color: '#ffffff',
+                            backgroundColor: '#020291',
+                            opacity: 0.85,
+                          },
                         }}
                       >
                         {scoring ? 'Scoring with AI...' : 'Submit & Score with AI'}

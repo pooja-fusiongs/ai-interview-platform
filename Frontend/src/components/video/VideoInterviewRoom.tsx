@@ -1180,6 +1180,12 @@ const VideoInterviewRoom: React.FC = () => {
     setCallJoined(false);
     setIsRecording(false);
     setEnding(false);
+    // Optimistically mark the interview completed so the render switches to
+    // the "Interview Completed" screen immediately. Otherwise there's a 1-5s
+    // window between setIsActive(false) and the backend endInterview response
+    // during which isCompleted is false and the "Join Video Interview" UI
+    // briefly reappears. The backend-confirmed value is merged in at line ~1246.
+    setInterview((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
     // Don't assume no_show from frontend maxParticipants — backend has the truth
     // (candidate may have joined on backend even if recruiter's connection kept failing)
     const candidateEverJoined = maxParticipantsRef.current >= 2;
@@ -1758,7 +1764,38 @@ const VideoInterviewRoom: React.FC = () => {
                 boxShadow: 'none',
                 border: { xs: 'none', md: '1px solid #e2e8f0' }
               }}>
-                {isActive ? (
+                {isCompleted ? (
+                  // Completed interview — always show this screen regardless of
+                  // any other state (prevents the "Join Video Interview" UI or
+                  // a stale LiveKit room from appearing after completion, even
+                  // if the initial redirect races or the page is reloaded).
+                  <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 4 }}>
+                    <Box sx={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 24px',
+                      boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)'
+                    }}>
+                      <Check sx={{ color: 'white', fontSize: 50 }} />
+                    </Box>
+                    <Typography sx={{
+                      color: '#1e293b',
+                      fontSize: '28px',
+                      fontWeight: 700,
+                      mb: 2
+                    }}>
+                      Interview Completed
+                    </Typography>
+                    <Typography sx={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>
+                      Interview completed. You can close this window.
+                    </Typography>
+                  </Box>
+                ) : isActive ? (
                   // LiveKit Video Call with Tiles
                   <Box
                     sx={{
@@ -1939,33 +1976,6 @@ const VideoInterviewRoom: React.FC = () => {
                         <Typography sx={{ color: '#64748b' }}>Establishing secure connection...</Typography>
                       </Box>
                     )}
-                  </Box>
-                ) : isCompleted ? (
-                  <Box sx={{ textAlign: 'center', width: '100%', maxWidth: 500, mx: 'auto', p: 4 }}>
-                    <Box sx={{
-                      width: 100,
-                      height: 100,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      margin: '0 auto 24px',
-                      boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)'
-                    }}>
-                      <Check sx={{ color: 'white', fontSize: 50 }} />
-                    </Box>
-                    <Typography sx={{
-                      color: '#1e293b',
-                      fontSize: '28px',
-                      fontWeight: 700,
-                      mb: 2
-                    }}>
-                      Interview Completed
-                    </Typography>
-                    <Typography sx={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>
-                      Interview completed. You can close this window.
-                    </Typography>
                   </Box>
                 ) : (
                   <Box sx={{

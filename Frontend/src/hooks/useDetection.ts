@@ -24,93 +24,11 @@ function loadScript(url: string): Promise<void> {
 const HOLISTIC_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js';
 const FACE_DETECTION_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/face_detection.js';
 
-// --- Face Identity Signature ---
-// Uses biometric ratios from MediaPipe face landmarks to detect person changes.
-// These ratios are stable for the same person but differ between people.
-interface FaceSignature {
-  eyeDistanceRatio: number;   // inter-eye / face height
-  noseLengthRatio: number;    // nose tip to bridge / face height
-  mouthWidthRatio: number;    // mouth width / face width
-  faceAspectRatio: number;    // face width / face height
-  eyeToNoseRatio: number;     // eye center to nose tip / face height
-}
-
-function computeFaceSignature(landmarks: any[]): FaceSignature | null {
-  if (!landmarks || landmarks.length < 200) return null;
-
-  // Safely access landmarks — Holistic gives 468, but check key indices exist
-  const maxIdx = Math.max(454, 362, 291, 263, 234, 168, 152, 133, 61, 33, 10, 1);
-  if (landmarks.length <= maxIdx) return null;
-
-  const foreheadTop = landmarks[10];
-  const chinBottom  = landmarks[152];
-  const leftCheek   = landmarks[234];
-  const rightCheek  = landmarks[454];
-  const leftEyeIn   = landmarks[133];
-  const rightEyeIn  = landmarks[263];
-  const leftEyeOut  = landmarks[33];
-  const rightEyeOut = landmarks[362];
-  const noseTip     = landmarks[1];
-  const noseBridge  = landmarks[168];
-  const leftMouth   = landmarks[61];
-  const rightMouth  = landmarks[291];
-
-  // Verify all landmarks have x,y coordinates
-  const all = [foreheadTop, chinBottom, leftCheek, rightCheek, leftEyeIn, rightEyeIn,
-               leftEyeOut, rightEyeOut, noseTip, noseBridge, leftMouth, rightMouth];
-  if (all.some(l => !l || l.x === undefined || l.y === undefined)) return null;
-
-  const dist = (a: any, b: any) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-
-  const faceHeight = dist(foreheadTop, chinBottom);
-  const faceWidth  = dist(leftCheek, rightCheek);
-  if (faceHeight < 0.01 || faceWidth < 0.01) return null;
-
-  return {
-    eyeDistanceRatio: dist(leftEyeIn, rightEyeIn) / faceHeight,
-    noseLengthRatio:  dist(noseTip, noseBridge) / faceHeight,
-    mouthWidthRatio:  dist(leftMouth, rightMouth) / faceWidth,
-    faceAspectRatio:  faceWidth / faceHeight,
-    eyeToNoseRatio:   dist(noseTip, {
-      x: (leftEyeOut.x + rightEyeOut.x) / 2,
-      y: (leftEyeOut.y + rightEyeOut.y) / 2,
-    }) / faceHeight,
-  };
-}
-
-function averageSignatures(sigs: FaceSignature[]): FaceSignature {
-  const n = sigs.length;
-  const sum = sigs.reduce((acc, s) => ({
-    eyeDistanceRatio: acc.eyeDistanceRatio + s.eyeDistanceRatio,
-    noseLengthRatio:  acc.noseLengthRatio  + s.noseLengthRatio,
-    mouthWidthRatio:  acc.mouthWidthRatio  + s.mouthWidthRatio,
-    faceAspectRatio:  acc.faceAspectRatio  + s.faceAspectRatio,
-    eyeToNoseRatio:   acc.eyeToNoseRatio   + s.eyeToNoseRatio,
-  }), { eyeDistanceRatio: 0, noseLengthRatio: 0, mouthWidthRatio: 0, faceAspectRatio: 0, eyeToNoseRatio: 0 });
-  return {
-    eyeDistanceRatio: sum.eyeDistanceRatio / n,
-    noseLengthRatio:  sum.noseLengthRatio  / n,
-    mouthWidthRatio:  sum.mouthWidthRatio  / n,
-    faceAspectRatio:  sum.faceAspectRatio  / n,
-    eyeToNoseRatio:   sum.eyeToNoseRatio   / n,
-  };
-}
-
-/** Returns similarity 0-1 (1 = same person, <0.70 = likely different person) */
-function compareFaceSignatures(a: FaceSignature, b: FaceSignature): number {
-  const diffs = [
-    Math.abs(a.eyeDistanceRatio - b.eyeDistanceRatio),
-    Math.abs(a.noseLengthRatio  - b.noseLengthRatio),
-    Math.abs(a.mouthWidthRatio  - b.mouthWidthRatio),
-    Math.abs(a.faceAspectRatio  - b.faceAspectRatio),
-    Math.abs(a.eyeToNoseRatio   - b.eyeToNoseRatio),
-  ];
-  const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-  return Math.max(0, 1 - avgDiff * 10);
-}
-
-const FACE_CHANGE_THRESHOLD = 0.82; // Below this = different person
-const REFERENCE_FRAMES = 5;         // Frames to build initial reference
+// Face-identity biometric signature logic was removed — it relied on the first
+// 5 frames of an interview as a "reference" and flagged same-person candidates
+// as different whenever lighting / angle shifted similarity below threshold.
+// When a real photo-based identity check is added, build it against a stored
+// reference photo, not against the first few frames of a live session.
 
 // --- Types ---
 export interface MovementFlags {
@@ -171,7 +89,20 @@ const CHIN_IDX = 152;
 // Thresholds
 const AUDIO_RMS_THRESHOLD = 0.002;
 const LIP_MOVEMENT_THRESHOLD = 0.06;
-const PITCH_SHIFT_THRESHOLD = 0.35;
+// Pitch consistency tuning. Previous algorithm (strict 0.35 threshold, mean
+// baseline from first 10 segments, single-frame shift counting) scored the same
+// clear speaker at ~37%. The values below are tuned so natural prosody (stress,
+// sentence-end fall, thinking pauses, occasional vocal fry) stays "consistent"
+// while a genuine different speaker still trips the threshold.
+const PITCH_SHIFT_THRESHOLD = 0.40;       // 40% deviation = different speaker territory
+const PITCH_WARMUP_SEGMENTS = 7;          // ignore first ~5s (mic-test, nervous start)
+const PITCH_BASELINE_SEGMENTS = 15;       // voiced segments collected to form baseline
+const PITCH_ROLLING_WINDOW = 40;          // rolling median window for drift-adaptive baseline
+const PITCH_SUSTAINED_SHIFT_FRAMES = 4;   // consecutive shifted frames before we flag
+const PITCH_OCTAVE_TOLERANCE = 0.15;      // treat ratios near 2× / 0.5× as octave errors
+const PITCH_DRIFT_BAND = 0.15;            // only absorb pitch into baseline when within 15% —
+                                          // keeps a mid-interview voice swap from silently
+                                          // shifting the baseline to the impostor's range.
 
 /** Audio Pitch Detection Algorithm */
 function detectPitch(analyser: AnalyserNode, sampleRate: number, buffer: Float32Array<ArrayBuffer>): number {
@@ -222,7 +153,8 @@ export function useDetection({
   const [lipMoving, setLipMoving] = useState(false);
   const [audioActive, setAudioActive] = useState(false);
   const [movementScore, setMovementScore] = useState<'CALM' | 'MODERATE' | 'HIGH'>('CALM');
-  const [faceChanged, setFaceChanged] = useState(false);
+  // faceChanged stays constant false — identity check disabled (see top of file).
+  const faceChanged = false;
 
   // Stats accumulator (resets every 5 seconds for the payload window)
   const windowStatsRef = useRef<Omit<UnifiedDetectionPayload, 'interview_id' | 'timestamp' | 'flags'>>({
@@ -268,6 +200,11 @@ export function useDetection({
   const holisticRef = useRef<any>(null);
   const faceDetectorRef = useRef<any>(null);
   const multiFaceCountRef = useRef(0); // Updated by FaceDetection (supports multiple faces)
+  // Sustained-multiface debounce: raw per-frame counts spike to 2 on glasses
+  // reflections, posters, shadows. Only commit to multiFaceCountRef when the
+  // same count holds for several consecutive frames.
+  const multiFacePendingCountRef = useRef(0);
+  const multiFacePendingFramesRef = useRef(0);
   const internalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Liveness detection — track face landmark movement between frames
   const prevNoseRef = useRef<{ x: number; y: number } | null>(null);
@@ -281,7 +218,10 @@ export function useDetection({
   const audioDataRef = useRef<Float32Array<ArrayBuffer> | null>(null);
   const bufferRef = useRef<Float32Array<ArrayBuffer> | null>(null);
   const baselinePitchRef = useRef(0);
-  const baselineCountRef = useRef(0);
+  const baselineCountRef = useRef(0);       // voiced segments used to build initial baseline
+  const warmupCountRef = useRef(0);          // voiced segments skipped at interview start
+  const recentPitchesRef = useRef<number[]>([]); // rolling window for drift-aware baseline
+  const consecutiveShiftRef = useRef(0);     // sustained-shift debounce counter
   const opennessSumRef = useRef(0);
 
   // Movement Trackers
@@ -289,11 +229,6 @@ export function useDetection({
   const lastHandsRef = useRef<{left: any, right: any}>({left: null, right: null});
   const movementHistoryRef = useRef<number[]>([]); // stores intensity values
 
-  // Face Identity Trackers
-  const referenceFaceSigsRef = useRef<FaceSignature[]>([]);   // first N frames to build reference
-  const referenceFaceRef = useRef<FaceSignature | null>(null); // locked-in reference
-  const faceChangedConsecutiveRef = useRef(0);                 // consecutive mismatches (debounce)
-  const recentSimilaritiesRef = useRef<number[]>([]);          // sliding window of last 5 similarities
   const slouchReferenceYRef = useRef<number | null>(null);
 
   // Payload extraction helper
@@ -446,24 +381,86 @@ export function useDetection({
         
         if (pitch === 0) {
           w.silent_segments += 1;
+          // Break sustained-shift streak on silence so a pause followed by a
+          // clean resume doesn't keep counting as a shift.
+          consecutiveShiftRef.current = 0;
         } else {
-          if (baselineCountRef.current < 10) {
+          // Stage 1: WARMUP — ignore first few voiced segments entirely
+          // (mic test, throat clear, nervous pitch). Don't count them as
+          // consistent OR inconsistent.
+          if (warmupCountRef.current < PITCH_WARMUP_SEGMENTS) {
+            warmupCountRef.current += 1;
+          }
+          // Stage 2: BASELINE BUILD — collect a window, then use median.
+          // Median is robust against outlier frames that skewed the old mean.
+          else if (baselineCountRef.current < PITCH_BASELINE_SEGMENTS) {
+            recentPitchesRef.current.push(pitch);
             baselineCountRef.current += 1;
-            baselinePitchRef.current = (baselinePitchRef.current * (baselineCountRef.current - 1) + pitch) / baselineCountRef.current;
-            w.avg_pitch = baselinePitchRef.current;
+            if (baselineCountRef.current === PITCH_BASELINE_SEGMENTS) {
+              const sorted = [...recentPitchesRef.current].sort((a, b) => a - b);
+              baselinePitchRef.current = sorted[Math.floor(sorted.length / 2)];
+            }
+            // During baseline build treat as consistent (known-good speaker).
+            w.avg_pitch = pitch;
             w.consistent_segments += 1;
-          } else {
-            const deviation = Math.abs(pitch - baselinePitchRef.current) / baselinePitchRef.current;
-            if (deviation > w.max_pitch_deviation) w.max_pitch_deviation = deviation;
-            w.avg_pitch = (w.avg_pitch * 0.95) + (pitch * 0.05);
+          }
+          // Stage 3: LIVE COMPARISON against drifting baseline.
+          else {
+            const baseline = baselinePitchRef.current;
+            const ratio = pitch / baseline;
 
-            if (deviation > PITCH_SHIFT_THRESHOLD) {
-              w.inconsistent_segments += 1;
-              w.pitch_shift_count += 1;
-              w.inconsistent_seconds += intervalSeconds;
-            } else {
+            // Octave-error guard: autocorrelation often returns 2× or ½× the
+            // true fundamental. Same speaker, algorithm glitch — don't penalize.
+            const isOctaveError =
+              Math.abs(ratio - 2) < PITCH_OCTAVE_TOLERANCE ||
+              Math.abs(ratio - 0.5) < PITCH_OCTAVE_TOLERANCE;
+
+            if (isOctaveError) {
               w.consistent_segments += 1;
-              baselinePitchRef.current = baselinePitchRef.current * 0.98 + pitch * 0.02;
+              consecutiveShiftRef.current = 0;
+            } else {
+              const deviation = Math.abs(pitch - baseline) / baseline;
+              if (deviation > w.max_pitch_deviation) w.max_pitch_deviation = deviation;
+              w.avg_pitch = (w.avg_pitch * 0.95) + (pitch * 0.05);
+
+              if (deviation > PITCH_SHIFT_THRESHOLD) {
+                // Sustained-shift debounce: single-frame spikes (natural
+                // emphasis, sentence-end intonation) don't count. Only if the
+                // deviation persists for N consecutive frames do we flag it.
+                consecutiveShiftRef.current += 1;
+                if (consecutiveShiftRef.current >= PITCH_SUSTAINED_SHIFT_FRAMES) {
+                  w.inconsistent_segments += 1;
+                  w.inconsistent_seconds += intervalSeconds;
+                  // Count one shift event at the moment sustained threshold
+                  // is first crossed, not every frame after — otherwise a
+                  // single long deviation racks up a huge penalty.
+                  if (consecutiveShiftRef.current === PITCH_SUSTAINED_SHIFT_FRAMES) {
+                    w.pitch_shift_count += 1;
+                  }
+                } else {
+                  // Short spike — still the same speaker, count as consistent.
+                  w.consistent_segments += 1;
+                }
+              } else {
+                w.consistent_segments += 1;
+                consecutiveShiftRef.current = 0;
+                // Drift-adaptive baseline, but only absorb pitches that are
+                // *very* close to the current baseline (within DRIFT_BAND).
+                // If we absorbed everything below the shift threshold, a
+                // mid-interview voice swap whose valleys dip under threshold
+                // would silently pull the baseline toward the impostor and
+                // score them as consistent. Tight band = real drift only.
+                if (deviation < PITCH_DRIFT_BAND) {
+                  recentPitchesRef.current.push(pitch);
+                  if (recentPitchesRef.current.length > PITCH_ROLLING_WINDOW) {
+                    recentPitchesRef.current.shift();
+                  }
+                  if (recentPitchesRef.current.length >= 10) {
+                    const sorted = [...recentPitchesRef.current].sort((a, b) => a - b);
+                    baselinePitchRef.current = sorted[Math.floor(sorted.length / 2)];
+                  }
+                }
+              }
             }
           }
         }
@@ -530,40 +527,16 @@ export function useDetection({
       }
       if (faceCountCurrent > w.max_faces_detected) w.max_faces_detected = faceCountCurrent;
 
-      // --- FACE IDENTITY TRACKING ---
-      // Compare current face biometric ratios with the reference (first 5 frames)
-      // --- FACE IDENTITY TRACKING ---
-      const faceLm = results.faceLandmarks;
-      if (hasFace && faceLm && faceLm.length > 100) {
-        const sig = computeFaceSignature(faceLm);
-        if (sig) {
-          if (!referenceFaceRef.current) {
-            referenceFaceSigsRef.current.push(sig);
-            if (referenceFaceSigsRef.current.length >= REFERENCE_FRAMES) {
-              referenceFaceRef.current = averageSignatures(referenceFaceSigsRef.current);
-            }
-          } else {
-            const similarity = compareFaceSignatures(referenceFaceRef.current, sig);
-            recentSimilaritiesRef.current.push(similarity);
-            if (recentSimilaritiesRef.current.length > 5) recentSimilaritiesRef.current.shift();
-
-            const avgSimilarity = recentSimilaritiesRef.current.length >= 3
-              ? recentSimilaritiesRef.current.reduce((a, b) => a + b, 0) / recentSimilaritiesRef.current.length
-              : similarity;
-
-            if (avgSimilarity < FACE_CHANGE_THRESHOLD) {
-              faceChangedConsecutiveRef.current += 1;
-              if (faceChangedConsecutiveRef.current >= 2) {
-                w.face_changed_count += 1;
-                setFaceChanged(true);
-              }
-            } else {
-              faceChangedConsecutiveRef.current = 0;
-              setFaceChanged(false);
-            }
-          }
-        }
-      }
+      // --- FACE IDENTITY TRACKING (DISABLED) ---
+      // Pehle ye block first-5-frames ka biometric signature bana ke har frame
+      // se compare karta tha, aur threshold se neeche girne pe "Different Person
+      // Detected" chip dikhata tha. Reference signature hi unreliable banta tha
+      // (camera ne abhi auto-exposure settle nahi kiya hota, candidate settle
+      // nahi hua hota) — isliye false-positive flicker aata tha same person ke
+      // liye bhi. Real identity check profile-photo-based hoga future me;
+      // impostor/2nd-person ka case already multiple_face_count handle karta hai.
+      // Jab photo-based match add ho, tab yahan reference photo embedding se
+      // compare karna — first 5 frames se nahi.
 
       // --- LIP SYNC ---
       w.total_frames += 1;
@@ -727,11 +700,38 @@ export function useDetection({
         });
         fd.setOptions({
           model: 'short',
-          minDetectionConfidence: 0.5,
+          // Raised from 0.5 — lower thresholds detected glasses reflections,
+          // posters and background shadows as second faces.
+          minDetectionConfidence: 0.75,
         });
         fd.onResults((faceResults: FaceDetectionResults) => {
-          const count = faceResults.detections?.length ?? 0;
-          multiFaceCountRef.current = count;
+          const detections = faceResults.detections ?? [];
+          // Area filter: a real second person in frame occupies a meaningful
+          // fraction of the image. Tiny detections (glare, glasses reflection,
+          // background patterns) have bbox area ~1-2% — ignore them.
+          const MIN_FACE_AREA = 0.015; // ~1.5% of frame
+          const validDetections = detections.filter((d: any) => {
+            const bbox = d?.boundingBox;
+            if (!bbox) return true; // if no bbox info, trust the detection
+            const w = bbox.width ?? 0;
+            const h = bbox.height ?? 0;
+            return (w * h) >= MIN_FACE_AREA;
+          });
+          const rawCount = validDetections.length;
+
+          // Sustained-frame debounce: only commit a changed count after it
+          // holds for several consecutive frames. Stops 1-frame flickers from
+          // toggling the "N faces detected" chip on the recruiter side.
+          const SUSTAINED_FRAMES = 3;
+          if (rawCount === multiFacePendingCountRef.current) {
+            multiFacePendingFramesRef.current += 1;
+          } else {
+            multiFacePendingCountRef.current = rawCount;
+            multiFacePendingFramesRef.current = 1;
+          }
+          if (multiFacePendingFramesRef.current >= SUSTAINED_FRAMES) {
+            multiFaceCountRef.current = rawCount;
+          }
         });
         await fd.initialize();
         faceDetectorRef.current = fd;

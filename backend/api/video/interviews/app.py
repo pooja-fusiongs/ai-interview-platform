@@ -36,6 +36,7 @@ from models import (
     QuestionGenerationSession,
     TranscriptChunk,
 )
+from services.realtime_transcription import compile_transcript
 from schemas import (
     VideoInterviewCreate,
     VideoInterviewResponse,
@@ -1205,15 +1206,10 @@ async def guest_end_interview(
             chunks = db.query(TranscriptChunk).filter(
                 TranscriptChunk.video_interview_id == video_id,
                 TranscriptChunk.is_final == True
-            ).order_by(TranscriptChunk.sequence_number).all()
+            ).order_by(TranscriptChunk.created_at, TranscriptChunk.id).all()
 
             if chunks and len(chunks) >= 2:
-                # Build formatted transcript from real-time chunks
-                lines = []
-                for c in chunks:
-                    speaker = c.speaker.capitalize() if c.speaker else "Speaker"
-                    lines.append(f"{speaker}: {c.text}")
-                realtime_text = "\n".join(lines)
+                realtime_text = compile_transcript(chunks)
 
                 start_str = (vi.started_at or vi.scheduled_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
                 end_str = (vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
@@ -1817,13 +1813,13 @@ def end_video_interview(
         chunks = db.query(TranscriptChunk).filter(
             TranscriptChunk.video_interview_id == vi.id,
             TranscriptChunk.is_final == True
-        ).order_by(TranscriptChunk.sequence_number).all()
+        ).order_by(TranscriptChunk.created_at, TranscriptChunk.id).all()
 
         if chunks and len(chunks) >= 2:
-            lines = [f"{(c.speaker or 'Speaker').capitalize()}: {c.text}" for c in chunks]
+            body = compile_transcript(chunks)
             start_str = (vi.started_at or vi.scheduled_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
             end_str = (vi.ended_at or datetime.now(timezone.utc)).strftime("%H:%M:%S")
-            vi.transcript = f"[Interview Start: {start_str}]\n\n" + "\n".join(lines) + f"\n\n[Interview End: {end_str}]"
+            vi.transcript = f"[Interview Start: {start_str}]\n\n{body}\n\n[Interview End: {end_str}]"
             vi.transcript_source = "realtime"
             vi.transcript_generated_at = datetime.now(timezone.utc)
     except Exception as e:

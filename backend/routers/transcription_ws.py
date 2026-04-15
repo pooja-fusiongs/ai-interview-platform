@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database import get_safe_db
 from models import VideoInterview, TranscriptChunk
-from services.realtime_transcription import DeepgramStreamer
+from services.realtime_transcription import DeepgramStreamer, is_noise_chunk, compile_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -103,14 +103,17 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
 
     # Callback: when Deepgram returns a transcript result
     async def on_transcript(speaker: str, text: str, is_final: bool,
-                            timestamp_start: float, timestamp_end: float):
-        # Save final chunks to DB
-        if is_final and text.strip():
+                            timestamp_start: float, timestamp_end: float,
+                            confidence: float = 1.0):
+        # Save final chunks to DB, skipping silence-hallucination / filler noise
+        # so they don't interleave with the other speaker's real turn.
+        cleaned = text.strip()
+        if is_final and cleaned and not is_noise_chunk(cleaned, confidence):
             try:
                 chunk = TranscriptChunk(
                     video_interview_id=interview_id,
                     speaker=speaker,
-                    text=text.strip(),
+                    text=cleaned,
                     timestamp_start=timestamp_start,
                     timestamp_end=timestamp_end,
                     is_final=True,
@@ -210,9 +213,10 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
         print(f"[transcription_ws] 🔚 {role} closing: {audio_chunks_received[0]} chunks, {audio_bytes_received[0] / 1024:.1f} KB received")
         await streamer.close()
 
-        # Compile all final chunks into VideoInterview.transcript
-        # Use timestamp_start ordering for natural chronological order
-        # (handles chunks from both recruiter and candidate connections)
+        # Compile all final chunks into VideoInterview.transcript.
+        # Sort by wall-clock `created_at` — recruiter's and candidate's Deepgram
+        # streams have independent `timestamp_start` clocks, so only the DB
+        # server clock gives a reliable global order across both participants.
         try:
             chunks = (
                 db.query(TranscriptChunk)
@@ -220,34 +224,12 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
                     TranscriptChunk.video_interview_id == interview_id,
                     TranscriptChunk.is_final == True,
                 )
-                .order_by(TranscriptChunk.timestamp_start, TranscriptChunk.sequence_number)
+                .order_by(TranscriptChunk.created_at, TranscriptChunk.id)
                 .all()
             )
 
             if chunks:
-                # Merge consecutive same-speaker chunks for cleaner transcript
-                merged_lines = []
-                prev_speaker = None
-                current_text = []
-
-                for c in chunks:
-                    if c.speaker == prev_speaker:
-                        current_text.append(c.text)
-                    else:
-                        if prev_speaker and current_text:
-                            merged_lines.append(
-                                f"{prev_speaker.capitalize()}: {' '.join(current_text)}"
-                            )
-                        prev_speaker = c.speaker
-                        current_text = [c.text]
-
-                if prev_speaker and current_text:
-                    merged_lines.append(
-                        f"{prev_speaker.capitalize()}: {' '.join(current_text)}"
-                    )
-
-                full_transcript = "\n".join(merged_lines)
-
+                full_transcript = compile_transcript(chunks)
                 interview_obj = db.query(VideoInterview).filter(
                     VideoInterview.id == interview_id
                 ).first()
@@ -258,7 +240,7 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
                     db.commit()
                     logger.info(
                         f"Compiled real-time transcript for interview {interview_id} "
-                        f"({len(chunks)} chunks, {len(merged_lines)} speaker turns)"
+                        f"({len(chunks)} chunks)"
                     )
         except Exception as e:
             logger.error(f"Error compiling transcript: {e}")
@@ -280,7 +262,7 @@ async def get_transcript_chunks(interview_id: int):
                 TranscriptChunk.video_interview_id == interview_id,
                 TranscriptChunk.is_final == True,
             )
-            .order_by(TranscriptChunk.timestamp_start, TranscriptChunk.sequence_number)
+            .order_by(TranscriptChunk.created_at, TranscriptChunk.id)
             .all()
         )
         return [

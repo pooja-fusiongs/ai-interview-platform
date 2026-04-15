@@ -139,12 +139,14 @@ class DeepgramStreamer:
                         is_final = data.get("is_final", False)
                         start = data.get("start", 0)
                         duration = data.get("duration", 0)
+                        confidence = alternatives[0].get("confidence", 1.0)
                         await self.on_transcript(
                             speaker=self.speaker,
                             text=transcript,
                             is_final=is_final,
                             timestamp_start=start,
                             timestamp_end=start + duration,
+                            confidence=confidence,
                         )
 
         except websockets.exceptions.ConnectionClosed:
@@ -173,3 +175,73 @@ class DeepgramStreamer:
             except Exception:
                 pass
         logger.info(f"Deepgram closed for speaker: {self.speaker}")
+
+
+# ─── Transcript cleaning helpers ───────────────────────────────────────────────
+#
+# Deepgram ke chunks me teen problems aate hain:
+#   1. Silence me ghost/filler words (uh, hmm, the) — candidate chup hai phir bhi
+#      uska mic chunk bhej deta hai. Ye recruiter ke turn ke beech me ghus jaate
+#      hain aur transcript interleaved lagta hai.
+#   2. Ek speaker ka sentence Deepgram pause pe 2-3 chunks me tod deta hai.
+#   3. Recruiter aur candidate ke `timestamp_start` alag clocks pe hain — stream
+#      start ke relative. Isliye wall-clock (`created_at`) se sort karna zaroori
+#      hai, Deepgram timestamp se nahi.
+
+_FILLER_WORDS = {
+    "uh", "um", "umm", "uhh", "hmm", "hm", "mm", "mhm", "ah", "oh",
+    "er", "eh", "the", "a", "an", "so", "yeah", "ok", "okay",
+}
+
+
+def is_noise_chunk(text: str, confidence: float = 1.0) -> bool:
+    """True if a chunk looks like silence hallucination / filler noise.
+
+    Deepgram sometimes emits tiny low-confidence chunks while a participant is
+    silent (background noise, breathing, brief acknowledgements). Dropping them
+    before save is the cleanest fix — otherwise they leak into the other
+    speaker's turn when we sort chronologically.
+    """
+    cleaned = (text or "").strip().lower().rstrip(".,!?")
+    if not cleaned:
+        return True
+    words = cleaned.split()
+    # Single filler word, regardless of confidence
+    if len(words) == 1 and words[0] in _FILLER_WORDS:
+        return True
+    # Very short + low confidence → likely hallucinated
+    if len(words) <= 2 and confidence < 0.6:
+        return True
+    # All words are fillers (e.g. "uh um", "hmm the")
+    if words and all(w in _FILLER_WORDS for w in words):
+        return True
+    return False
+
+
+def compile_transcript(chunks) -> str:
+    """Merge consecutive same-speaker chunks into clean speaker turns.
+
+    Expects chunks already ordered chronologically (by wall-clock created_at).
+    Returns lines like: "Recruiter: ...\\nCandidate: ...".
+    """
+    lines: list[str] = []
+    prev_speaker = None
+    buffer: list[str] = []
+
+    for c in chunks:
+        speaker = (c.speaker or "speaker").strip().lower()
+        text = (c.text or "").strip()
+        if not text:
+            continue
+        if speaker == prev_speaker:
+            buffer.append(text)
+        else:
+            if prev_speaker and buffer:
+                lines.append(f"{prev_speaker.capitalize()}: {' '.join(buffer)}")
+            prev_speaker = speaker
+            buffer = [text]
+
+    if prev_speaker and buffer:
+        lines.append(f"{prev_speaker.capitalize()}: {' '.join(buffer)}")
+
+    return "\n".join(lines)
