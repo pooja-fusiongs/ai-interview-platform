@@ -13,6 +13,7 @@ import {
 } from '@mui/icons-material';
 import videoInterviewService from '../../services/videoInterviewService';
 import ratingService from '../../services/ratingService';
+import activityService from '../../services/activityService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { LiveKitRoom, RoomAudioRenderer, useRemoteParticipants, useTracks } from '@livekit/components-react';
@@ -542,6 +543,41 @@ const VideoInterviewRoom: React.FC = () => {
   const graceCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
+
+  // Guard recording / transcription / fraud-detection from being killed by an
+  // accidental refresh, back-button or tab close. While the call is joined:
+  //   1. activityService.setInterviewActive(true) → suppresses the auto-logout
+  //      beacon that beforeunload would otherwise fire (which invalidates the
+  //      session and tears down the WS connections mid-interview).
+  //   2. A native browser confirm prompt warns before leaving the page.
+  useEffect(() => {
+    activityService.setInterviewActive(callJoined);
+    if (!callJoined) return;
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      activityService.setInterviewActive(false);
+    };
+  }, [callJoined]);
+
+  // Final safety: ensure the flag is cleared on unmount even if callJoined
+  // never flipped back to false (e.g. user navigates away mid-call).
+  useEffect(() => {
+    return () => {
+      activityService.setInterviewActive(false);
+    };
+  }, []);
+
+  // Audio-only fallback — set automatically when the browser denies the
+  // camera (e.g. another tab/app owns it). LiveKitRoom is re-mounted with
+  // video={false} so the user can at least hear/see the remote participant.
+  const [audioOnlyMode, setAudioOnlyMode] = useState(false);
   // const jitsiApiRef = useRef<any>(null); // Removed Jitsi ref
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -1220,22 +1256,20 @@ const VideoInterviewRoom: React.FC = () => {
     cleanupVideoCall();
 
     // 4+5) Upload recording and call endInterview IN PARALLEL — don't block end on upload
-    const candidateJoined = maxParticipantsRef.current >= 2;
-
+    // ALWAYS upload if a blob exists, regardless of who joined.
+    // Whoever ends the call (recruiter OR candidate) — the recording must be saved.
     const uploadPromise = (async () => {
-      if (recordingBlob && candidateJoined) {
+      if (recordingBlob) {
         try {
           const upload = isGuest ? videoInterviewService.guestUploadRecording : videoInterviewService.uploadRecording;
-          console.log(`🎬 [handleEnd] Uploading recording: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB...`);
+          console.log(`🎬 [handleEnd] Uploading recording: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB (maxParticipants=${maxParticipantsRef.current})...`);
           const uploadResult = await upload(Number(videoId), recordingBlob);
           console.log('✅ [handleEnd] Recording uploaded:', uploadResult);
         } catch (err) {
           console.error('❌ [handleEnd] Recording upload failed:', err);
         }
-      } else if (recordingBlob && !candidateJoined) {
-        console.log('⏭️ [handleEnd] Skipping recording upload — candidate never joined (maxParticipants=1)');
       } else {
-        console.error('❌ [handleEnd] NO recording blob to upload!');
+        console.error('❌ [handleEnd] NO recording blob to upload! MediaRecorder produced nothing.');
       }
     })();
 
@@ -1809,7 +1843,8 @@ const VideoInterviewRoom: React.FC = () => {
                   >
                     {lkToken ? (
                       <LiveKitRoom
-                        video={true}
+                        key={audioOnlyMode ? 'audio-only' : 'full-av'}
+                        video={!audioOnlyMode}
                         audio={true}
                         token={lkToken}
                         serverUrl={import.meta.env.VITE_LIVEKIT_URL || "wss://ai-interview-platform-a0kpbtob.livekit.cloud"}
@@ -1841,7 +1876,8 @@ const VideoInterviewRoom: React.FC = () => {
                           setParticipantCount(1);
                           maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 1);
                           reconnectAttemptsRef.current = 0;
-                          toast.success('Joined interview');
+                          // Stable id + low duration so reconnect loops don't stack 4+ toasts.
+                          toast.success('Joined interview', { id: 'livekit-joined', duration: 2500 });
                         }}
                         onDisconnected={async (reason?: DisconnectReason) => {
                           console.warn('LiveKit disconnected, reason:', reason);
@@ -1930,13 +1966,75 @@ const VideoInterviewRoom: React.FC = () => {
                         }}
                         onError={(error: Error) => {
                           console.error('LiveKit error:', error);
+
+                          // PERMISSION DENIED is a FATAL error — don't auto-retry.
+                          // Otherwise LiveKit re-requests camera every few seconds,
+                          // each denial fires onError → new toast → infinite loop.
+                          // Mark endingRef so onDisconnected's reconnect branch is skipped.
+                          const msg = error.message || '';
+                          const isPermissionErr = msg.includes('Permission denied')
+                            || msg.includes('NotAllowedError')
+                            || error.name === 'NotAllowedError';
+                          if (isPermissionErr) {
+                            reconnectAttemptsRef.current = MAX_RECONNECT_ATTEMPTS + 1; // suppress retry
+                            // Auto-fallback to audio-only so the user can still
+                            // continue the interview even when the camera is
+                            // held by another tab/app. LiveKitRoom is re-mounted
+                            // (via key prop) with video={false}.
+                            if (!audioOnlyMode) {
+                              setAudioOnlyMode(true);
+                              toast('Camera busy — joined in audio-only mode. Close other apps using camera and rejoin to enable video.', {
+                                id: 'livekit-permission-denied',
+                                duration: 8000,
+                                icon: '🎧',
+                              });
+                            } else {
+                              toast.error(
+                                'Mic permission denied. Grant mic access in browser settings, then click Rejoin.',
+                                { id: 'livekit-permission-denied', duration: 10000 }
+                              );
+                            }
+                            return;
+                          }
+
                           // Avoid duplicate toasts for device errors (already handled by onMediaDeviceFailure)
-                          if (!error.message?.includes('video source') && !error.message?.includes('device')) {
-                            toast.error(`Video error: ${error.message || 'Connection issue detected'}`);
+                          if (!msg.includes('video source') && !msg.includes('device')) {
+                            const isSignalErr = msg.includes('signal connection')
+                              || msg.includes('Abort handler')
+                              || msg.includes('could not establish');
+                            if (isSignalErr) {
+                              toast.error('Connection unstable. Retrying...', {
+                                id: 'livekit-signal-error',
+                                duration: 3000,
+                              });
+                            } else {
+                              toast.error(`Video error: ${msg || 'Connection issue detected'}`, {
+                                id: 'livekit-generic-error',
+                                duration: 4000,
+                              });
+                            }
                           }
                         }}
                         onMediaDeviceFailure={(failure: any) => {
                           console.error('Media device failure:', failure);
+                          const failureStr = String(failure || '');
+                          if (failureStr.includes('Permission') || failureStr.includes('NotAllowed')) {
+                            reconnectAttemptsRef.current = MAX_RECONNECT_ATTEMPTS + 1;
+                            if (!audioOnlyMode) {
+                              setAudioOnlyMode(true);
+                              toast('Camera busy — joined in audio-only mode. You can still hear and see the other participant.', {
+                                id: 'livekit-permission-denied',
+                                duration: 8000,
+                                icon: '🎧',
+                              });
+                            } else {
+                              toast.error(
+                                'Mic permission denied. Grant mic access in browser settings, then rejoin.',
+                                { id: 'livekit-permission-denied', duration: 10000 }
+                              );
+                            }
+                            return;
+                          }
                           toast.error('Camera or microphone failed. Close other apps using camera (Teams, Zoom) and refresh.', { id: 'media-device-error', duration: 6000 });
                         }}
                         style={{ height: '100%', width: '100%', background: '#0a0a0b' }}

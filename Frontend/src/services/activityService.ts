@@ -8,6 +8,22 @@ import { apiClient } from './api';
 class ActivityService {
   private activityInterval: ReturnType<typeof setInterval> | null = null;
   private isTracking = false;
+  private interviewInProgress = false;
+
+  /**
+   * Mark a video interview as in-progress (or finished). When true,
+   * the beforeunload handler will NOT send the logout beacon — otherwise an
+   * accidental refresh / nav-away during the call would invalidate the
+   * session and tear down the recording, transcription WS and fraud-detection
+   * connections mid-interview.
+   */
+  setInterviewActive(active: boolean) {
+    this.interviewInProgress = active;
+  }
+
+  isInterviewActive(): boolean {
+    return this.interviewInProgress;
+  }
 
   /**
    * Start tracking user activity
@@ -104,6 +120,12 @@ class ActivityService {
   private handleBeforeUnload = () => {
     const token = localStorage.getItem('token');
     if (!token) return;
+
+    // CRITICAL: Skip the logout beacon while a video interview is active.
+    // beforeunload fires on refresh/back/navigate too, and a logout here would
+    // invalidate the session mid-call — killing the recording upload,
+    // transcription WS and fraud-detection stream. Recording must never break.
+    if (this.interviewInProgress) return;
 
     // Use fetch with keepalive for reliable delivery during page unload
     const baseUrl = apiClient.defaults.baseURL || '';

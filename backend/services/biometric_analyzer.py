@@ -107,6 +107,9 @@ def analyze_voice(audio_path: str) -> Dict[str, Any]:
       - pitch_variation : std-dev of estimated F0 across segments
       - speaking_rate_consistency : similarity of zero-crossing rates
       - voice_print_match : spectral-centroid similarity across segments
+
+    Note: Caller should pass candidate-only audio (via _extract_candidate_audio)
+    so the recruiter's voice doesn't inflate variance and trigger false fraud flags.
     """
     import numpy as np
     from pydub import AudioSegment

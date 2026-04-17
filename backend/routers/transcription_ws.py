@@ -213,40 +213,60 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
         print(f"[transcription_ws] 🔚 {role} closing: {audio_chunks_received[0]} chunks, {audio_bytes_received[0] / 1024:.1f} KB received")
         await streamer.close()
 
-        # Compile all final chunks into VideoInterview.transcript.
+        # Close the long-lived WS session — its connection has likely been dropped
+        # by Cloud SQL during the idle interview window.
+        try:
+            db.close()
+        except Exception:
+            pass
+
+        # Compile all final chunks into VideoInterview.transcript using a FRESH
+        # session. Retry once on stale-connection errors (Cloud SQL drops idle
+        # connections after ~10 min — pool_pre_ping won't help mid-use).
         # Sort by wall-clock `created_at` — recruiter's and candidate's Deepgram
         # streams have independent `timestamp_start` clocks, so only the DB
         # server clock gives a reliable global order across both participants.
-        try:
-            chunks = (
-                db.query(TranscriptChunk)
-                .filter(
-                    TranscriptChunk.video_interview_id == interview_id,
-                    TranscriptChunk.is_final == True,
-                )
-                .order_by(TranscriptChunk.created_at, TranscriptChunk.id)
-                .all()
-            )
-
-            if chunks:
-                full_transcript = compile_transcript(chunks)
-                interview_obj = db.query(VideoInterview).filter(
-                    VideoInterview.id == interview_id
-                ).first()
-                if interview_obj:
-                    interview_obj.transcript = full_transcript
-                    interview_obj.transcript_source = "realtime"
-                    interview_obj.transcript_generated_at = datetime.now(timezone.utc)
-                    db.commit()
-                    logger.info(
-                        f"Compiled real-time transcript for interview {interview_id} "
-                        f"({len(chunks)} chunks)"
+        for attempt in range(2):
+            compile_db = get_safe_db()
+            try:
+                chunks = (
+                    compile_db.query(TranscriptChunk)
+                    .filter(
+                        TranscriptChunk.video_interview_id == interview_id,
+                        TranscriptChunk.is_final == True,
                     )
-        except Exception as e:
-            logger.error(f"Error compiling transcript: {e}")
-            db.rollback()
-        finally:
-            db.close()
+                    .order_by(TranscriptChunk.created_at, TranscriptChunk.id)
+                    .all()
+                )
+
+                if chunks:
+                    full_transcript = compile_transcript(chunks)
+                    interview_obj = compile_db.query(VideoInterview).filter(
+                        VideoInterview.id == interview_id
+                    ).first()
+                    if interview_obj:
+                        interview_obj.transcript = full_transcript
+                        interview_obj.transcript_source = "realtime"
+                        interview_obj.transcript_generated_at = datetime.now(timezone.utc)
+                        compile_db.commit()
+                        logger.info(
+                            f"Compiled real-time transcript for interview {interview_id} "
+                            f"({len(chunks)} chunks)"
+                        )
+                break
+            except Exception as e:
+                logger.error(f"Error compiling transcript (attempt {attempt+1}/2): {e}")
+                try:
+                    compile_db.rollback()
+                except Exception:
+                    pass
+                if attempt == 1:
+                    logger.error(f"Transcript compile failed after retry for interview {interview_id}")
+            finally:
+                try:
+                    compile_db.close()
+                except Exception:
+                    pass
 
         logger.info(f"Real-time transcription ended for interview {interview_id}, role={role}")
 

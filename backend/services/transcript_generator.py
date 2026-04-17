@@ -647,19 +647,21 @@ def _add_speaker_labels(raw_text: str, questions: Optional[List[Dict]] = None) -
             prompt = f"""You are a transcript formatter. Below is a raw speech-to-text transcript{chunk_context} from a job interview between a Recruiter and a Candidate. Your job is to add speaker labels.
 
 Rules:
-- Label each dialogue turn as Recruiter: or Candidate:
+- Label EVERY dialogue turn as either "Recruiter:" or "Candidate:" — NEVER use "Speaker:" or any other label
 - Do NOT use any markdown formatting - no bold (**), no italics, no headers
-- The Recruiter asks questions, gives instructions, and manages the interview flow
-- The Candidate answers questions and talks about their experience
+- The Recruiter asks questions, greets the candidate, gives instructions, and manages the interview flow (short turns, often ending with "?")
+- The Candidate answers questions and talks about their experience (longer turns, mentions "I", "my", past projects/skills)
 - Keep the EXACT original words - do NOT add, remove, or change any words
 - Just add "Recruiter:" or "Candidate:" before each speaker turn (plain text, no bold/markdown)
 - Put each speaker turn on a new line with a blank line between turns
-- If you cannot determine the speaker for a part, label it as "Speaker:"{questions_context}
+- The interview USUALLY starts with the Recruiter greeting/asking the first question
+- Speakers ALTERNATE — if you are unsure, alternate between Recruiter and Candidate based on the previous turn
+- IMPORTANT: You MUST pick either "Recruiter:" or "Candidate:" for every line. Do NOT use "Speaker:" under any circumstances.{questions_context}
 
 Raw transcript:
 {chunk}
 
-Formatted transcript with speaker labels:"""
+Formatted transcript with speaker labels (use ONLY Recruiter: and Candidate:):"""
 
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -687,11 +689,39 @@ Formatted transcript with speaker labels:"""
         labeled_text = re.sub(r'\*\*(Recruiter|Candidate|Speaker):', r'\1:', labeled_text)
         labeled_text = re.sub(r'(Recruiter|Candidate|Speaker):\*\*', r'\1:', labeled_text)
 
+        # Force-convert any remaining "Speaker:" labels to alternating Recruiter/Candidate.
+        # The interview always starts with the Recruiter greeting/asking the first question.
+        if "Speaker:" in labeled_text:
+            logger.warning("[speaker_labels] LLM output contained 'Speaker:' — forcing Recruiter/Candidate alternation")
+            lines = labeled_text.split("\n")
+            fixed_lines = []
+            last_known_role = None  # Track last role used so we alternate properly
+            for line in lines:
+                stripped = line.lstrip()
+                if stripped.startswith("Recruiter:"):
+                    last_known_role = "Recruiter"
+                    fixed_lines.append(line)
+                elif stripped.startswith("Candidate:"):
+                    last_known_role = "Candidate"
+                    fixed_lines.append(line)
+                elif stripped.startswith("Speaker:"):
+                    # Alternate from last known role; default first turn to Recruiter
+                    next_role = "Candidate" if last_known_role == "Recruiter" else "Recruiter"
+                    fixed_lines.append(line.replace("Speaker:", f"{next_role}:", 1))
+                    last_known_role = next_role
+                else:
+                    fixed_lines.append(line)
+            labeled_text = "\n".join(fixed_lines)
+
         logger.info(f"[speaker_labels] Successfully added speaker labels ({len(labeled_text)} chars)")
         return labeled_text
 
     except Exception as e:
         logger.warning(f"[speaker_labels] Failed to add speaker labels: {e}")
+        # Even on failure, never return unlabeled text — prepend Recruiter: as best-effort
+        # so the UI shows a role label instead of plain text.
+        if raw_text and not raw_text.lstrip().startswith(("Recruiter:", "Candidate:")):
+            return f"Recruiter: {raw_text}"
         return raw_text
 
 

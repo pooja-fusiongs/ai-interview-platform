@@ -17,6 +17,7 @@ from datetime import datetime, timezone, timedelta
 import sys
 import os
 import hashlib
+import secrets
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from database import get_db
@@ -921,10 +922,18 @@ async def join_video_interview(
             if app and app.applicant_name:
                 participant_name = app.applicant_name
 
+        # LiveKit kicks any existing participant that shares an identity with a
+        # new joiner — so identity MUST be unique per device/tab. If we used
+        # `recruiter_<user_id>`, the same recruiter joining from a 2nd PC (or
+        # the candidate from a 2nd tab) would silently kick the first session.
+        # Append a short random suffix so every join request gets a fresh
+        # identity. The display name (`participant_name`) stays human-readable.
+        role_prefix = 'recruiter' if is_recruiter else 'candidate'
+        unique_suffix = secrets.token_hex(4)
         token_data = await generate_livekit_token(TokenRequest(
             room_name=room_name,
             participant_name=participant_name,
-            participant_identity=f"{'recruiter' if is_recruiter else 'candidate'}_{current_user.id}",
+            participant_identity=f"{role_prefix}_{current_user.id}_{unique_suffix}",
             role="interviewer" if is_recruiter else "candidate"
         ))
 
@@ -1019,10 +1028,13 @@ async def guest_join_interview(
             else:
                 candidate_name = vi.candidate.full_name or vi.candidate.username or candidate_name
 
+        # Unique-per-join identity (see comment in join_video_interview).
+        # Otherwise candidate joining from a second tab/device kicks the first.
+        unique_suffix = secrets.token_hex(4)
         token_data = await generate_livekit_token(TokenRequest(
             room_name=room_name,
             participant_name=candidate_name,
-            participant_identity=f"guest_candidate_{video_id}",
+            participant_identity=f"guest_candidate_{video_id}_{unique_suffix}",
             role="candidate"
         ))
 
@@ -2952,6 +2964,24 @@ def upload_transcript_and_score(
         "questions_found": len(approved_questions) if approved_questions else 0,
         "scoring_error": scoring_error
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/video/guest/{video_id}/upload-transcript  -- No-auth fallback
+# ---------------------------------------------------------------------------
+# Used when the candidate's session was killed mid-interview (e.g. accidental
+# refresh/logout) so the recording's transcript still uploads and gets scored.
+# The frontend retries here automatically if the authenticated route returns 401.
+
+@router.post("/api/video/guest/{video_id}/upload-transcript")
+def guest_upload_transcript_and_score(
+    video_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+):
+    """No-auth mirror of upload-transcript so a logged-out candidate can still
+    finalize the transcript + scoring for their just-finished interview."""
+    return upload_transcript_and_score(video_id=video_id, body=body, current_user=None, db=db)
 
 
 # ---------------------------------------------------------------------------

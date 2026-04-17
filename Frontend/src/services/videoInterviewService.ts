@@ -73,12 +73,28 @@ export const videoInterviewService = {
     return response.data;
   },
   uploadTranscriptAndScore: async (id: number, transcriptText: string) => {
-    const response = await apiClient.post(`/api/video/interviews/${id}/upload-transcript`, {
-      transcript_text: transcriptText
-    }, {
-      timeout: 180000, // 3 min — LLM scoring
-    });
-    return response.data;
+    // BULLETPROOF: try authenticated route first, fall back to no-auth guest route
+    // on auth failure so an accidental logout/session-expiry mid-interview cannot
+    // block the transcript+scoring flow.
+    try {
+      const response = await apiClient.post(`/api/video/interviews/${id}/upload-transcript`, {
+        transcript_text: transcriptText
+      }, {
+        timeout: 180000, // 3 min — LLM scoring
+      });
+      return response.data;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const isAuthFailure = status === 401 || status === 403 || !status; // network drop too
+      if (!isAuthFailure) throw err;
+      console.warn(`[uploadTranscript] auth route failed (status=${status ?? 'network'}), retrying via guest route...`);
+      const response = await guestClient.post(`/api/video/guest/${id}/upload-transcript`, {
+        transcript_text: transcriptText
+      }, {
+        timeout: 180000,
+      });
+      return response.data;
+    }
   },
   updateNotes: async (id: number, notes: string) => {
     const response = await apiClient.patch(`/api/video/interviews/${id}/notes`, { notes });
@@ -109,10 +125,26 @@ export const videoInterviewService = {
     }
     const formData = new FormData();
     formData.append('file', blob, `interview_${id}.webm`);
-    const response = await apiClient.post(`/api/video/interviews/${id}/upload-recording`, formData, {
-      timeout: 300000, // 5 min timeout for large uploads
-    });
-    return response.data;
+    // BULLETPROOF: try auth route first, fall back to no-auth guest route on
+    // auth failure so a mid-interview logout/session-expiry cannot lose the
+    // recording (FormData is rebuilt for the retry — body streams are consumed).
+    try {
+      const response = await apiClient.post(`/api/video/interviews/${id}/upload-recording`, formData, {
+        timeout: 300000, // 5 min timeout for large uploads
+      });
+      return response.data;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const isAuthFailure = status === 401 || status === 403 || !status;
+      if (!isAuthFailure) throw err;
+      console.warn(`[uploadRecording] auth route failed (status=${status ?? 'network'}), retrying via guest route...`);
+      const retryForm = new FormData();
+      retryForm.append('file', blob, `interview_${id}.webm`);
+      const response = await guestClient.post(`/api/video/guest/${id}/upload-recording`, retryForm, {
+        timeout: 300000,
+      });
+      return response.data;
+    }
   },
   getLiveKitToken: async (roomName: string, participantName: string) => {
     const response = await apiClient.post('/api/livekit/token', {

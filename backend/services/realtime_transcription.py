@@ -55,6 +55,10 @@ class DeepgramStreamer:
 
         self.ws = await websockets.connect(url, additional_headers=headers)
         self._running = True
+        # Reset retry counter on successful connect — otherwise the streamer
+        # silently dies after 3 cumulative drops over the interview lifetime,
+        # freezing live captions ~halfway through.
+        self._reconnect_attempts = 0
         self._task = asyncio.create_task(self._receive_loop())
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
         logger.info(f"Deepgram connected for speaker: {self.speaker}")
@@ -76,13 +80,16 @@ class DeepgramStreamer:
                 logger.error(f"Error sending audio to Deepgram ({self.speaker}): {e}")
 
     async def _try_reconnect(self):
-        """Attempt to reconnect to Deepgram (max 3 attempts)."""
-        if self._reconnecting or self._reconnect_attempts >= 3:
+        """Attempt to reconnect to Deepgram (max 10 attempts per drop event).
+        Counter resets to 0 on successful connect — long interviews can drop many
+        times over the call's lifetime without permanently freezing live captions.
+        """
+        if self._reconnecting or self._reconnect_attempts >= 10:
             return
         self._reconnecting = True
         self._reconnect_attempts += 1
         try:
-            logger.info(f"Reconnecting to Deepgram for {self.speaker} (attempt {self._reconnect_attempts}/3)...")
+            logger.info(f"Reconnecting to Deepgram for {self.speaker} (attempt {self._reconnect_attempts}/10)...")
             # Close old connection
             if self.ws:
                 try:
@@ -223,13 +230,28 @@ def compile_transcript(chunks) -> str:
 
     Expects chunks already ordered chronologically (by wall-clock created_at).
     Returns lines like: "Recruiter: ...\\nCandidate: ...".
+    Never emits "Speaker:" — if a chunk has no role, alternate from the previous one
+    (interview always starts with Recruiter).
     """
     lines: list[str] = []
     prev_speaker = None
     buffer: list[str] = []
+    last_resolved_role = None  # For alternation when speaker is missing
+
+    def _normalize(raw_speaker: str | None) -> str:
+        """Map any speaker value to 'recruiter' or 'candidate' — never returns 'speaker'."""
+        nonlocal last_resolved_role
+        s = (raw_speaker or "").strip().lower()
+        if s in ("recruiter", "candidate"):
+            last_resolved_role = s
+            return s
+        # Missing/unknown role → alternate from last resolved role; first turn = recruiter
+        next_role = "candidate" if last_resolved_role == "recruiter" else "recruiter"
+        last_resolved_role = next_role
+        return next_role
 
     for c in chunks:
-        speaker = (c.speaker or "speaker").strip().lower()
+        speaker = _normalize(c.speaker)
         text = (c.text or "").strip()
         if not text:
             continue

@@ -96,7 +96,11 @@ async def livekit_health_check():
     return {
         "status": "configured" if configured else "not_configured",
         "livekit_url": livekit_url if configured else None,
-        "message": "LiveKit is ready" if configured else "Credentials not set"
+        "message": "LiveKit is ready" if configured else "Credentials not set",
+        # Deploy verification — bump this string whenever you apply a new fix
+        # so you can curl /health to confirm the running revision.
+        "deploy_marker": "identity-collision-fix-v1",
+        "identity_format": "recruiter_<userId>_<8hex>",
     }
 
 

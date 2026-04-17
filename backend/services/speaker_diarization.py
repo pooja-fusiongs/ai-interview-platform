@@ -101,31 +101,33 @@ def _run_pyannote(wav_path: str) -> List[Dict]:
 def assign_speaker_roles(segments: List[Dict]) -> Dict[str, str]:
     """
     Map SPEAKER_00/SPEAKER_01 to Recruiter/Candidate.
-    Heuristic: the speaker who talks MORE is the Recruiter (they ask questions + guide the interview).
-    Tiebreaker: first speaker = Recruiter.
+    Heuristic: the FIRST person to speak is the Recruiter — they greet the
+    candidate and open the interview ("Hi, welcome..."). The talk-time
+    heuristic is unreliable because candidates often talk MORE giving long
+    answers, which would mislabel them as the recruiter.
     """
     if not segments:
         return {}
 
-    speakers = sorted(set(s["speaker"] for s in segments))
-    if len(speakers) == 1:
-        return {speakers[0]: "Recruiter"}
+    speakers_set = set(s["speaker"] for s in segments)
+    if len(speakers_set) == 1:
+        return {next(iter(speakers_set)): "Recruiter"}
 
-    # Calculate total talk time per speaker
+    # First speaker chronologically = Recruiter (opens interview)
+    sorted_by_time = sorted(segments, key=lambda s: s.get("start", 0))
+    recruiter_speaker = sorted_by_time[0]["speaker"]
+
+    # Talk time logged for diagnostics only — not used for role assignment
     talk_time: Dict[str, float] = {}
     for s in segments:
         dur = s.get("end", 0) - s.get("start", 0)
         talk_time[s["speaker"]] = talk_time.get(s["speaker"], 0) + dur
 
-    # Speaker with more talk time = Recruiter (they explain, ask questions, guide)
-    sorted_speakers = sorted(speakers, key=lambda spk: talk_time.get(spk, 0), reverse=True)
-    recruiter_speaker = sorted_speakers[0]
-
     role_map = {}
-    for spk in speakers:
+    for spk in speakers_set:
         role_map[spk] = "Recruiter" if spk == recruiter_speaker else "Candidate"
 
-    print(f"[speaker_diarization] Role assignment: {role_map} (talk_time: {talk_time})")
+    print(f"[speaker_diarization] Role assignment (first-speaker heuristic): {role_map} (talk_time: {talk_time})")
     return role_map
 
 
