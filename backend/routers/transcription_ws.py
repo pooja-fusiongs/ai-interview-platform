@@ -105,10 +105,11 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
     async def on_transcript(speaker: str, text: str, is_final: bool,
                             timestamp_start: float, timestamp_end: float,
                             confidence: float = 1.0):
-        # Save final chunks to DB, skipping silence-hallucination / filler noise
-        # so they don't interleave with the other speaker's real turn.
+        # Save every final chunk to DB so the stored transcript matches what was
+        # shown live (turn-taking interviews don't produce cross-speaker mic noise,
+        # so filler-word filtering is no longer needed here).
         cleaned = text.strip()
-        if is_final and cleaned and not is_noise_chunk(cleaned, confidence):
+        if is_final and cleaned:
             try:
                 chunk = TranscriptChunk(
                     video_interview_id=interview_id,

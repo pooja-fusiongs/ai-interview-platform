@@ -112,12 +112,27 @@ export function useRealtimeTranscript({
     return () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       try {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'stop' }));
-          wsRef.current.close();
+        // Stop the recorder first so its last 500ms chunk (containing the
+        // final words like "yeah thank you") gets flushed to the WebSocket
+        // BEFORE we close the connection. Without this, the tail audio is
+        // lost and Deepgram never emits its final transcript for it.
+        const recorder = localRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') {
+          recorder.stop();
+          localRecorderRef.current = null;
         }
       } catch {}
-      wsRef.current = null;
+      // Give the last ondataavailable callback ~300ms to forward the flushed
+      // chunk over the WebSocket, then tell the backend we're done.
+      setTimeout(() => {
+        try {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'stop' }));
+            wsRef.current.close();
+          }
+        } catch {}
+        wsRef.current = null;
+      }, 300);
       reconnectAttemptsRef.current = 0;
       setIsConnected(false);
     };

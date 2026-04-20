@@ -1276,7 +1276,11 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
         bg_db = get_safe_db()
         print(f"[BG Transcription] Starting for vi_id={vi_id}")
 
-        # Wait a moment for recording upload to commit (race condition fix)
+        # Wait for recording upload + real-time transcript compile to commit.
+        # Realtime compile happens in transcription_ws close handler and needs
+        # up to ~3-4s (CloseStream wait for Deepgram finals + DB write). Without
+        # this wait, BG task reads an empty transcript and skips the ground-truth
+        # comparison, leaving only the (often mis-diarized) recording transcript.
         _time.sleep(1)
 
         bg_vi = bg_db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
@@ -1284,8 +1288,20 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
             print(f"[BG Transcription] VideoInterview {vi_id} not found")
             return
 
-        # Save any existing real-time transcript for later comparison
+        # Poll up to 10 seconds for realtime transcript to appear. Realtime is
+        # ground truth for speaker labels — worth waiting for it.
         realtime_transcript = bg_vi.transcript if bg_vi.transcript_source == "realtime" else None
+        if not realtime_transcript:
+            for attempt in range(5):
+                _time.sleep(2)
+                bg_db.refresh(bg_vi)
+                if bg_vi.transcript and bg_vi.transcript_source == "realtime":
+                    realtime_transcript = bg_vi.transcript
+                    print(f"[BG Transcription] Real-time transcript appeared after {(attempt + 1) * 2}s wait")
+                    break
+            else:
+                print(f"[BG Transcription] No real-time transcript after 10s wait — proceeding with recording only")
+
         if realtime_transcript:
             print(f"[BG Transcription] Real-time transcript exists ({len(realtime_transcript)} chars), will compare with recording transcript")
 
@@ -1471,11 +1487,23 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                 rt_words = len(realtime_transcript.split())
                 rec_words = len(transcript_text.split())
                 rec_has_speakers = "Recruiter:" in transcript_text or "Candidate:" in transcript_text
+                rt_has_speakers = "Recruiter:" in realtime_transcript or "Candidate:" in realtime_transcript
 
-                print(f"[BG Transcription] Comparing: realtime={rt_words} words, recording={rec_words} words (speakers={rec_has_speakers})")
+                print(f"[BG Transcription] Comparing: realtime={rt_words} words (speakers={rt_has_speakers}), recording={rec_words} words (speakers={rec_has_speakers})")
 
-                # Only fall back to realtime if recording transcript is nearly empty
-                if rec_words < 10 and rt_words > 20:
+                # Decision order:
+                # 1. Realtime speaker labels are GROUND TRUTH — each participant's WS
+                #    connection directly labels itself as recruiter/candidate. Recording
+                #    diarization is a heuristic (question-mark counting) that can flip
+                #    roles. When both have labels OR only realtime has them, prefer
+                #    realtime unless recording is massively longer (2x+ words).
+                # 2. If recording is nearly empty, keep realtime.
+                # 3. Otherwise, prefer recording (more accurate Whisper transcription).
+                if rt_has_speakers and rec_words < rt_words * 2:
+                    final_transcript = realtime_transcript
+                    chosen_source = "realtime"
+                    print(f"[BG Transcription] Keeping realtime: speaker labels are ground truth (recording role assignment is heuristic)")
+                elif rec_words < 10 and rt_words > 20:
                     final_transcript = realtime_transcript
                     chosen_source = "realtime"
                     print(f"[BG Transcription] Recording transcript too short ({rec_words} words), falling back to realtime")
@@ -1629,6 +1657,95 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
             try: os.unlink(temp_downloaded.name)
             except OSError: pass
         if bg_db: bg_db.close()
+
+
+# ==========================================================================
+# Direct-to-Cloudinary upload flow (bypasses Cloud Run's 32 MB HTTP/1.1 limit)
+# ==========================================================================
+
+@router.post("/api/video/interviews/{video_id}/cloudinary-signature")
+def get_cloudinary_upload_signature(video_id: int, db: Session = Depends(get_db)):
+    """Return a short-lived Cloudinary signed upload params so the frontend
+    can POST the recording directly to Cloudinary without routing the file
+    through Cloud Run (which has a 32 MB body size limit on HTTP/1.1).
+
+    Accessible without auth so guest candidates can also use it. The signature
+    is bound to a specific public_id + folder so it can only be used to upload
+    into the interview_recordings/interview_{id} slot.
+    """
+    import time as _t
+    import cloudinary
+    import cloudinary.utils
+    import config
+
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    if not config.CLOUDINARY_CLOUD_NAME or not config.CLOUDINARY_API_SECRET:
+        raise HTTPException(status_code=500, detail="Cloudinary not configured on server")
+
+    cloudinary.config(
+        cloud_name=config.CLOUDINARY_CLOUD_NAME,
+        api_key=config.CLOUDINARY_API_KEY,
+        api_secret=config.CLOUDINARY_API_SECRET,
+        secure=True,
+    )
+
+    timestamp = int(_t.time())
+    folder = "interview_recordings"
+    public_id = f"interview_{video_id}"
+
+    # Params that must match what the client POSTs to Cloudinary.
+    params_to_sign = {
+        "folder": folder,
+        "public_id": public_id,
+        "overwrite": "true",
+        "timestamp": timestamp,
+    }
+    signature = cloudinary.utils.api_sign_request(params_to_sign, config.CLOUDINARY_API_SECRET)
+
+    return {
+        "cloud_name": config.CLOUDINARY_CLOUD_NAME,
+        "api_key": config.CLOUDINARY_API_KEY,
+        "timestamp": timestamp,
+        "signature": signature,
+        "folder": folder,
+        "public_id": public_id,
+        "resource_type": "video",
+    }
+
+
+@router.post("/api/video/interviews/{video_id}/set-recording-url")
+def set_recording_url(video_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Save the Cloudinary URL after a successful direct upload.
+
+    Only accepts URLs that point to our Cloudinary cloud_name to prevent
+    arbitrary URLs being stored.
+    """
+    import config
+
+    url = (payload or {}).get("url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+
+    cloud = config.CLOUDINARY_CLOUD_NAME or ""
+    if cloud and f"res.cloudinary.com/{cloud}/" not in url:
+        raise HTTPException(status_code=400, detail="url must be a Cloudinary URL for this cloud")
+
+    vi = db.query(VideoInterview).filter(VideoInterview.id == video_id).first()
+    if not vi:
+        raise HTTPException(status_code=404, detail="Video interview not found")
+
+    # First-upload-wins — match existing behaviour of the upload-recording routes.
+    if vi.recording_url:
+        print(f"🎥 Recording URL already set for vi={video_id}, keeping existing")
+        return {"message": "Recording URL already set", "recording_url": vi.recording_url}
+
+    vi.recording_url = url
+    db.commit()
+    print(f"🎥 Direct-upload recording URL saved for vi={video_id}: {url[:80]}...")
+    return {"message": "Recording URL saved", "recording_url": url}
 
 
 @router.post("/api/video/guest/{video_id}/upload-recording")

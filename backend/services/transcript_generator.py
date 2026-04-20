@@ -401,14 +401,19 @@ def transcribe_with_deepgram_diarized(file_path: str) -> Optional[str]:
             for spk in sorted_by_questions[1:]:
                 speaker_role_map[spk] = "Candidate"
         elif len(all_speakers) == 1:
-            speaker_role_map[list(all_speakers)[0]] = "Speaker"
+            # Only one speaker detected (usually when recording audio is dominated by
+            # one side). Default to Recruiter so the UI still renders proper role
+            # labels rather than a generic "Speaker" label that the frontend treats
+            # as plain text.
+            speaker_role_map[list(all_speakers)[0]] = "Recruiter"
 
         logger.info(f"[diarized] Speaker roles: {speaker_role_map}, questions per speaker: {question_count}")
 
-        # Build labeled transcript
+        # Build labeled transcript. Default to "Recruiter" for any unmapped speaker
+        # id so the UI never falls back to raw-text rendering.
         lines = []
         for speaker_id, text in raw_lines:
-            role = speaker_role_map.get(speaker_id, "Speaker")
+            role = speaker_role_map.get(speaker_id, "Recruiter")
             lines.append(f"{role}: {text}")
 
         if not lines:

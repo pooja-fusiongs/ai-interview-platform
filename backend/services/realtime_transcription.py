@@ -166,18 +166,49 @@ class DeepgramStreamer:
             self._running = False
 
     async def close(self):
-        """Gracefully shut down the Deepgram connection."""
-        self._running = False
-        for task in [self._task, self._keepalive_task]:
-            if task and not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        """Gracefully shut down the Deepgram connection.
+
+        Order matters: send CloseStream FIRST so Deepgram flushes pending finals
+        (like the candidate's final "yeah thank you"). Give the receive loop a
+        moment to process those finals BEFORE cancelling it — otherwise the last
+        utterance gets dropped from the transcript.
+        """
+        # 1. Stop keepalive immediately (not needed anymore)
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
+
+        # 2. Ask Deepgram to finalise pending audio and flush final transcripts
         if self.ws:
             try:
                 await self.ws.send(json.dumps({"type": "CloseStream"}))
+            except Exception:
+                pass
+
+        # 3. Wait briefly for the receive loop to process the flushed finals.
+        #    Deepgram typically emits final transcripts within 500-1500ms after
+        #    CloseStream; we wait up to 3s for the loop to exit naturally (it
+        #    exits on ConnectionClosed once Deepgram closes from its side).
+        if self._task and not self._task.done():
+            try:
+                await asyncio.wait_for(self._task, timeout=3.0)
+            except asyncio.TimeoutError:
+                # Loop still running after 3s — force cancel so we don't hang
+                self._task.cancel()
+                try:
+                    await self._task
+                except asyncio.CancelledError:
+                    pass
+            except asyncio.CancelledError:
+                pass
+
+        # 4. Now it's safe to close the socket
+        self._running = False
+        if self.ws:
+            try:
                 await self.ws.close()
             except Exception:
                 pass

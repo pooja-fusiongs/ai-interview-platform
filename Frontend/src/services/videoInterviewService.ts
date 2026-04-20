@@ -1,5 +1,5 @@
 import apiClient from './api';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
 // Guest axios instance — no auth token needed
 // NOTE: Do NOT set default Content-Type here — it breaks FormData uploads (file upload sends as JSON instead of multipart)
@@ -9,6 +9,58 @@ const guestClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 90000, // 90s — Render cold starts can be slow
 });
+
+/**
+ * Direct-to-Cloudinary upload. Bypasses Cloud Run's 32 MB HTTP/1.1 body limit
+ * by having the browser POST the recording straight to Cloudinary, then tells
+ * the backend where the file landed.
+ *
+ * Returns the backend response on success, or null if the server side is not
+ * configured (so the caller can fall back to the old proxied-upload path).
+ * Throws on network/upload failure so the caller can retry or fall back.
+ */
+async function uploadToCloudinaryDirect(
+  id: number,
+  blob: Blob,
+  client: AxiosInstance
+): Promise<any | null> {
+  // 1. Ask backend for a short-lived signed upload payload.
+  let sigData: any;
+  try {
+    const sigRes = await client.post(`/api/video/interviews/${id}/cloudinary-signature`);
+    sigData = sigRes.data;
+  } catch (err: any) {
+    // Backend returns 500 if Cloudinary isn't configured, or 404 for unknown
+    // endpoint (older backend revision). Signal "fall back" to caller.
+    if (err?.response?.status === 404 || err?.response?.status === 500) return null;
+    throw err;
+  }
+
+  if (!sigData?.cloud_name || !sigData?.signature) return null;
+
+  // 2. POST the recording directly to Cloudinary (no Cloud Run in the path).
+  const form = new FormData();
+  form.append('file', blob, `interview_${id}.webm`);
+  form.append('api_key', sigData.api_key);
+  form.append('timestamp', String(sigData.timestamp));
+  form.append('signature', sigData.signature);
+  form.append('folder', sigData.folder);
+  form.append('public_id', sigData.public_id);
+  form.append('overwrite', 'true');
+
+  const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${sigData.cloud_name}/${sigData.resource_type || 'video'}/upload`;
+
+  // Use raw axios (no auth interceptors) and generous timeout for long recordings.
+  const uploadRes = await axios.post(cloudinaryUrl, form, {
+    timeout: 30 * 60 * 1000, // 30 min — covers large recordings on slow networks
+  });
+  const secureUrl = uploadRes?.data?.secure_url;
+  if (!secureUrl) throw new Error('Cloudinary did not return a secure_url');
+
+  // 3. Save the final URL on the backend so transcription / fraud analysis can fetch it.
+  const saveRes = await client.post(`/api/video/interviews/${id}/set-recording-url`, { url: secureUrl });
+  return saveRes.data;
+}
 
 export const videoInterviewService = {
   scheduleInterview: async (data: any) => {
@@ -123,6 +175,17 @@ export const videoInterviewService = {
       console.warn(`⚠️ Recording blob too small (${blob?.size || 0} bytes), skipping upload`);
       return { message: 'Recording too small, skipped' };
     }
+
+    // PRIMARY PATH: direct-to-Cloudinary upload. Bypasses Cloud Run's 32 MB
+    // HTTP/1.1 request body limit — essential for interviews > ~2 min.
+    try {
+      const direct = await uploadToCloudinaryDirect(id, blob, apiClient);
+      if (direct) return direct;
+    } catch (directErr: any) {
+      console.warn('[uploadRecording] direct Cloudinary path failed, falling back to backend proxy:', directErr?.message || directErr);
+    }
+
+    // FALLBACK 1: backend-proxied upload (old path) — only works for files < 32 MB.
     const formData = new FormData();
     formData.append('file', blob, `interview_${id}.webm`);
     // BULLETPROOF: try auth route first, fall back to no-auth guest route on
@@ -186,6 +249,16 @@ export const videoInterviewService = {
       console.warn(`⚠️ Guest recording blob too small (${blob?.size || 0} bytes), skipping upload`);
       return { message: 'Recording too small, skipped' };
     }
+
+    // PRIMARY PATH: direct-to-Cloudinary (bypasses 32 MB Cloud Run limit).
+    try {
+      const direct = await uploadToCloudinaryDirect(id, blob, guestClient);
+      if (direct) return direct;
+    } catch (directErr: any) {
+      console.warn('[guestUploadRecording] direct Cloudinary path failed, falling back to backend proxy:', directErr?.message || directErr);
+    }
+
+    // FALLBACK: backend-proxied upload (old path) — only works for files < 32 MB.
     const formData = new FormData();
     formData.append('file', blob, `interview_${id}.webm`);
     const response = await guestClient.post(`/api/video/guest/${id}/upload-recording`, formData, {

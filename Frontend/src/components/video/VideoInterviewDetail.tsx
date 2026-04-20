@@ -81,9 +81,13 @@ const VideoInterviewDetail: React.FC = () => {
 
  
 
-  // Auto-poll for transcript with exponential backoff to reduce bandwidth
+  // Auto-poll for recording_url and/or transcript with exponential backoff.
+  // Poll if EITHER is missing on a completed interview — the recording upload
+  // and the background transcription both finish asynchronously AFTER the
+  // user lands on this page, so we need to pick up whichever is missing.
   useEffect(() => {
-    if (transcript || !interview?.recording_url || interview?.status !== 'completed') return;
+    if (interview?.status !== 'completed') return;
+    if (transcript && interview?.recording_url) return; // Both already present — nothing to wait for
     let cancelled = false;
     let attempts = 0;
     const maxAttempts = 12; // Fewer attempts with longer gaps
@@ -96,11 +100,22 @@ const VideoInterviewDetail: React.FC = () => {
       const delay = Math.min(10000 + attempts * 5000, 30000);
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
-        if (data.transcript && !cancelled) {
+        if (cancelled) return;
+        let updated = false;
+        if (data.recording_url && !interview?.recording_url) {
+          setInterview(data);
+          updated = true;
+        }
+        if (data.transcript && !transcript) {
           setTranscript(data.transcript);
           setInterview(data);
           toast.success('Transcript is ready!');
-          return; // Stop polling
+          updated = true;
+        }
+        // Stop polling when everything we needed is now present
+        if (data.transcript && data.recording_url) return;
+        if (updated && data.recording_url && !data.transcript) {
+          // Recording arrived but transcript still pending — keep polling
         }
       } catch { /* ignore polling errors */ }
       if (!cancelled) {
