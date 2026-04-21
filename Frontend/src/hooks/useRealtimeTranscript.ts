@@ -162,7 +162,10 @@ export function useRealtimeTranscript({
           } catch {}
         };
         recorder.onerror = () => {}; // Silent
-        recorder.start(500); // 500ms chunks — better for Deepgram sentence detection
+        // 250ms chunks — faster audio delivery to backend → faster interim captions.
+        // Deepgram's recommended range is 100-250ms for low-latency streaming.
+        // Kept ≥250ms so we don't overwhelm the WS with too many small frames.
+        recorder.start(250);
         return recorder;
       } catch {
         return null;

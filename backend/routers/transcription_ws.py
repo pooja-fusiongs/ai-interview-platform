@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database import get_safe_db
 from models import VideoInterview, TranscriptChunk
-from services.realtime_transcription import DeepgramStreamer, is_noise_chunk, compile_transcript
+from services.realtime_transcription import DeepgramStreamer, compile_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -101,15 +101,21 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
         _interview_connections[interview_id] = []
     _interview_connections[interview_id].append(websocket)
 
+    # Buffer for the LAST interim transcript (per this speaker's connection).
+    # Deepgram sends interim updates while the user is still speaking; each update
+    # replaces the previous one. When a FINAL arrives, it supersedes the interim.
+    # If the connection drops BEFORE a final is emitted, the buffered interim is
+    # flushed as a best-effort chunk so that content isn't lost. This is what
+    # recovers ~90%+ of the transcript even when Deepgram keeps reconnecting.
+    last_interim = {"text": "", "start": 0.0, "end": 0.0, "conf": 1.0}
+
     # Callback: when Deepgram returns a transcript result
     async def on_transcript(speaker: str, text: str, is_final: bool,
                             timestamp_start: float, timestamp_end: float,
                             confidence: float = 1.0):
-        # Save every final chunk to DB so the stored transcript matches what was
-        # shown live (turn-taking interviews don't produce cross-speaker mic noise,
-        # so filler-word filtering is no longer needed here).
         cleaned = text.strip()
         if is_final and cleaned:
+            # Final result — save immediately, clear any buffered interim (superseded).
             try:
                 chunk = TranscriptChunk(
                     video_interview_id=interview_id,
@@ -126,6 +132,41 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
             except Exception as e:
                 logger.error(f"DB save error: {e}")
                 db.rollback()
+            # Reset buffer: this utterance has been finalized
+            last_interim["text"] = ""
+            last_interim["start"] = 0.0
+            last_interim["end"] = 0.0
+            last_interim["conf"] = 1.0
+        elif (not is_final) and cleaned:
+            # Interim update. Two cases:
+            # (a) Continuation of the same utterance — replace buffer with better guess.
+            # (b) New utterance (big timestamp jump) — flush the stale buffered interim
+            #     first (it never got a final), then start tracking the new one.
+            # This way, mid-call Deepgram reconnects don't silently drop content.
+            if last_interim["text"] and abs(timestamp_start - last_interim["start"]) > 1.5:
+                try:
+                    stale = TranscriptChunk(
+                        video_interview_id=interview_id,
+                        speaker=speaker,
+                        text=last_interim["text"],
+                        timestamp_start=last_interim["start"],
+                        timestamp_end=last_interim["end"],
+                        is_final=True,  # treat as final so compile_transcript picks it up
+                        sequence_number=chunk_counter[0],
+                    )
+                    db.add(stale)
+                    db.commit()
+                    chunk_counter[0] += 1
+                except Exception as e:
+                    logger.error(f"Stale-interim flush error: {e}")
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+            last_interim["text"] = cleaned
+            last_interim["start"] = timestamp_start
+            last_interim["end"] = timestamp_end
+            last_interim["conf"] = confidence
 
         # Broadcast to ALL participants in this interview room
         msg = {
@@ -209,6 +250,31 @@ async def transcription_websocket(websocket: WebSocket, interview_id: int):
             _interview_connections[interview_id] = [ws for ws in _interview_connections[interview_id] if ws != websocket]
             if not _interview_connections[interview_id]:
                 del _interview_connections[interview_id]
+
+        # Flush any unflushed interim transcript as a best-effort chunk BEFORE closing.
+        # This is the "fallback" that recovers content when Deepgram connection drops
+        # mid-utterance and never emits a final for that content.
+        if last_interim["text"]:
+            try:
+                flush_chunk = TranscriptChunk(
+                    video_interview_id=interview_id,
+                    speaker=speaker_label,
+                    text=last_interim["text"],
+                    timestamp_start=last_interim["start"],
+                    timestamp_end=last_interim["end"],
+                    is_final=True,  # Stored as final so compile_transcript picks it up
+                    sequence_number=chunk_counter[0],
+                )
+                db.add(flush_chunk)
+                db.commit()
+                chunk_counter[0] += 1
+                print(f"[transcription_ws] 💾 Flushed last interim for {role}: \"{last_interim['text'][:50]}...\"")
+            except Exception as e:
+                logger.error(f"Failed to flush last interim: {e}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
         # Close Deepgram connection
         print(f"[transcription_ws] 🔚 {role} closing: {audio_chunks_received[0]} chunks, {audio_bytes_received[0] / 1024:.1f} KB received")

@@ -143,19 +143,24 @@ def submit_movement_detection(
         existing.voice_consistency_score = round(voice_score, 3)
 
     # Calculate Body Movement Score mapping to existing DB
-    # CALM = 1.0, MODERATE = 0.5, HIGH = 0.0 for trust score
+    # Softer baseline: normal nervous movement shouldn't crash trust to ~0%.
+    # CALM = 1.0, MODERATE = 0.75, HIGH = 0.35 (HIGH != fraud, just elevated motion)
     b_score = 1.0
     if payload.movement_score == "MODERATE":
-        b_score = 0.5
+        b_score = 0.75
     elif payload.movement_score == "HIGH":
-        b_score = 0.0
-        
+        b_score = 0.35
+
     if existing.body_movement_score is not None:
         existing.body_movement_score = round((existing.body_movement_score * 0.7) + (b_score * 0.3), 3)
     else:
         existing.body_movement_score = round(b_score, 3)
 
-    # Fetch all movement entries to check for > 3 HIGH movements
+    # Floor body_movement_score at 0.2 — never drop to ~2% from motion alone
+    if existing.body_movement_score is not None and existing.body_movement_score < 0.2:
+        existing.body_movement_score = 0.2
+
+    # Flag only after sustained HIGH movement (raised threshold from 3 -> 5 to reduce false positives)
     high_count = db.query(MovementTimeline).filter(
         MovementTimeline.video_interview_id == interview_id,
         MovementTimeline.movement_score == "HIGH"
@@ -183,10 +188,10 @@ def submit_movement_detection(
             "timestamp_seconds": 0
         })
 
-    if high_count >= 3:
+    if high_count >= 5:
         existing_flags.append({
             "flag_type": "excessive_movement",
-            "severity": "high" if high_count > 5 else "medium",
+            "severity": "high" if high_count > 8 else "medium",
             "description": f"HIGH body movement detected {high_count} times",
             "confidence": 0.9,
             "timestamp_seconds": 0

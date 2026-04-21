@@ -178,9 +178,26 @@ def _manual_parse_transcript(
         if not line:
             continue
 
-        # Try to extract speaker and text
-        # Format: [00:00:00] Speaker: text
+        # Skip interview start/end markers like "[Interview Start: 11:29:23]"
+        if re.match(r'^\[Interview (Start|End):[^\]]*\]$', line):
+            continue
+
+        # Try to extract speaker and text. Support TWO transcript formats:
+        # (1) Timestamped: "[00:00:00] Speaker: text" or "00:00 Speaker: text"
+        # (2) Plain: "Speaker: text" — our realtime transcript format (no per-line timestamps)
         match = re.match(r'\[?\d{2}:\d{2}(?::\d{2})?\]?\s*([^:]+):\s*(.*)', line)
+        if not match:
+            # Fallback: plain "Speaker: text" without inline timestamps.
+            # Only match if the speaker token is short (≤25 chars) and looks like a label,
+            # not a sentence with a colon in it.
+            plain_match = re.match(r'^([A-Za-z][A-Za-z \-_]{0,24}):\s*(.*)$', line)
+            if plain_match:
+                speaker_token = plain_match.group(1).strip().lower()
+                # Only treat as speaker header if it matches known interview roles
+                if speaker_token in ("recruiter", "candidate", "interviewer", "interviewee",
+                                      "hiring manager", "manager", "user", "assistant"):
+                    match = plain_match
+
         if match:
             if current_speaker and current_text:
                 qa_pairs.append({
@@ -210,7 +227,8 @@ def _manual_parse_transcript(
         best_score = 0
 
         for j, pair in enumerate(qa_pairs):
-            if "interviewer" in pair["speaker"] or "hiring" in pair["speaker"] or "manager" in pair["speaker"]:
+            # Recognise the interviewer/recruiter side by any of these speaker labels
+            if any(tok in pair["speaker"] for tok in ("recruiter", "interviewer", "hiring", "manager")):
                 # This is a question - check if it matches
                 pair_words = set(pair["text"].lower().split()[:8])
                 overlap = len(q_words & pair_words)
@@ -218,7 +236,9 @@ def _manual_parse_transcript(
                 if overlap >= 2 and j + 1 < len(qa_pairs):
                     # Next entry should be the candidate's answer
                     next_pair = qa_pairs[j + 1]
-                    if "candidate" in next_pair["speaker"] or "interviewee" in next_pair["speaker"] or next_pair["speaker"] != pair["speaker"]:
+                    if ("candidate" in next_pair["speaker"]
+                            or "interviewee" in next_pair["speaker"]
+                            or next_pair["speaker"] != pair["speaker"]):
                         if overlap > best_score:
                             best_score = overlap
                             best_answer = next_pair["text"][:500]  # Limit length

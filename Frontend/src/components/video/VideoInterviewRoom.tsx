@@ -764,7 +764,7 @@ const VideoInterviewRoom: React.FC = () => {
       let saved = false;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating, source: 'video_interview' });
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating, source: 'video_interview', video_interview_id: Number(videoId) });
           questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
           setQuestionRatings(prev => ({ ...prev, [questionId]: rating }));
           saved = true;
@@ -1233,7 +1233,7 @@ const VideoInterviewRoom: React.FC = () => {
       ratingQueueRef.current = [];
       for (const { questionId, rating } of pendingRatings) {
         try {
-          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating, source: 'video_interview' });
+          await ratingService.rateQuestion(interviewJobId, applicationId, questionId, { rating, source: 'video_interview', video_interview_id: Number(videoId) });
           questionRatingsRef.current = { ...questionRatingsRef.current, [questionId]: rating };
           console.log(`💾 Saved pending rating: Q${questionId} = ${rating}`);
         } catch (err) {

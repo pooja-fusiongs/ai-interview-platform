@@ -101,22 +101,16 @@ const VideoInterviewDetail: React.FC = () => {
       try {
         const data = await videoInterviewService.getInterview(Number(videoId));
         if (cancelled) return;
-        let updated = false;
         if (data.recording_url && !interview?.recording_url) {
           setInterview(data);
-          updated = true;
         }
         if (data.transcript && !transcript) {
           setTranscript(data.transcript);
           setInterview(data);
           toast.success('Transcript is ready!');
-          updated = true;
         }
-        // Stop polling when everything we needed is now present
+        // Stop polling when everything is present; otherwise schedule next poll below.
         if (data.transcript && data.recording_url) return;
-        if (updated && data.recording_url && !data.transcript) {
-          // Recording arrived but transcript still pending — keep polling
-        }
       } catch { /* ignore polling errors */ }
       if (!cancelled) {
         timeoutId = setTimeout(pollWithBackoff, delay);

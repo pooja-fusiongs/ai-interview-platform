@@ -345,14 +345,14 @@ class InterviewAnswer(Base):
 # ==================== Interview Rating Model (from client merge) ====================
 
 class InterviewRating(Base):
-    """Per-question recruiter rating (1-10 scale) from client's iHire system."""
+    """Per-question recruiter rating (1-10 scale) from client's iHire system.
+    One rating row per (question_id, source, video_interview_id) — isolated per interview
+    so the same question re-rated across multiple video interviews is tracked separately."""
     __tablename__ = "interview_ratings"
-    __table_args__ = (
-        UniqueConstraint("question_id", "source", name="uq_rating_question_source"),
-    )
 
     id = Column(Integer, primary_key=True, index=True)
     question_id = Column(Integer, ForeignKey("interview_questions.id"), nullable=False)
+    video_interview_id = Column(Integer, ForeignKey("video_interviews.id"), nullable=True, index=True)
     rating = Column(Integer, nullable=False)  # 1-10 scale
     notes = Column(Text, nullable=True)
     source = Column(String(30), nullable=False, server_default="ai_questions")  # "ai_questions" or "video_interview"

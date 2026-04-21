@@ -72,7 +72,7 @@ export const ratingService = {
     jobId: number,
     candidateId: number,
     questionId: number,
-    data: { rating: number; notes?: string; source?: string }
+    data: { rating: number; notes?: string; source?: string; video_interview_id?: number }
   ): Promise<Rating> => {
     const response = await apiClient.post(
       `/api/jobs/${jobId}/candidates/${candidateId}/questions/${questionId}/rate`,
@@ -130,7 +130,7 @@ export const ratingService = {
     const response = await apiClient.post(
       `/api/jobs/${jobId}/candidates/${candidateId}/finalize-report`,
       {},
-      { timeout: 30000 }
+      { timeout: 60000 }  // 60s: report_card generation calls OpenAI, can be slow under load
     );
     return response.data;
   },

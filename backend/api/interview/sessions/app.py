@@ -72,13 +72,22 @@ def _was_actually_answered(a: InterviewAnswer) -> bool:
     marker phrases in answer_text/feedback and typically a score of 0. Filter
     them out so the results page shows only questions the candidate actually
     answered.
+
+    Special case: if feedback indicates rule-based fallback scoring was used,
+    show the answer anyway so recruiters can still see every question when both
+    AI services are rate-limited. Rule-based feedback always contains the
+    substring "rule-based scoring".
     """
+    fb = (a.feedback or "").strip().lower()
+    # Rule-based fallback — show all questions so recruiter has visibility when AI failed
+    if "rule-based scoring" in fb:
+        return True
+
     text = (a.answer_text or "").strip().lower()
     if not text:
         return False
     if any(p in text for p in _NOT_ASKED_PHRASES):
         return False
-    fb = (a.feedback or "").strip().lower()
     if any(p in fb for p in _NOT_ASKED_PHRASES) and (a.score or 0) == 0:
         return False
     return True
@@ -304,7 +313,12 @@ def get_my_sessions(
     result = []
     for s in sessions:
         total_q = q_counts_by_app.get(s.application_id, len(s.answers)) if s.application_id else len(s.answers)
-        answered = sum(1 for a in s.answers if a.score and a.score > 0)
+        # Count as answered: score>0 OR rule-based fallback feedback (so AI-failed sessions still show question counts)
+        answered = sum(
+            1 for a in s.answers
+            if (a.score and a.score > 0)
+            or (a.feedback and "rule-based scoring" in a.feedback.lower())
+        )
         result.append(
             InterviewSessionListResponse(
                 id=s.id,
@@ -589,7 +603,12 @@ def list_interviews(
     result = []
     for s in sessions:
         total_q = q_counts_by_app.get(s.application_id, len(s.answers)) if s.application_id else len(s.answers)
-        answered = sum(1 for a in s.answers if a.score and a.score > 0)
+        # Count as answered: score>0 OR rule-based fallback feedback (so AI-failed sessions still show question counts)
+        answered = sum(
+            1 for a in s.answers
+            if (a.score and a.score > 0)
+            or (a.feedback and "rule-based scoring" in a.feedback.lower())
+        )
         result.append(
             InterviewSessionListResponse(
                 id=s.id,

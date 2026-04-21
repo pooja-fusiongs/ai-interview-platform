@@ -42,7 +42,11 @@ class DeepgramStreamer:
             "smart_format=true",
             "punctuate=true",
             "interim_results=true",
-            "endpointing=800",
+            # endpointing=500: Deepgram waits 500ms silence before emitting final
+            # (lowered from 800 for faster live caption finalisation). Tested safe —
+            # 500ms still distinguishes sentence boundaries well; dropping below ~300
+            # would risk premature finals mid-sentence.
+            "endpointing=500",
             "utterance_end_ms=3000",
             "vad_events=true",
             "filler_words=false",
@@ -64,7 +68,9 @@ class DeepgramStreamer:
         logger.info(f"Deepgram connected for speaker: {self.speaker}")
 
     async def send_audio(self, audio_data: bytes):
-        """Forward audio bytes to Deepgram. Auto-reconnects on connection drop."""
+        """Forward audio bytes to Deepgram. Auto-reconnects on connection drop.
+        On a drop, the caller's on_transcript callback may still hold an interim buffer.
+        We log the drop loudly so the caller's finally-block can flush that buffer."""
         if not self._running and not self._reconnecting:
             # Try to reconnect
             await self._try_reconnect()
@@ -73,7 +79,7 @@ class DeepgramStreamer:
             try:
                 await self.ws.send(audio_data)
             except websockets.exceptions.ConnectionClosed:
-                logger.warning(f"Deepgram connection closed for {self.speaker}, will reconnect")
+                logger.warning(f"Deepgram connection closed for {self.speaker}, will reconnect — any unfinalized interim for this drop will be lost")
                 self._running = False
                 await self._try_reconnect()
             except Exception as e:

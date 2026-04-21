@@ -448,6 +448,7 @@ class RatingCreate(BaseModel):
     rating: int
     notes: Optional[str] = None
     source: Optional[str] = "ai_questions"  # "ai_questions" or "video_interview"
+    video_interview_id: Optional[int] = None  # When source="video_interview", isolates rating to a specific interview
 
     @classmethod
     def validate_rating_range(cls, v):

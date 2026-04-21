@@ -76,16 +76,31 @@ async def rate_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Check if rating already exists for this source
+    # Check if rating already exists for this (question, source, video_interview) triple.
+    # Lookup must include video_interview_id so each interview can independently rate
+    # the same question without stomping on rows from other interviews.
     source = rating_data.source or "ai_questions"
-    existing_rating = db.query(InterviewRating).filter(
+    video_interview_id = rating_data.video_interview_id if source == "video_interview" else None
+
+    existing_filter = [
         InterviewRating.question_id == question.id,
         InterviewRating.source == source,
-    ).first()
+    ]
+    if video_interview_id is not None:
+        existing_filter.append(InterviewRating.video_interview_id == video_interview_id)
+    else:
+        # Legacy/ai_questions flow (no video_interview_id) — match only rows where it's also NULL
+        existing_filter.append(InterviewRating.video_interview_id.is_(None))
+
+    existing_rating = db.query(InterviewRating).filter(*existing_filter).first()
 
     if existing_rating:
         existing_rating.rating = rating_data.rating
         existing_rating.notes = rating_data.notes
+        # Bump created_at so downstream queries still have a reasonable temporal signal
+        # (video_interview_id is the authoritative isolation, but created_at is kept fresh too).
+        from datetime import datetime as _dt, timezone as _tz
+        existing_rating.created_at = _dt.now(_tz.utc)
         db.commit()
         db.refresh(existing_rating)
         return existing_rating
@@ -95,6 +110,7 @@ async def rate_question(
         rating=rating_data.rating,
         notes=rating_data.notes,
         source=source,
+        video_interview_id=video_interview_id,
     )
     db.add(new_rating)
     db.commit()
@@ -168,6 +184,10 @@ async def update_rating(
         rating.rating = rating_data.rating
     if rating_data.notes is not None:
         rating.notes = rating_data.notes
+
+    # Bump created_at so time-scoped "this interview only" queries pick up this update
+    from datetime import datetime as _dt, timezone as _tz
+    rating.created_at = _dt.now(_tz.utc)
 
     _update_overall_score(candidate, db)
     db.commit()
@@ -499,10 +519,12 @@ async def finalize_interview_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Auto-generate report card from recruiter ratings after interview ends."""
+    """Auto-generate report card from recruiter ratings after interview ends.
+    Final score = 80% AI (transcript) + 20% recruiter, scoped to rated questions only.
+    Biometric/integrity (lip-sync, body movement, face) stays separate as Trust Score."""
     job, candidate = get_candidate_with_auth(job_id, candidate_id, current_user, db)
 
-    # Recalculate overall score from all ratings
+    # Recalculate overall score from all ratings (partial-interview aware: avg over rated count only)
     _update_overall_score(candidate, db)
     db.commit()
     db.refresh(candidate)
@@ -544,12 +566,15 @@ async def finalize_interview_report(
 
     # Fetch fraud analysis scores if available (via VideoInterview link)
     fraud_scores = None
+    transcript_for_ai = None
     try:
         from models import VideoInterview, FraudAnalysis
         # Find video interview for this job + candidate
         vi = db.query(VideoInterview).filter(
             VideoInterview.job_id == job_id,
         ).order_by(VideoInterview.created_at.desc()).first()
+        if vi and vi.transcript:
+            transcript_for_ai = vi.transcript
         if vi:
             fraud = db.query(FraudAnalysis).filter(
                 FraudAnalysis.video_interview_id == vi.id
@@ -565,16 +590,29 @@ async def finalize_interview_report(
     except Exception as e:
         print(f"⚠️ Could not fetch fraud scores: {e}")
 
-    # Build and save report card (with fraud scores if available)
-    report_card = _build_report_card(
-        job, candidate, questions_data, "", "", fraud_scores=fraud_scores
-    )
-    candidate.report_card_json = json.dumps(report_card)
+    # NOTE: AI transcript scoring is NOT done here — it would add a 20-40s OpenAI call
+    # and trip the frontend's axios timeout. The `/api/video/interviews/{id}/upload-transcript`
+    # endpoint already runs Groq/Gemini scoring + 80/20 blend for the video interview flow,
+    # and the `/transcript` endpoint handles it for the AI-questions flow. If `candidate.ai_score`
+    # is already populated (by the /transcript endpoint), `_update_overall_score` above has already
+    # applied the 80/20 weighting to `candidate.final_score`.
+
+    # Build and save report card — wrapped in try/except so a slow/failed OpenAI call
+    # on report card generation doesn't break finalization. Recruiter score remains saved.
+    report_card = None
+    try:
+        report_card = _build_report_card(
+            job, candidate, questions_data, "", transcript_for_ai or "", fraud_scores=fraud_scores
+        )
+        candidate.report_card_json = json.dumps(report_card)
+    except Exception as e:
+        print(f"⚠️ Report card generation failed (recruiter score still saved): {e}")
     db.commit()
 
     return {
         "status": "success",
         "recruiter_score": candidate.overall_score,
+        "ai_score": candidate.ai_score,
         "final_score": candidate.final_score,
         "report_card": report_card,
     }

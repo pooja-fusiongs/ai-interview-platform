@@ -105,14 +105,36 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
         total_questions = None
 
         if db:
-            # Query 1: Get application (needed for question/rating lookups)
+            # Query 1: Get application (needed for question/rating lookups).
+            # Multi-strategy lookup — handles both logged-in and guest candidates.
+            # Strategy 1: Email match (works for logged-in candidates)
             if vi.candidate:
                 application = db.query(JobApplication).filter(
                     JobApplication.job_id == vi.job_id,
                     JobApplication.applicant_email == vi.candidate.email
                 ).first()
-                if application:
-                    candidate_name = application.applicant_name
+
+            # Strategy 2: If no application found via email (guest flow),
+            # derive it from existing ratings tied to THIS interview.
+            if not application:
+                try:
+                    rating_app_row = db.query(InterviewQuestion.candidate_id).join(
+                        InterviewRating, InterviewRating.question_id == InterviewQuestion.id
+                    ).filter(
+                        InterviewRating.video_interview_id == vi.id,
+                        InterviewRating.source == "video_interview",
+                    ).distinct().first()
+                    if rating_app_row:
+                        app_id = rating_app_row[0]
+                        application = db.query(JobApplication).filter(
+                            JobApplication.id == app_id,
+                            JobApplication.job_id == vi.job_id,
+                        ).first()
+                except Exception as e:
+                    print(f"[video-detail] Rating-based application lookup failed: {e}")
+
+            if application:
+                candidate_name = application.applicant_name
 
             # Query 2: Session + answers in one go (if session exists)
             if vi.session_id is not None:
@@ -142,29 +164,98 @@ def _build_response(vi: VideoInterview, db: Session = None, questions_approved: 
                 if q_session:
                     question_session_id = q_session.id
 
-                # Combined count query — only video_interview ratings for this page
-                total_q = db.query(sa_func.count(InterviewQuestion.id)).filter(
+                # Count questions that were actually ASKED during the interview.
+                # A question is "asked" if either:
+                #   (a) an InterviewAnswer row exists for it in this video's session
+                #       (AI extracted an answer for it from the transcript — skips not_asked), or
+                #   (b) a recruiter InterviewRating row exists for it (recruiter rated => asked).
+                # IMPORTANT: InterviewRating rows persist across re-interviews (linked to question_id
+                # only, no video_interview_id). We MUST scope to ratings created on/after vi.started_at
+                # (with vi.scheduled_at fallback) to avoid counting stale ratings from prior sessions.
+                generated_q = db.query(sa_func.count(InterviewQuestion.id)).filter(
                     InterviewQuestion.job_id == vi.job_id,
                     InterviewQuestion.candidate_id == application.id,
                 ).scalar() or 0
-                if total_q > 0:
-                    rated_q = db.query(sa_func.count(InterviewRating.id)).join(
+
+                # Build the "this interview only" rating cutoff
+                rating_cutoff = vi.started_at or vi.scheduled_at
+
+                asked_q_ids = set()
+
+                # Source 1: answers from this video interview's session
+                sess_for_count = None
+                if vi.session_id:
+                    sess_for_count = db.query(InterviewSession).filter(
+                        InterviewSession.id == vi.session_id
+                    ).first()
+                if not sess_for_count:
+                    sess_for_count = db.query(InterviewSession).filter(
+                        InterviewSession.job_id == vi.job_id,
+                        InterviewSession.application_id == application.id,
+                    ).order_by(InterviewSession.created_at.desc()).first()
+
+                if sess_for_count:
+                    # Only count answers with a real AI score (> 0) — this excludes
+                    # not_asked questions that older code paths may have persisted
+                    # with score=0 and placeholder answer_text. Groq gives >0 to any
+                    # question it actually found evidence for in the transcript.
+                    ans_q_ids = db.query(InterviewAnswer.question_id).filter(
+                        InterviewAnswer.session_id == sess_for_count.id,
+                        InterviewAnswer.question_id.isnot(None),
+                        InterviewAnswer.score.isnot(None),
+                        InterviewAnswer.score > 0,
+                    ).all()
+                    asked_q_ids.update(r[0] for r in ans_q_ids if r[0] is not None)
+
+                # Helper: build the base rating query filtered by THIS specific video interview.
+                # Wrapped in try/except so a missing column (e.g., during live migration) doesn't
+                # crash the whole detail page — falls back to unscoped query in that case.
+                def _scoped_rating_query(select_expr):
+                    return db.query(select_expr).join(
                         InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
                     ).filter(
                         InterviewQuestion.candidate_id == application.id,
                         InterviewRating.source == "video_interview",
-                    ).scalar() or 0
-                    if rated_q > 0:
-                        total_questions = total_q
-                        rated_questions = rated_q
-                        # Calculate score from video_interview ratings only
+                        InterviewRating.video_interview_id == vi.id,
+                    )
+
+                def _unscoped_rating_query(select_expr):
+                    return db.query(select_expr).join(
+                        InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
+                    ).filter(
+                        InterviewQuestion.candidate_id == application.id,
+                        InterviewRating.source == "video_interview",
+                    )
+
+                # Source 2: ratings tied to THIS video interview — strict isolation
+                try:
+                    rated_rows = _scoped_rating_query(InterviewRating.question_id).all()
+                except Exception as e:
+                    # Column not yet migrated, or other transient error — fall back to unscoped
+                    print(f"[video-detail] scoped rating query failed, falling back: {e}")
+                    db.rollback()
+                    rated_rows = _unscoped_rating_query(InterviewRating.question_id).all()
+                asked_q_ids.update(r[0] for r in rated_rows if r[0] is not None)
+
+                # Denominator: asked count when we have signal, else fall back to generated
+                asked_q = len(asked_q_ids) if asked_q_ids else generated_q
+
+                if asked_q > 0:
+                    try:
+                        rated_q = _scoped_rating_query(sa_func.count(InterviewRating.id)).scalar() or 0
                         from sqlalchemy import func as _fn
-                        vi_avg = db.query(_fn.avg(InterviewRating.rating)).join(
-                            InterviewQuestion, InterviewRating.question_id == InterviewQuestion.id
-                        ).filter(
-                            InterviewQuestion.candidate_id == application.id,
-                            InterviewRating.source == "video_interview",
-                        ).scalar()
+                        vi_avg_query = _scoped_rating_query(_fn.avg(InterviewRating.rating))
+                    except Exception as e:
+                        print(f"[video-detail] scoped count/avg failed, falling back: {e}")
+                        db.rollback()
+                        rated_q = _unscoped_rating_query(sa_func.count(InterviewRating.id)).scalar() or 0
+                        from sqlalchemy import func as _fn
+                        vi_avg_query = _unscoped_rating_query(_fn.avg(InterviewRating.rating))
+
+                    if rated_q > 0:
+                        total_questions = asked_q
+                        rated_questions = rated_q
+                        vi_avg = vi_avg_query.scalar()
                         recruiter_score = round(float(vi_avg), 1) if vi_avg else None
         response = VideoInterviewResponse(
             id=vi.id,
@@ -1235,8 +1326,24 @@ async def guest_end_interview(
         except Exception as e:
             print(f"[EndInterview] Real-time transcript build failed: {e}")
 
-    # Start background recording transcription only if no transcript yet
-    if not vi.transcript:
+    # Fallback logic:
+    # 1. If no transcript at all → run recording-based transcription
+    # 2. If transcript exists but is suspiciously short (< 200 chars of actual content,
+    #    stripping timestamp markers) → ALSO run recording-based transcription as fallback.
+    #    The recording-based worker detects a realtime transcript and picks whichever has
+    #    more content, so no overwrite risk for already-good realtime transcripts.
+    transcript_content_len = 0
+    if vi.transcript:
+        # Strip timestamp markers like [Interview Start: hh:mm:ss] for the length check
+        import re as _re
+        stripped = _re.sub(r'\[Interview (Start|End):[^\]]*\]', '', vi.transcript).strip()
+        transcript_content_len = len(stripped)
+
+    realtime_too_short = bool(vi.transcript) and transcript_content_len < 200
+
+    if not vi.transcript or realtime_too_short:
+        if realtime_too_short:
+            print(f"[EndInterview] Realtime transcript only {transcript_content_len} chars — triggering recording fallback")
         _start_background_transcription_task(
             vi_id=video_id,
             job_id=vi.job_id,
@@ -1244,6 +1351,14 @@ async def guest_end_interview(
             recording_url_hint=vi.recording_url,
             session_id=vi.session_id
         )
+        # If we had a short realtime transcript, still kick off scoring on it NOW.
+        # The recording-based worker will re-score later if it produces a better transcript
+        # (scoring worker is idempotent — skips if session.overall_score already > 0).
+        if vi.transcript:
+            _start_background_scoring_task(vi_id=video_id)
+    else:
+        # Good realtime transcript — kick off AI scoring + 80/20 blend immediately.
+        _start_background_scoring_task(vi_id=video_id)
 
     return {"message": "Interview ended", "status": vi.status}
 
@@ -1257,6 +1372,254 @@ def _start_background_transcription_task(vi_id, job_id, started_at, recording_ur
         daemon=True,
     )
     thread.start()
+
+
+def _start_background_scoring_task(vi_id):
+    """Start a background thread to AI-score the transcript and apply 80/20 blend.
+    Spawned by /end once the realtime transcript is built, so the Results page
+    shows proper scores without the recruiter manually clicking "Score Transcript"."""
+    import threading
+    thread = threading.Thread(target=_bg_scoring_worker, args=(vi_id,), daemon=True)
+    thread.start()
+
+
+def _bg_scoring_worker(vi_id):
+    """Worker: run Groq/Gemini scoring for a video interview's transcript and
+    write per-question answers with 80% AI + 20% recruiter blending.
+    Mirrors the logic of /upload-transcript so the Results page data path is identical."""
+    import traceback
+    from database import SessionLocal
+    from models import Recommendation, InterviewSessionStatus, InterviewAnswer, InterviewRating
+
+    db = SessionLocal()
+    try:
+        vi = db.query(VideoInterview).filter(VideoInterview.id == vi_id).first()
+        if not vi or not vi.transcript:
+            print(f"[BG Scoring] vi_id={vi_id}: no transcript, skipping")
+            return
+
+        # If already scored AND transcript hasn't materially grown since, skip.
+        # Otherwise (e.g., recording-based transcription produced a richer transcript
+        # than the realtime one we scored earlier), re-score to pick up the new content.
+        if vi.session_id:
+            existing_sess = db.query(InterviewSession).filter(
+                InterviewSession.id == vi.session_id
+            ).first()
+            if existing_sess and existing_sess.overall_score is not None and existing_sess.overall_score > 0:
+                prev_len = len(existing_sess.transcript_text or "")
+                cur_len = len(vi.transcript or "")
+                # Only re-score if transcript grew by >50% (meaningful new content)
+                if cur_len <= int(prev_len * 1.5):
+                    print(f"[BG Scoring] vi_id={vi_id}: session already scored ({existing_sess.overall_score}) "
+                          f"and transcript hasn't meaningfully grown ({prev_len} -> {cur_len}), skipping")
+                    return
+                print(f"[BG Scoring] vi_id={vi_id}: transcript grew significantly ({prev_len} -> {cur_len}), re-scoring")
+
+        # Resolve application + approved questions using a multi-strategy lookup.
+        # This MUST handle guest interviews where vi.candidate.email doesn't match
+        # JobApplication.applicant_email (guest users have auto-generated emails).
+        application = None
+
+        # Strategy 1: Email match (works for logged-in candidates)
+        if vi.candidate:
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id,
+                JobApplication.applicant_email == vi.candidate.email,
+            ).first()
+
+        # Strategy 2: Derive from existing ratings for THIS interview
+        # (ratings point to questions which point to an application via candidate_id).
+        # This is the ground-truth mapping used by the rate endpoint URL (/api/jobs/X/candidates/Y/...).
+        if not application:
+            try:
+                from models import InterviewRating as _IR
+                rating_app_row = db.query(InterviewQuestion.candidate_id).join(
+                    _IR, _IR.question_id == InterviewQuestion.id
+                ).filter(
+                    _IR.video_interview_id == vi.id,
+                    _IR.source == "video_interview",
+                ).distinct().first()
+                if rating_app_row:
+                    app_id = rating_app_row[0]
+                    application = db.query(JobApplication).filter(
+                        JobApplication.id == app_id,
+                        JobApplication.job_id == vi.job_id,
+                    ).first()
+                    if application:
+                        print(f"[BG Scoring] vi_id={vi_id}: resolved application={application.id} via rating lookup")
+            except Exception as e:
+                print(f"[BG Scoring] Rating-based application lookup failed: {e}")
+
+        # Strategy 3: Any application for this job (last resort)
+        if not application:
+            application = db.query(JobApplication).filter(
+                JobApplication.job_id == vi.job_id
+            ).first()
+
+        candidate_id_for_questions = application.id if application else vi.candidate_id
+        approved_questions = db.query(InterviewQuestion).filter(
+            InterviewQuestion.job_id == vi.job_id,
+            InterviewQuestion.candidate_id == candidate_id_for_questions,
+            InterviewQuestion.is_approved == True,
+        ).all()
+        if not approved_questions:
+            approved_questions = db.query(InterviewQuestion).filter(
+                InterviewQuestion.job_id == vi.job_id,
+                InterviewQuestion.candidate_id == candidate_id_for_questions,
+            ).all()
+
+        if not approved_questions:
+            print(f"[BG Scoring] vi_id={vi_id}: no questions found (candidate_id_for_questions={candidate_id_for_questions}), skipping")
+            return
+
+        import config
+        from services.groq_service import score_transcript_with_groq
+        from services.gemini_service import score_transcript_with_gemini
+
+        questions_for_scoring = [
+            {"question_id": q.id, "question_text": q.question_text, "sample_answer": q.sample_answer or ""}
+            for q in approved_questions
+        ]
+
+        llm_result = None
+        if config.GROQ_API_KEY:
+            try:
+                print(f"[BG Scoring] vi_id={vi_id}: Scoring with Groq...")
+                llm_result = score_transcript_with_groq(vi.transcript, questions_for_scoring)
+            except Exception as e:
+                print(f"[BG Scoring] Groq failed: {e}")
+
+        if not llm_result and config.GEMINI_API_KEY:
+            try:
+                print(f"[BG Scoring] vi_id={vi_id}: Trying Gemini fallback...")
+                llm_result = score_transcript_with_gemini(vi.transcript, questions_for_scoring)
+            except Exception as e:
+                print(f"[BG Scoring] Gemini failed: {e}")
+
+        if not llm_result:
+            print(f"[BG Scoring] vi_id={vi_id}: AI scoring unavailable, skipping")
+            return
+
+        # Find or create session
+        session = None
+        if vi.session_id:
+            session = db.query(InterviewSession).filter(InterviewSession.id == vi.session_id).first()
+        if not session:
+            session = db.query(InterviewSession).filter(
+                InterviewSession.job_id == vi.job_id,
+                InterviewSession.application_id == candidate_id_for_questions,
+            ).first()
+        if not session:
+            session = InterviewSession(
+                job_id=vi.job_id,
+                candidate_id=vi.candidate_id,
+                application_id=candidate_id_for_questions,
+                status=InterviewSessionStatus.IN_PROGRESS,
+                interview_mode="video_interview",
+                started_at=datetime.now(timezone.utc),
+            )
+            db.add(session)
+            db.flush()
+            vi.session_id = session.id
+
+        session.transcript_text = vi.transcript
+
+        # Pre-fetch recruiter ratings for 80/20 blend — isolated to THIS video interview.
+        # Defensive: falls back to unscoped query if video_interview_id column isn't migrated yet.
+        valid_q_ids = [q.id for q in approved_questions]
+        try:
+            ratings_rows = db.query(InterviewRating).filter(
+                InterviewRating.question_id.in_(valid_q_ids),
+                InterviewRating.source == "video_interview",
+                InterviewRating.video_interview_id == vi.id,
+            ).all()
+        except Exception as e:
+            print(f"[BG Scoring] scoped ratings query failed, falling back: {e}")
+            db.rollback()
+            ratings_rows = db.query(InterviewRating).filter(
+                InterviewRating.question_id.in_(valid_q_ids),
+                InterviewRating.source == "video_interview",
+            ).all()
+        recruiter_ratings = {r.question_id: float(r.rating) for r in ratings_rows if r.rating is not None}
+
+        rec_str = llm_result.get("recommendation", "reject")
+        session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
+        session.strengths = llm_result.get("strengths", "")
+        session.weaknesses = llm_result.get("weaknesses", "")
+        session.status = InterviewSessionStatus.SCORED
+        session.completed_at = datetime.now(timezone.utc)
+
+        blended_total = 0.0
+        blended_count = 0
+        valid_question_ids = {q.id for q in approved_questions}
+
+        for pq in llm_result.get("per_question", []):
+            # Skip questions Groq says were not asked in transcript
+            if pq.get("not_asked"):
+                continue
+
+            q_id = pq.get("question_id")
+            if not q_id:
+                continue
+            try:
+                q_id = int(q_id)
+            except (ValueError, TypeError):
+                continue
+            if q_id not in valid_question_ids:
+                continue
+
+            existing_answer = db.query(InterviewAnswer).filter(
+                InterviewAnswer.session_id == session.id,
+                InterviewAnswer.question_id == q_id,
+            ).first()
+            if existing_answer:
+                answer = existing_answer
+            else:
+                answer = InterviewAnswer(session_id=session.id, question_id=q_id)
+                db.add(answer)
+
+            extracted = pq.get("extracted_answer", "")
+            if extracted and extracted not in ("[Extracted from Transcript]", "No answer found in transcript", ""):
+                answer.answer_text = extracted
+            elif not answer.answer_text:
+                answer.answer_text = "Answer not extracted from transcript"
+
+            ai_score_raw = float(pq.get("score", 0))
+            if q_id in recruiter_ratings:
+                recruiter_raw_100 = recruiter_ratings[q_id] * 10.0
+                answer.score = round((ai_score_raw * 0.8) + (recruiter_raw_100 * 0.2), 2)
+            else:
+                answer.score = ai_score_raw
+
+            answer.relevance_score = float(pq.get("relevance_score", 0))
+            answer.completeness_score = float(pq.get("completeness_score", 0))
+            answer.accuracy_score = float(pq.get("accuracy_score", 0))
+            answer.clarity_score = float(pq.get("clarity_score", 0))
+            answer.feedback = pq.get("feedback", "")
+
+            blended_total += answer.score
+            blended_count += 1
+
+        if blended_count > 0:
+            session.overall_score = round(blended_total / blended_count, 2)
+        else:
+            session.overall_score = float(llm_result.get("overall_score", 0))
+
+        db.commit()
+        print(f"[BG Scoring] vi_id={vi_id}: ✅ Scored {blended_count} questions, overall={session.overall_score}")
+    except Exception as e:
+        print(f"[BG Scoring] vi_id={vi_id}: ❌ Failed: {e}")
+        import traceback as _tb
+        _tb.print_exc()
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, session_id, candidate_id=None, candidate_email=None):
@@ -1544,6 +1907,14 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                     bg_session.transcript_text = transcript_text
 
             bg_db.commit()
+
+            # Now that the recording-based transcript is saved, trigger AI scoring
+            # (same pipeline as the realtime path — spawns its own DB session, safe re-entrant)
+            if final_transcript and chosen_source != "failed":
+                try:
+                    _start_background_scoring_task(vi_id=vi_id)
+                except Exception as sc_err:
+                    print(f"[BG Transcription] Could not trigger scoring: {sc_err}")
         except Exception as e:
             print(f"[BG Transcription] Extraction failed: {e}")
             bg_vi.transcript_source = "failed"
@@ -2966,13 +3337,34 @@ def upload_transcript_and_score(
         session.transcript_text = transcript_text
 
         if llm_result:
-            session.overall_score = float(llm_result.get("overall_score", 0))
             rec_str = llm_result.get("recommendation", "reject")
             session.recommendation = Recommendation(rec_str) if rec_str in ("select", "next_round", "reject") else Recommendation.REJECT
             session.strengths = llm_result.get("strengths", "")
             session.weaknesses = llm_result.get("weaknesses", "")
             session.status = InterviewSessionStatus.SCORED
             session.completed_at = datetime.now(timezone.utc)
+
+            # Pre-fetch recruiter ratings (InterviewRating, source="video_interview") for 80/20 blend.
+            # AI score is 0-100, recruiter rating is 1-10 — scale rating to 0-100 before blending.
+            # Isolated to THIS video interview via video_interview_id; falls back to unscoped if column missing.
+            from models import InterviewRating
+            valid_q_ids = [q.id for q in approved_questions]
+            recruiter_ratings = {}
+            if valid_q_ids:
+                try:
+                    ratings_rows = db.query(InterviewRating).filter(
+                        InterviewRating.question_id.in_(valid_q_ids),
+                        InterviewRating.source == "video_interview",
+                        InterviewRating.video_interview_id == vi.id,
+                    ).all()
+                except Exception as e:
+                    print(f"[upload-transcript] scoped ratings failed, falling back: {e}")
+                    db.rollback()
+                    ratings_rows = db.query(InterviewRating).filter(
+                        InterviewRating.question_id.in_(valid_q_ids),
+                        InterviewRating.source == "video_interview",
+                    ).all()
+                recruiter_ratings = {r.question_id: float(r.rating) for r in ratings_rows if r.rating is not None}
 
             # Build score_result with session ID for frontend navigation
             score_result = {
@@ -2984,8 +3376,18 @@ def upload_transcript_and_score(
                 "interview_session_id": session.id  # For navigating to Results page
             }
 
+            # Accumulate blended per-question scores to recompute session.overall_score
+            blended_total = 0.0
+            blended_count = 0
+
             # Save per-question answers with extracted answers from transcript
             for pq in llm_result.get("per_question", []):
+                # Skip questions that were not asked during the interview —
+                # Groq returns per_question for ALL job questions, flagging missed ones
+                # with not_asked=True. Including them crashes the average toward 0.
+                if pq.get("not_asked"):
+                    continue
+
                 if use_direct_scoring:
                     # Direct scoring: no pre-defined question IDs, save extracted Q&A
                     answer = InterviewAnswer(
@@ -3026,12 +3428,34 @@ def upload_transcript_and_score(
                         answer.answer_text = extracted or "Answer not extracted from transcript"
 
                 # Store scores on 0-100 scale (internal standard)
-                answer.score = float(pq.get("score", 0))
+                ai_score_raw = float(pq.get("score", 0))
+
+                # 80/20 blend with recruiter rating if present for this question.
+                # recruiter rating is 1-10 → scale to 0-100. AI is already 0-100.
+                # If no recruiter rating, keep AI-only (partial-interview: unrated questions count as AI-only).
+                if not use_direct_scoring and q_id in recruiter_ratings:
+                    recruiter_raw_100 = recruiter_ratings[q_id] * 10.0
+                    blended = round((ai_score_raw * 0.8) + (recruiter_raw_100 * 0.2), 2)
+                    answer.score = blended
+                else:
+                    answer.score = ai_score_raw
+
                 answer.relevance_score = float(pq.get("relevance_score", 0))
                 answer.completeness_score = float(pq.get("completeness_score", 0))
                 answer.accuracy_score = float(pq.get("accuracy_score", 0))
                 answer.clarity_score = float(pq.get("clarity_score", 0))
                 answer.feedback = pq.get("feedback", "")
+
+                blended_total += answer.score
+                blended_count += 1
+
+            # Recompute session.overall_score from blended per-question scores
+            # (override LLM's overall_score so 80/20 actually reflects in final number)
+            if blended_count > 0:
+                session.overall_score = round(blended_total / blended_count, 2)
+                score_result["overall_score"] = session.overall_score
+            else:
+                session.overall_score = float(llm_result.get("overall_score", 0))
         else:
             # Scoring failed but still save session with transcript
             score_result = {

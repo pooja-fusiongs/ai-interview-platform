@@ -135,6 +135,9 @@ def run_migrations():
                 ("video_interviews", "recording_data", "BYTEA"),
                 ("video_interviews", "reminder_sent_at", "TIMESTAMP WITH TIME ZONE"),
                 ("interview_ratings", "source", "VARCHAR(30) DEFAULT 'ai_questions'"),
+                # Per-interview rating isolation: each rating now belongs to a specific video interview
+                # so the same question rated across multiple interviews doesn't contaminate each other.
+                ("interview_ratings", "video_interview_id", "INTEGER REFERENCES video_interviews(id)"),
             ]
             with engine.begin() as conn:
                 for table, column, col_type in expected_columns:
@@ -148,6 +151,16 @@ def run_migrations():
                         except Exception as e:
                             pass
             print("Auto-migration complete.")
+
+            # Drop the old unique constraint on interview_ratings(question_id, source) — it prevented
+            # multiple interviews from rating the same question independently. Now that
+            # video_interview_id distinguishes each interview's rating, this constraint must go.
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE interview_ratings DROP CONSTRAINT IF EXISTS uq_rating_question_source"))
+                    print("Dropped stale uq_rating_question_source constraint.")
+            except Exception:
+                pass
 
             # Create indexes for performance (idempotent — IF NOT EXISTS)
             perf_indexes = [
@@ -173,6 +186,8 @@ def run_migrations():
                 "CREATE INDEX IF NOT EXISTS idx_jobs_created_by ON jobs(created_by)",
                 "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
                 "CREATE INDEX IF NOT EXISTS idx_fraud_analyses_vi ON fraud_analyses(video_interview_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_ratings_vi ON interview_ratings(video_interview_id)",
+                "CREATE INDEX IF NOT EXISTS idx_interview_ratings_question ON interview_ratings(question_id)",
             ]
             for idx_sql in perf_indexes:
                 try:
@@ -208,33 +223,29 @@ def run_migrations():
         except Exception:
             pass
 
-        # Migrate interview_ratings: drop old unique(question_id), add unique(question_id, source)
+        # Migrate interview_ratings: drop ALL legacy unique constraints on (question_id) or
+        # (question_id, source). Each video interview now gets its own rating row per question,
+        # isolated via video_interview_id. The old unique constraint would block this pattern,
+        # so we must ensure it's fully removed (including re-drop in case an earlier startup
+        # recreated it).
         try:
             from sqlalchemy import text as _t_rating
             with engine.begin() as conn:
-                # Drop old unique constraint on question_id (try common constraint names)
                 for constraint_name in [
                     'interview_ratings_question_id_key',
                     'uq_interview_ratings_question_id',
                     'ix_interview_ratings_question_id',
+                    'uq_rating_question_source',  # <-- our own previously-added constraint
                 ]:
                     try:
                         conn.execute(_t_rating(f'ALTER TABLE interview_ratings DROP CONSTRAINT IF EXISTS {constraint_name}'))
                     except Exception:
                         pass
-                # Also try dropping unique index
                 try:
                     conn.execute(_t_rating('DROP INDEX IF EXISTS interview_ratings_question_id_key'))
                 except Exception:
                     pass
-                # Add new composite unique constraint
-                try:
-                    conn.execute(_t_rating(
-                        'ALTER TABLE interview_ratings ADD CONSTRAINT uq_rating_question_source UNIQUE (question_id, source)'
-                    ))
-                    print("  Migrated interview_ratings: unique(question_id, source)")
-                except Exception:
-                    pass  # Already exists
+                print("  Migrated interview_ratings: removed legacy unique constraints (per-interview isolation via video_interview_id)")
         except Exception as e:
             print(f"⚠️ Rating constraint migration: {e}")
 
