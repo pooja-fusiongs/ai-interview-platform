@@ -306,15 +306,31 @@ def submit_lip_events(
     # Calculate lip sync score
     # Frames where audio was active (candidate should be speaking)
     audio_active_frames = payload.lip_moving_with_audio + payload.lip_still_with_audio
-    if audio_active_frames == 0:
-        # No audio detected yet — can't calculate sync, give neutral score
-        lip_score = 1.0
-    else:
+
+    # Task 1 + 4 + 5: when no audio-active frames were observed in this batch,
+    # we have zero evidence — do not fabricate a perfect 1.0. lip_score stays
+    # None and the score-write block below is skipped so prior score is
+    # preserved. sync_ratio / mismatch_ratio also guarded below.
+    lip_score = None
+    sync_ratio = None
+    mismatch_ratio = None
+    MIN_LIP_FRAMES = 4
+    if audio_active_frames >= MIN_LIP_FRAMES:
         # Sync ratio = how often lips move when audio is active
         sync_ratio = payload.lip_moving_with_audio / audio_active_frames
-        # Penalize heavily for mismatch (audio active but lips still)
         mismatch_ratio = payload.lip_still_with_audio / audio_active_frames
-        lip_score = max(0.0, min(1.0, sync_ratio - (mismatch_ratio * 0.3)))
+
+        # Detection-failure guard: very low sync ratio (<10%) with enough
+        # frames almost always means the frontend MediaPipe lip-movement
+        # threshold is too strict — detection failure, not fraud. Real
+        # dubbing produces ~30-50% sync. Skip so prior score is preserved.
+        if sync_ratio < 0.1:
+            lip_score = None
+        else:
+            # Honest formula: lip_score = sync_ratio. Previous
+            # "sync_ratio - mismatch_ratio * 0.2" double-counted the signal
+            # (sync+mismatch sum to 1) and clamped real speakers to 0.
+            lip_score = round(max(0.0, min(1.0, sync_ratio)), 3)
 
     details = json.dumps({
         "total_frames": payload.total_frames,
@@ -323,10 +339,13 @@ def submit_lip_events(
         "lip_moving_no_audio": payload.lip_moving_no_audio,
         "lip_still_no_audio": payload.lip_still_no_audio,
         "no_face_frames": payload.no_face_frames,
-        "sync_ratio": round(sync_ratio if audio_active_frames > 0 else 1.0, 3),
+        # When no audio-active frames, report null instead of 1.0 so downstream
+        # dashboards don't visualize absence-of-data as perfect sync.
+        "sync_ratio": round(sync_ratio, 3) if sync_ratio is not None else None,
         "mismatch_seconds": round(payload.mismatch_seconds, 1),
         "max_mouth_openness": round(payload.max_mouth_openness, 4),
         "avg_mouth_openness": round(payload.avg_mouth_openness, 4),
+        "lip_score_computed": lip_score is not None,
     })
 
     # Build lip sync flags
@@ -346,11 +365,20 @@ def submit_lip_events(
     existing = get_or_create_fraud_analysis(db, video_interview_id)
     now = datetime.utcnow()
 
-    # Keep worst lip sync score
-    if existing.lip_sync_score is not None:
-        existing.lip_sync_score = round(min(lip_score, existing.lip_sync_score), 3)
-    else:
-        existing.lip_sync_score = round(lip_score, 3)
+    # Task 5: only update stored score when current batch produced a valid
+    # lip_score. Invalid (no-data) batches leave the existing value alone.
+    #
+    # Previous "keep worst" (min) aggregation meant a single bad batch would
+    # permanently lock the score at its low value with no recovery, even if
+    # every subsequent batch was perfect. Changed to the same rolling average
+    # movement.py uses (0.7 prior + 0.3 new), which converges toward the true
+    # average behavior across the interview and matches the live-detection
+    # path's semantics for consistency.
+    if lip_score is not None:
+        if existing.lip_sync_score is not None:
+            existing.lip_sync_score = round((existing.lip_sync_score * 0.7) + (lip_score * 0.3), 3)
+        else:
+            existing.lip_sync_score = round(lip_score, 3)
     existing.lip_sync_details = details
 
     # Merge lip flags with existing flags
@@ -845,20 +873,29 @@ def list_all_analyses(
     from sqlalchemy import text as _text
     # Increase timeout for this heavy query
     db.execute(_text("SET LOCAL statement_timeout = '120s'"))
+    # Subquery dedupes (one row per video_interview_id, keeping the most recent
+    # analysis) then outer query orders by analyzed_at DESC so LIMIT 100 returns
+    # the 100 most recently analyzed interviews. Previous single-level query
+    # used `ORDER BY fa.video_interview_id` (ASC per PostgreSQL default) which
+    # took the 100 LOWEST video_interview_ids — hiding newer interviews (e.g.
+    # #159) from Live Monitor once the dataset grew past 100 rows.
     rows = db.execute(_text("""
-        SELECT DISTINCT ON (fa.video_interview_id)
-            fa.id, fa.video_interview_id, fa.overall_trust_score, fa.flag_count, fa.flags,
-            fa.voice_consistency_score, fa.lip_sync_score, fa.body_movement_score,
-            fa.face_detection_score, fa.face_detection_details, fa.analysis_status, fa.analyzed_at,
-            vi.status as vi_status, vi.started_at as vi_started_at,
-            u.full_name as candidate_name, u.username as candidate_username,
-            j.title as job_title
-        FROM fraud_analyses fa
-        JOIN video_interviews vi ON fa.video_interview_id = vi.id
-        LEFT JOIN users u ON u.id = vi.candidate_id
-        LEFT JOIN jobs j ON j.id = vi.job_id
-        WHERE vi.status != 'scheduled'
-        ORDER BY fa.video_interview_id, fa.analyzed_at DESC NULLS LAST
+        SELECT * FROM (
+            SELECT DISTINCT ON (fa.video_interview_id)
+                fa.id, fa.video_interview_id, fa.overall_trust_score, fa.flag_count, fa.flags,
+                fa.voice_consistency_score, fa.lip_sync_score, fa.body_movement_score,
+                fa.face_detection_score, fa.face_detection_details, fa.analysis_status, fa.analyzed_at,
+                vi.status as vi_status, vi.started_at as vi_started_at,
+                u.full_name as candidate_name, u.username as candidate_username,
+                j.title as job_title
+            FROM fraud_analyses fa
+            JOIN video_interviews vi ON fa.video_interview_id = vi.id
+            LEFT JOIN users u ON u.id = vi.candidate_id
+            LEFT JOIN jobs j ON j.id = vi.job_id
+            WHERE vi.status != 'scheduled'
+            ORDER BY fa.video_interview_id, fa.analyzed_at DESC NULLS LAST
+        ) deduped
+        ORDER BY deduped.analyzed_at DESC NULLS LAST
         LIMIT 100
     """)).fetchall()
 

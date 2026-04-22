@@ -818,6 +818,14 @@ class UnifiedDetectionPayload(BaseModel):
     # Face Identity Change
     face_changed_count: int = 0
 
+    # Audio Quality (Option B) — detects mic drops, noise, volume issues.
+    # All default 0 so older frontend clients that don't send these still work.
+    audio_normal_frames: int = 0
+    audio_low_frames: int = 0
+    audio_silent_frames: int = 0
+    audio_drop_count: int = 0
+    audio_noise_frames: int = 0
+
     # Body Movement Details
     movement_score: str = "CALM"
     movement_intensity: float = 0.0

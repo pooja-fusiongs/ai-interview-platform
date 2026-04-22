@@ -8,6 +8,7 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const [notFound, setNotFound] = useState(false)
   const [emailError, setEmailError] = useState('')
   const [emailTouched, setEmailTouched] = useState(false)
   const navigate = useNavigate()
@@ -35,12 +36,18 @@ const ForgotPassword = () => {
     }
 
     setLoading(true)
+    setNotFound(false)
     try {
       await apiClient.post('/api/auth/forgot-password', { email })
       setSent(true)
-      showSuccess('If an account exists with that email, a reset link has been sent.')
-    } catch {
-      showError('Something went wrong. Please try again.')
+      showSuccess('Reset link sent to your email.')
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        setNotFound(true)
+        showError('No account found with this email. Please sign up first.')
+      } else {
+        showError(err?.response?.data?.detail || 'Something went wrong. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -95,6 +102,27 @@ const ForgotPassword = () => {
               <Typography sx={{ color: '#6b7280', fontSize: '14px', textAlign: 'left', mb: 3 }}>
                 Enter your email address and we'll send you a link to reset your password.
               </Typography>
+
+              {notFound && (
+                <Box sx={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  mb: 2,
+                  textAlign: 'left'
+                }}>
+                  <Typography sx={{ color: '#991b1b', fontSize: '13px', fontWeight: 600, mb: 0.5 }}>
+                    No account found with this email
+                  </Typography>
+                  <Typography sx={{ color: '#7f1d1d', fontSize: '12px' }}>
+                    Please <Box component="span"
+                      onClick={() => navigate('/signup')}
+                      sx={{ color: '#020291', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}
+                    >sign up</Box> first to create an account.
+                  </Typography>
+                </Box>
+              )}
 
               <Box sx={{
                 display: 'flex',

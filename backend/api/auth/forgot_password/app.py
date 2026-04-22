@@ -116,13 +116,26 @@ def send_password_reset_email(email: str, reset_link: str) -> bool:
 def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     if not user:
-        return {"message": "If an account with that email exists, a reset link has been sent."}
+        # Explicit 404 so the UI can direct the user to sign up instead of
+        # silently claiming an email was sent (which confuses users who never
+        # had an account and causes real support tickets).
+        print(f"[ForgotPassword] No user found for email: {body.email}")
+        raise HTTPException(
+            status_code=404,
+            detail="No account found with this email. Please sign up first.",
+        )
 
     token = create_reset_token(user.email)
     reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
-    send_password_reset_email(user.email, reset_link)
+    sent = send_password_reset_email(user.email, reset_link)
 
-    return {"message": "If an account with that email exists, a reset link has been sent."}
+    if not sent:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send reset email. Please try again in a few minutes.",
+        )
+
+    return {"message": "Reset link sent to your email."}
 
 
 @router.post("/reset-password-confirm")

@@ -68,6 +68,12 @@ export interface UnifiedDetectionPayload {
   looking_away_count: number;
   looking_away_seconds: number;
   face_changed_count: number;
+  // Audio quality tracking (Option B — detects mic drops, noise, volume issues)
+  audio_normal_frames: number;     // RMS in healthy range
+  audio_low_frames: number;        // RMS below normal but above silence (weak/distant mic)
+  audio_silent_frames: number;     // RMS near zero (mic muted/disconnected)
+  audio_drop_count: number;        // Sudden normal → silent transitions mid-interview
+  audio_noise_frames: number;      // RMS extremely high (clipping/noise)
   movement_score: 'CALM' | 'MODERATE' | 'HIGH';
   movement_intensity: number;
   flags: MovementFlags;
@@ -89,6 +95,16 @@ const CHIN_IDX = 152;
 // Thresholds
 const AUDIO_RMS_THRESHOLD = 0.002;
 const LIP_MOVEMENT_THRESHOLD = 0.06;
+
+// Audio quality classification bands (Option B). Normal speech RMS typically
+// 0.02-0.25. Below 0.002 we already treat as inaudible (existing threshold).
+// Below 0.008 = "low" (weak mic, far from camera, distorted). Above 0.5 = "noise"
+// (clipping, loud background, mic overload). Between 0.008-0.5 = "normal".
+const AUDIO_LOW_RMS = 0.008;
+const AUDIO_NOISE_RMS = 0.5;
+// Drop detection: if last frame was normal/noise and this frame is silent,
+// count as a drop event (mic disconnected or suddenly muted).
+const AUDIO_DROP_SUSTAIN_FRAMES = 3; // need 3 consecutive silent frames to count
 // Pitch consistency tuning. Previous algorithm (strict 0.35 threshold, mean
 // baseline from first 10 segments, single-frame shift counting) scored the same
 // clear speaker at ~37%. The values below are tuned so natural prosody (stress,
@@ -185,6 +201,11 @@ export function useDetection({
     looking_away_count: 0,
     looking_away_seconds: 0,
     face_changed_count: 0,
+    audio_normal_frames: 0,
+    audio_low_frames: 0,
+    audio_silent_frames: 0,
+    audio_drop_count: 0,
+    audio_noise_frames: 0,
     movement_score: 'CALM',
     movement_intensity: 0,
   });
@@ -216,6 +237,10 @@ export function useDetection({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioDataRef = useRef<Float32Array<ArrayBuffer> | null>(null);
+  // Audio-quality state (Option B): track previous audio class for drop detection
+  const prevAudioClassRef = useRef<'normal' | 'low' | 'silent' | 'noise'>('silent');
+  const silentStreakRef = useRef(0);
+  const hasHadNormalAudioRef = useRef(false); // ignore initial silence before candidate starts talking
   const bufferRef = useRef<Float32Array<ArrayBuffer> | null>(null);
   const baselinePitchRef = useRef(0);
   const baselineCountRef = useRef(0);       // voiced segments used to build initial baseline
@@ -289,6 +314,11 @@ export function useDetection({
       looking_away_count: 0,
       looking_away_seconds: 0,
       face_changed_count: 0,
+      audio_normal_frames: 0,
+      audio_low_frames: 0,
+      audio_silent_frames: 0,
+      audio_drop_count: 0,
+      audio_noise_frames: 0,
       movement_score: 'CALM',
       movement_intensity: 0,
     };
@@ -374,6 +404,39 @@ export function useDetection({
         rms = Math.sqrt(rms / bufferRef.current.length);
         isAudioActive = rms > AUDIO_RMS_THRESHOLD;
         setAudioActive(isAudioActive);
+
+        // --- AUDIO QUALITY CLASSIFICATION (Option B) ---
+        // Bucket every frame into normal/low/silent/noise based on RMS.
+        // Detect "drops" (sudden normal → silent transitions mid-interview).
+        let audioClass: 'normal' | 'low' | 'silent' | 'noise';
+        if (rms > AUDIO_NOISE_RMS) {
+          audioClass = 'noise';
+          w.audio_noise_frames += 1;
+        } else if (rms > AUDIO_LOW_RMS) {
+          audioClass = 'normal';
+          w.audio_normal_frames += 1;
+          hasHadNormalAudioRef.current = true;
+          silentStreakRef.current = 0;
+        } else if (rms > AUDIO_RMS_THRESHOLD) {
+          audioClass = 'low';
+          w.audio_low_frames += 1;
+          silentStreakRef.current = 0;
+        } else {
+          audioClass = 'silent';
+          w.audio_silent_frames += 1;
+          silentStreakRef.current += 1;
+          // Count as a "drop" only if: (1) candidate has produced normal audio
+          // at some point (not still in initial pre-speaking phase), AND
+          // (2) silence has sustained long enough to not be a natural pause.
+          if (
+            hasHadNormalAudioRef.current &&
+            silentStreakRef.current === AUDIO_DROP_SUSTAIN_FRAMES &&
+            (prevAudioClassRef.current === 'normal' || prevAudioClassRef.current === 'low')
+          ) {
+            w.audio_drop_count += 1;
+          }
+        }
+        prevAudioClassRef.current = audioClass;
         
         // Pitch for consistency
         pitch = detectPitch(analyserRef.current, audioCtxRef.current.sampleRate, bufferRef.current);

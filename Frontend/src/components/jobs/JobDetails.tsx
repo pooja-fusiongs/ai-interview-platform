@@ -186,12 +186,22 @@ const JobDetails: React.FC<JobDetailsProps> = ({
       const sMapping: Record<number, number> = {}
       for (const vi of interviews) {
         if (vi.job_id === selectedJob.id) {
-          // Match by application_id first (most reliable), then fallback to email
+          // Match by application_id first (most reliable), then fallback to email.
+          // /api/candidates dedupes by email, so its `id` = primary_app.id — which
+          // may NOT match the application_id under which the video interview was
+          // created (re-applications). Email fallback catches those cases.
+          //
+          // The backend returns the email as `email` (not `applicant_email`); an
+          // earlier version of this code used the wrong field name, so email
+          // matching silently failed and candidates with mismatched application_ids
+          // lost their video/fraud buttons.
           let matched = vi.application_id ? fetchedCandidates.find((c: any) => c.id === vi.application_id) : null
           if (!matched && vi.candidate_email) {
-            matched = fetchedCandidates.find((c: any) =>
-              c.applicant_email?.toLowerCase() === vi.candidate_email.toLowerCase()
-            )
+            const viEmail = vi.candidate_email.toLowerCase()
+            matched = fetchedCandidates.find((c: any) => {
+              const candEmail = (c.email || c.applicant_email || '').toLowerCase()
+              return candEmail && candEmail === viEmail
+            })
           }
           if (matched) {
             vMapping[matched.id] = vi.id
@@ -313,7 +323,11 @@ const JobDetails: React.FC<JobDetailsProps> = ({
     const candidateRef = schedulingCandidate
     setScheduling(true)
     try {
-      const scheduledAt = `${scheduleForm.date}T${scheduleForm.time}:00`
+      // Parse picker values as the user's LOCAL time, then convert to a proper
+      // UTC ISO string (with Z suffix). Sending a naive "YYYY-MM-DDTHH:MM:SS"
+      // caused the backend to treat it as UTC, shifting the email time by the
+      // user's timezone offset (e.g., 4 PM IST became 9:30 PM in emails).
+      const scheduledAt = new Date(`${scheduleForm.date}T${scheduleForm.time}:00`).toISOString()
       const result = await recruiterService.scheduleInterview(selectedJob.id, candidateRef.id, scheduledAt, parseInt(scheduleForm.duration_minutes))
       hotToast.success('Interview scheduled! Questions generated and email sent to candidate.', { duration: 4000 })
       setScheduleDialogOpen(false)
@@ -1206,6 +1220,24 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                           <i className="fas fa-download" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Report</span>
                                         </Button>
                                       )}
+                                      {/* Always render Fraud for visual consistency on Completed rows.
+                                          When no video_interviews record exists (e.g., interview completed
+                                          via transcript upload, not via the video flow), render disabled
+                                          with a tooltip so users aren't confused by a missing button. */}
+                                      <Tooltip title={candidateVideoIds[candidate.id] ? '' : 'No video interview data available for this candidate'} arrow disableHoverListener={!!candidateVideoIds[candidate.id]}>
+                                        <span>
+                                          <Button
+                                            className="job-action-btn"
+                                            onClick={() => navigate(`/fraud-analysis/${candidateVideoIds[candidate.id]}`)}
+                                            size="small"
+                                            variant="outlined"
+                                            disabled={!candidateVideoIds[candidate.id]}
+                                            sx={btnSx('#dc6b09', '#dc6b09', '#dc6b09')}
+                                          >
+                                            <i className="fas fa-shield-alt" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Fraud</span>
+                                          </Button>
+                                        </span>
+                                      </Tooltip>
                                       <Button className="job-action-btn" onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                         <i className="fas fa-paper-plane" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Offer</span>
                                       </Button>
@@ -1226,14 +1258,9 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                         </Button>
                                       )}
                                       {candidateVideoIds[candidate.id] ? (
-                                        <>
                                         <Button className="job-action-btn" onClick={() => navigate(`/video-room/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#7c3aed', '#7c3aed', '#7c3aed')}>
                                           <i className="fas fa-video" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Interview</span>
                                         </Button>
-                                        <Button className="job-action-btn" onClick={() => navigate(`/fraud-analysis/${candidateVideoIds[candidate.id]}`)} size="small" variant="outlined" sx={btnSx('#dc6b09', '#dc6b09', '#dc6b09')}>
-                                          <i className="fas fa-shield-alt" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Fraud</span>
-                                        </Button>
-                                        </>
                                       ) : (
                                         <Button className="job-action-btn" onClick={() => { setSchedulingCandidate(candidate); setScheduleDialogOpen(true) }} size="small" variant="outlined" sx={btnSx('#16a34a', '#16a34a', '#16a34a')}>
                                           <i className="fas fa-calendar-plus" style={{ fontSize: 10 }}></i><span className="btn-label-md" style={{ marginLeft: 4 }}>Schedule</span>
@@ -1370,6 +1397,19 @@ const JobDetails: React.FC<JobDetailsProps> = ({
                                   <i className="fas fa-download" style={{ marginRight: 4, fontSize: 10 }}></i>Report
                                 </Button>
                               )}
+                              <Tooltip title={candidateVideoIds[candidate.id] ? '' : 'No video interview data available for this candidate'} arrow disableHoverListener={!!candidateVideoIds[candidate.id]}>
+                                <span>
+                                  <Button
+                                    onClick={() => navigate(`/fraud-analysis/${candidateVideoIds[candidate.id]}`)}
+                                    size="small"
+                                    variant="outlined"
+                                    disabled={!candidateVideoIds[candidate.id]}
+                                    sx={btnSx('#dc6b09', '#dc6b09', '#dc6b09')}
+                                  >
+                                    <i className="fas fa-shield-alt" style={{ marginRight: 4, fontSize: 10 }}></i>Fraud
+                                  </Button>
+                                </span>
+                              </Tooltip>
                               <Button onClick={() => handleSendOffer(candidate.id)} size="small" variant="outlined" sx={btnSx('#2563eb', '#2563eb', '#2563eb')}>
                                 <i className="fas fa-paper-plane" style={{ marginRight: 4, fontSize: 10 }}></i>Offer
                               </Button>

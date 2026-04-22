@@ -44,12 +44,19 @@ def login(user_credentials: UserLogin, request: Request, db: Session = Depends(g
     _check_rate_limit(client_ip)
 
     try:
-        user = authenticate_user(db, user_credentials.username, user_credentials.password)
+        user, reason = authenticate_user(db, user_credentials.username, user_credentials.password)
         if not user:
             _record_failed_attempt(client_ip)
+            # Specific messages so users know whether to sign up vs. retry password.
+            # Email enumeration is already possible via the signup page, so the extra
+            # clarity here is a worthwhile UX tradeoff.
+            if reason == "user_not_found":
+                detail = "No account found with this email. Please sign up first."
+            else:
+                detail = "Incorrect password. Please try again."
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
+                detail=detail,
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

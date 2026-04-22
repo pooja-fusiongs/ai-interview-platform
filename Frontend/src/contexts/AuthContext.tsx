@@ -126,10 +126,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       let errorMessage = 'Login failed'
 
-      if (error.response?.status === 401) {
-        errorMessage = 'Invalid email or password'
-      } else if (error.response?.data?.detail) {
+      // Always prefer backend's detail — it distinguishes "user not found"
+      // from "incorrect password" so the UI can route the user accordingly.
+      if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Invalid email or password'
       } else if (error.message) {
         errorMessage = error.message
       }

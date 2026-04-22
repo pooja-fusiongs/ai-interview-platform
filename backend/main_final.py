@@ -1632,30 +1632,43 @@ def get_candidate_interviews(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get all interview sessions and applications for a candidate."""
+    """Get all interview sessions and applications for a candidate.
+
+    `candidate_id` in this endpoint is a JobApplication.id — the /api/candidates
+    response returns that as each candidate's `id`. The previous implementation
+    queried the User table with this id, which 404'd for every candidate who had
+    applied but never signed up on the platform.
+    """
     try:
-        # User 
-        candidate = db.query(User).filter(User.id == candidate_id).first()
-        if not candidate:
+        # Resolve the candidate via JobApplication.id (what the UI passes),
+        # then look up ALL applications sharing this candidate's email so we
+        # can list every job they've interviewed for.
+        primary_app = db.query(JobApplication).filter(JobApplication.id == candidate_id).first()
+        if not primary_app:
             raise HTTPException(status_code=404, detail="Candidate not found")
-            
-        # Applications
+
+        candidate_email = primary_app.applicant_email
+
         applications = db.query(JobApplication).filter(
-            JobApplication.applicant_email == candidate.email
+            JobApplication.applicant_email == candidate_email
         ).all()
-        
-        # Sessions — newest first
+        app_ids = [a.id for a in applications]
+
+        # Match sessions by application_id — the stable FK. InterviewSession.candidate_id
+        # semantics are inconsistent across the codebase (sometimes User.id, sometimes
+        # JobApplication.id), so avoid it here.
         sessions = db.query(InterviewSession).filter(
-            InterviewSession.candidate_id == candidate_id
-        ).order_by(InterviewSession.created_at.desc()).all()
-        
+            InterviewSession.application_id.in_(app_ids)
+        ).order_by(InterviewSession.created_at.desc()).all() if app_ids else []
+
+        # Keep the most recent session per application (first wins after desc sort).
+        sessions_by_app = {}
+        for s in sessions:
+            sessions_by_app.setdefault(s.application_id, s)
+
         result = []
         for app in applications:
-            # Find matching session — match by job_id, or fall back to candidate_id when job_id is NULL
-            session = next((s for s in sessions if s.job_id is not None and s.job_id == app.job_id), None)
-            if session is None:
-                session = next((s for s in sessions if s.job_id is None and s.candidate_id == candidate_id), None)
-            
+            session = sessions_by_app.get(app.id)
             result.append({
                 "job_id": app.job_id,
                 "job_title": app.job.title if app.job else "Unknown Job",
@@ -1666,9 +1679,13 @@ def get_candidate_interviews(
                 "transcript_preview": session.transcript_text[:100] + "..." if session and session.transcript_text else None,
                 "session_id": session.id if session else None
             })
-            
+
         return {"success": True, "interviews": result}
-        
+
+    except HTTPException:
+        # Don't wrap expected 404s into 500s — that's what was polluting logs
+        # with "Error fetching candidate interviews: 404: Candidate not found".
+        raise
     except Exception as e:
         print(f"❌ Error fetching candidate interviews: {e}")
         raise HTTPException(status_code=500, detail=str(e))

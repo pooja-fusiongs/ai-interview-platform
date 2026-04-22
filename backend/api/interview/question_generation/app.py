@@ -196,29 +196,34 @@ def regenerate_questions(
 
     db.commit()
 
-    import threading
-    _bg_job_id = request.job_id
-    _bg_candidate_id = request.candidate_id
-    _bg_total = request.total_questions
-
-    def _regenerate_bg():
-        try:
-            from database import get_safe_db
-            bg_db = get_safe_db()
-            generator = get_question_generator()
-            result = generator.generate_questions(db=bg_db, job_id=_bg_job_id, candidate_id=_bg_candidate_id, total_questions=_bg_total)
-            print(f"✅ Regenerated {result.get('total_questions', 0)} questions for candidate {_bg_candidate_id}")
-            bg_db.close()
-        except Exception as e:
-            print(f"⚠️ Background regeneration failed: {e}")
-
-    threading.Thread(target=_regenerate_bg, daemon=True).start()
-
-    return {
-        "message": "Questions are being regenerated",
-        "status": "generating",
-        "total_questions": _bg_total,
-    }
+    # Generate synchronously (not in a background thread) so we can return the
+    # new session_id in the response. Background regeneration broke the UX:
+    # the old session is deleted before the HTTP response returns, so the
+    # frontend — which only knew the old session id — navigated away with
+    # "Question set not found" before the new session existed in the DB.
+    try:
+        generator = get_question_generator()
+        result = generator.generate_questions(
+            db=db,
+            job_id=request.job_id,
+            candidate_id=request.candidate_id,
+            total_questions=request.total_questions,
+        )
+        print(f"✅ Regenerated {result.get('total_questions', 0)} questions for candidate {request.candidate_id}")
+        return {
+            "message": "Questions regenerated successfully",
+            "status": "generated",
+            "session_id": result.get("session_id"),
+            "total_questions": result.get("total_questions", 0),
+        }
+    except Exception as e:
+        print(f"❌ Regeneration failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to regenerate questions: {str(e)}",
+        )
 
 
 @router.get("/sessions/{session_id}", response_model=QuestionGenerationSessionResponse)

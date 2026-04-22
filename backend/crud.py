@@ -28,19 +28,20 @@ def create_user(db: Session, user: UserCreate):
     return db_user
 
 def authenticate_user(db: Session, username: str, password: str):
-    """Authenticate user with enhanced debugging"""
+    """Authenticate user — returns (user, reason) tuple so caller can show a specific
+    error. reason is 'ok' | 'user_not_found' | 'wrong_password'."""
     print(f"🔍 Login attempt - Username/Email: {username}")
-    
+
     # Try to find user by username first
     user = get_user_by_username(db, username)
-    
+
     # If not found by username, try by email
     if not user:
         user = get_user_by_email(db, username)
-    
+
     if not user:
         print(f"❌ User not found: {username}")
-        return False
+        return (None, "user_not_found")
     
     print(f"✅ User found: {user.username} (ID: {user.id})")
     print(f"🔐 Stored hash: {user.hashed_password[:20]}...")
@@ -64,10 +65,10 @@ def authenticate_user(db: Session, username: str, password: str):
                     print(f"🔒 Password hash upgraded to bcrypt for user {user.username}")
                 except Exception:
                     db.rollback()  # Non-critical, don't break login
-            return user
+            return (user, "ok")
 
     print(f"❌ Password verification failed for all attempts")
-    return False
+    return (None, "wrong_password")
 
 # Job CRUD operations
 def create_job(db: Session, job: JobCreate, user_id: int):

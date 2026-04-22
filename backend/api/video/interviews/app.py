@@ -652,6 +652,54 @@ def list_video_interviews(
                         if not candidate_name:
                             candidate_name = fallback.applicant_name
 
+            # Last-resort fallback chain — keeps the frontend candidate map from
+            # losing this row (which would disable Fraud / Interview buttons even
+            # though the underlying analysis data exists). Try each path until
+            # something usable is found.
+            if (not candidate_email or not application_id):
+                app_row = None
+
+                # Path 1: VideoInterview → InterviewSession → JobApplication.
+                # Works for interviews that ran long enough to create a session.
+                if vi.session_id:
+                    sess = db.query(InterviewSession.application_id).filter(
+                        InterviewSession.id == vi.session_id
+                    ).first()
+                    if sess and sess[0]:
+                        app_row = db.query(JobApplication).filter(
+                            JobApplication.id == sess[0]
+                        ).first()
+
+                # Path 2: treat vi.candidate_id as a legacy JobApplication.id
+                # (older code paths sometimes stored it that way). Safe because
+                # we scope to the same job_id.
+                if not app_row and vi.candidate_id and vi.job_id:
+                    app_row = db.query(JobApplication).filter(
+                        JobApplication.id == vi.candidate_id,
+                        JobApplication.job_id == vi.job_id,
+                    ).first()
+
+                # Path 3: vi.candidate is None but vi.candidate_id still points
+                # to a User — fetch that user directly (maybe vi.candidate join
+                # was stale) and match their email to a JobApplication in this job.
+                if not app_row and vi.candidate_id and vi.job_id:
+                    from models import User as _User
+                    from sqlalchemy import func as _fn3
+                    u = db.query(_User.email).filter(_User.id == vi.candidate_id).first()
+                    if u and u[0]:
+                        app_row = db.query(JobApplication).filter(
+                            JobApplication.job_id == vi.job_id,
+                            _fn3.lower(JobApplication.applicant_email) == u[0].lower(),
+                        ).first()
+
+                if app_row:
+                    if not application_id:
+                        application_id = app_row.id
+                    if not candidate_email:
+                        candidate_email = app_row.applicant_email
+                    if not candidate_name:
+                        candidate_name = app_row.applicant_name or ""
+
             job_title = vi.job.title if vi.job else ""
 
             # Prefer scored session over video interview's session (which may not have score yet)
@@ -1929,7 +1977,12 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
         # Auto-run fraud analysis on recording (upgrade pending → completed)
         if recording_path:
             try:
-                from models import FraudAnalysis
+                # NOTE: FraudAnalysis is already imported at module-level (line 30).
+                # Do NOT re-import it here — a local `from ... import FraudAnalysis`
+                # makes Python treat the name as a local variable throughout the
+                # ENTIRE function, which breaks earlier usages (e.g., line 1741's
+                # fa = bg_db.query(FraudAnalysis)...) with "cannot access local
+                # variable 'FraudAnalysis' where it is not associated with a value".
                 from services.biometric_analyzer import run_real_analysis
 
                 # Run analysis WITHOUT DB connection (CPU-bound, takes 30-60 sec)
@@ -1957,13 +2010,28 @@ def _bg_transcription_worker(vi_id, job_id, started_at, recording_url_hint, sess
                 # Open fresh DB connection only for saving results
                 fraud_db = get_safe_db()
                 try:
+                    # Helper: skip overwriting a score when the analyzer flagged
+                    # the underlying data as insufficient. Prevents the batch
+                    # analysis from wiping out a real live-streamed score with
+                    # the default 0.80 / 1.0 fallback. Details are still saved
+                    # so the UI can surface the "no data" reason.
+                    import json as _json_ins
+                    def _insufficient(details_json):
+                        try:
+                            return bool((_json_ins.loads(details_json) or {}).get("insufficient_data"))
+                        except Exception:
+                            return False
+
                     existing_fa = fraud_db.query(FraudAnalysis).filter(FraudAnalysis.video_interview_id == vi_id).first()
                     if existing_fa:
-                        existing_fa.voice_consistency_score = results["voice_consistency_score"]
+                        if not _insufficient(results.get("voice_consistency_details")):
+                            existing_fa.voice_consistency_score = results["voice_consistency_score"]
                         existing_fa.voice_consistency_details = results["voice_consistency_details"]
-                        existing_fa.lip_sync_score = results["lip_sync_score"]
+                        if not _insufficient(results.get("lip_sync_details")):
+                            existing_fa.lip_sync_score = results["lip_sync_score"]
                         existing_fa.lip_sync_details = results["lip_sync_details"]
-                        existing_fa.body_movement_score = results["body_movement_score"]
+                        if not _insufficient(results.get("body_movement_details")):
+                            existing_fa.body_movement_score = results["body_movement_score"]
                         existing_fa.body_movement_details = results["body_movement_details"]
                         # Update face_detection_score from recording if no real-time data
                         try:

@@ -83,13 +83,51 @@ const InterviewRecorder: React.FC<{
   const localScreenTrackRef = allTracks.find(
     t => t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
   );
-  // Find remote tracks (for recording the other participant)
+
+  // Identity suffix is `_<8 hex>` appended by backend to prevent LiveKit identity collisions.
+  // Two sessions for the SAME user (duplicate tab / stale reconnect) share the base identity —
+  // strip the suffix and compare to detect duplicate-self remote participants, so we don't
+  // composite the candidate's own echo as a 2nd pane in the recording.
+  const localIdentity =
+    localCamTrackRef?.participant?.identity ||
+    localMicTrackRef?.participant?.identity ||
+    localScreenTrackRef?.participant?.identity ||
+    '';
+  const stripIdentitySuffix = (id: string) => id.replace(/_[0-9a-f]{8}$/i, '');
+  const localIdentityBase = stripIdentitySuffix(localIdentity);
+  const isDuplicateSelf = (remoteIdentity: string) =>
+    !!localIdentityBase && stripIdentitySuffix(remoteIdentity) === localIdentityBase;
+
+  // Find remote tracks (for recording the other participant).
+  // Skip any remote participant whose base identity matches local — that's a duplicate of
+  // the current user (e.g., same candidate in a second tab), not a genuine other party.
   const remoteCamTrackRef = allTracks.find(
     t => !t.participant.isLocal && t.source === Track.Source.Camera && t.publication?.track
+      && !isDuplicateSelf(t.participant.identity)
   );
   const remoteScreenTrackRef = allTracks.find(
     t => !t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
+      && !isDuplicateSelf(t.participant.identity)
   );
+
+  // Track IDs belonging to duplicate-self participants — used to filter DOM-scan fallback
+  // inside drawFrame so the candidate's own echo can't sneak in via a VideoTilesGrid <video>.
+  const forbiddenTrackIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const ids = new Set<string>();
+    if (localIdentityBase) {
+      for (const t of allTracks) {
+        if (t.participant.isLocal) continue;
+        if (!isDuplicateSelf(t.participant.identity)) continue;
+        const tid = t.publication?.track?.mediaStreamTrack?.id;
+        if (tid) ids.add(tid);
+      }
+      if (ids.size > 0) {
+        console.warn(`⚠️ [Recorder] Filtering duplicate-self remote tracks (count=${ids.size}, localBase=${localIdentityBase})`);
+      }
+    }
+    forbiddenTrackIdsRef.current = ids;
+  }, [allTracks, localIdentityBase]);
 
   const camMediaTrack = localCamTrackRef?.publication?.track?.mediaStreamTrack;
   const micMediaTrack = localMicTrackRef?.publication?.track?.mediaStreamTrack;
@@ -269,8 +307,16 @@ const InterviewRecorder: React.FC<{
           // ALWAYS check DOM for live video elements — handles track replacements
           if (!hasLocalCam || !hasRemoteCam) {
             const domVideos = document.querySelectorAll<HTMLVideoElement>('video');
+            const forbidden = forbiddenTrackIdsRef.current;
             for (const v of domVideos) {
               if (!v.srcObject || v.readyState < 2 || v.videoWidth === 0) continue;
+              // Skip videos backed by a duplicate-self remote track (candidate's own echo
+              // from a duplicate session) — prevents the 2-pane recording artifact.
+              if (forbidden.size > 0) {
+                const stream = v.srcObject as MediaStream;
+                const vidTracks = stream.getVideoTracks?.() || [];
+                if (vidTracks.some(vt => forbidden.has(vt.id))) continue;
+              }
               if (v.muted && !hasLocalCam) {
                 localCamVid = v; hasLocalCam = true;
               } else if (!v.muted && !hasRemoteCam) {
@@ -315,17 +361,47 @@ const InterviewRecorder: React.FC<{
               }
             }
           } else if (hasRemoteCam && hasLocalCam) {
-            // Side-by-side: remote left, local right
-            const halfW = canvas.width / 2;
-            ctx.drawImage(remoteCamVid!, 0, 0, halfW, canvas.height);
-            ctx.drawImage(localCamVid!, halfW, 0, halfW, canvas.height);
-            // Divider line
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(halfW, 0);
-            ctx.lineTo(halfW, canvas.height);
-            ctx.stroke();
+            // Both cameras present. Render the CANDIDATE (local) full-frame.
+            // Defensive: fall through to remote-only or local-only branches
+            // if either handle is somehow null despite the hasXxxCam flags
+            // being true. Prevents drawFrame exceptions from killing the
+            // animation loop and producing 0-chunk recordings.
+            try {
+              if (localCamVid) {
+                const primary = localCamVid;
+                const vw = primary.videoWidth || 640;
+                const vh = primary.videoHeight || 480;
+                const scale = Math.min(canvas.width / vw, canvas.height / vh);
+                const dw = vw * scale, dh = vh * scale;
+                ctx.drawImage(primary, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+
+                // PiP the remote ONLY if it's not a duplicate-self track.
+                if (remoteCamVid) {
+                  const remoteStream = remoteCamVid.srcObject as MediaStream | null;
+                  const remoteTracks = remoteStream?.getVideoTracks?.() || [];
+                  const forbidden = forbiddenTrackIdsRef.current;
+                  const remoteIsDupe = remoteTracks.some(t => forbidden.has(t.id));
+                  if (!remoteIsDupe) {
+                    const pipW = 160, pipH = 120, pipMargin = 12;
+                    const pipX = canvas.width - pipW - pipMargin;
+                    const pipY = canvas.height - pipH - pipMargin;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
+                    ctx.drawImage(remoteCamVid, pipX, pipY, pipW, pipH);
+                  }
+                }
+              } else if (remoteCamVid) {
+                // Defensive fallback: local handle went null between the
+                // hasLocalCam check and here. Render remote as primary.
+                const vw = remoteCamVid.videoWidth || 640;
+                const vh = remoteCamVid.videoHeight || 480;
+                const scale = Math.min(canvas.width / vw, canvas.height / vh);
+                const dw = vw * scale, dh = vh * scale;
+                ctx.drawImage(remoteCamVid, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+              }
+            } catch (err) {
+              console.warn('[Recorder] drawFrame composite error (recovering):', err);
+            }
           } else if (hasRemoteCam) {
             // Only remote camera
             const vw = remoteCamVid!.videoWidth || 640;
@@ -1156,6 +1232,19 @@ const VideoInterviewRoom: React.FC = () => {
         resolve(blob);
       };
       try {
+        // Force-flush any buffered frames BEFORE stop. MediaRecorder was
+        // configured with timeslice=1000ms — interviews that end in < 1s
+        // otherwise never emit a 'dataavailable' event and produce 0 chunks
+        // (seen in #166, #167). requestData() forces an immediate chunk emit
+        // regardless of the timeslice timer, so even a 200ms interview still
+        // captures whatever was on the canvas.
+        try {
+          if (recorder.state === 'recording') {
+            recorder.requestData();
+          }
+        } catch (reqErr) {
+          console.warn('⚠️ [StopRecorder] requestData() threw (continuing):', reqErr);
+        }
         recorder.stop();
       } catch (err) {
         console.warn('⚠️ [StopRecorder] recorder.stop() threw:', err);

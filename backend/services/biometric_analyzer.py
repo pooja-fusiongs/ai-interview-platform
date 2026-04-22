@@ -126,11 +126,16 @@ def analyze_voice(audio_path: str) -> Dict[str, Any]:
     seg_len = sample_rate * 6
     segments = [samples[i:i + seg_len] for i in range(0, len(samples), seg_len) if len(samples[i:i + seg_len]) > sample_rate]
 
+    # Track whether this call has enough real data to trust its output. Both
+    # sub-cases below (0 segments OR 1 duplicated segment) produce unreliable
+    # scores — the 1-segment duplication trick forces std=0 which artificially
+    # inflates every consistency metric to 1.0 (that's why every Voice score
+    # in the dashboard was showing 100%). Flag so the writer won't persist it.
+    _voice_insufficient = False
     if len(segments) < 2:
-        # Too short for meaningful analysis — still compute on whole clip as one segment
-        # instead of returning a fake 0.85 score
         if len(segments) == 1:
             segments = [segments[0], segments[0]]  # duplicate so std=0 → high score
+            _voice_insufficient = True
         else:
             return {"score": 0.80, "details": {
                 "pitch_variation": 0.1,
@@ -138,6 +143,7 @@ def analyze_voice(audio_path: str) -> Dict[str, Any]:
                 "voice_print_match": 0.80,
                 "samples_analyzed": 0,
                 "note": "audio_too_short",
+                "insufficient_data": True,
             }}
 
     # --- Pitch variation (autocorrelation-based F0) ---
@@ -194,6 +200,7 @@ def analyze_voice(audio_path: str) -> Dict[str, Any]:
             "speaking_rate_consistency": speaking_rate_consistency,
             "voice_print_match": voice_print_match,
             "samples_analyzed": len(segments),
+            "insufficient_data": _voice_insufficient,
         },
     }
 
@@ -276,25 +283,39 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
     cap.release()
     face_landmarker.close()
 
+    # Task 4 + 5: insufficient-data guard. Keep the numeric score value for
+    # backward compatibility with callers that arithmetically combine scores
+    # (e.g., biometric_analyzer.py:749, fraud_simulator.py:98), but surface
+    # `insufficient_data=True` in details so writer endpoints can choose to
+    # skip the DB write instead of overwriting a real score with this default.
     if len(mouth_openness) < 3:
         return {"score": 0.80, "details": {
             "avg_sync_offset_ms": 50.0,
-            "confidence_frames_pct": 0.80,
+            "confidence_frames_pct": 0.0,
             "anomaly_windows": 0,
             "total_frames_analyzed": frames_analyzed,
+            "insufficient_data": True,
         }}
 
     mo = np.array(mouth_openness)
     ae = np.array(audio_energy)
 
-    # Normalise
+    # Normalise — if either series is essentially constant (e.g. static photo
+    # producing identical mouth landmarks every frame, or muted audio track),
+    # correlation is undefined. Flag as insufficient-data rather than
+    # returning score = 0.5 which is the midpoint of a perfect/awful scale.
     if mo.std() > 1e-10 and ae.std() > 1e-10:
         corr = float(np.corrcoef(mo, ae)[0, 1])
+        degenerate = False
     else:
         corr = 0.0
+        degenerate = True
 
     # Correlation → score (0-1)
     score = round(max(0.0, min(1.0, (corr + 1.0) / 2.0)), 3)
+    # If inputs were degenerate (no variation in mouth or audio), surface that
+    # so callers can decide whether to trust the score. Score value preserved
+    # for backward compatibility with existing consumers.
 
     # Detect anomaly windows (low local correlation)
     window = max(3, len(mo) // 5)
@@ -316,6 +337,7 @@ def analyze_lip_sync(video_path: str, audio_path: str) -> Dict[str, Any]:
             "confidence_frames_pct": confidence_pct,
             "anomaly_windows": anomaly_windows,
             "total_frames_analyzed": frames_analyzed,
+            "insufficient_data": degenerate,
         },
     }
 
@@ -408,11 +430,15 @@ def analyze_body_movement(video_path: str) -> Dict[str, Any]:
     face_landmarker.close()
 
     if not shoulder_midpoints or total_face_frames == 0:
+        # No usable pose/face frames. Keep numeric score for backward compat
+        # with arithmetic callers, but flag insufficient_data so writer
+        # endpoints can skip overwriting real scores with this default.
         return {"score": 0.80, "details": {
             "posture_consistency": 0.80,
             "eye_contact_pct": 0.70,
             "head_movement_variance": 0.05,
             "suspicious_gestures_count": 0,
+            "insufficient_data": True,
         }}
 
     import numpy as np
