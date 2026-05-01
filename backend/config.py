@@ -32,6 +32,19 @@ HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 # Question generation mode: "live" (use LLM APIs) or "preview" (rule-based/mock)
 QUESTION_GENERATION_MODE = os.getenv("QUESTION_GENERATION_MODE", "live")
 
+# ─── Client repo (ihire-fgs) integration flags ─────────────────────────────────
+# When True, live mode will try the v2 (ihire-fgs) OpenAI prompt engine first.
+# On any error or when False, falls back to the existing Groq → OpenAI → Gemini chain.
+USE_V2_QUESTION_GEN = os.getenv("USE_V2_QUESTION_GEN", "false").lower() == "true"
+
+# When True, complete_session will also generate a polished report card and
+# store it as JSON on InterviewSession.report_card_json. Pure addition — does
+# not change any existing scoring behaviour.
+USE_REPORT_CARD = os.getenv("USE_REPORT_CARD", "false").lower() == "true"
+
+# OpenAI model for v2 question generation (client repo uses gpt-4.1)
+V2_QUESTION_GEN_MODEL = os.getenv("V2_QUESTION_GEN_MODEL", "gpt-4.1")
+
 # Scoring thresholds (out of 100)
 SCORE_SELECT_THRESHOLD = float(os.getenv("SCORE_SELECT_THRESHOLD", "75"))
 SCORE_NEXT_ROUND_THRESHOLD = float(os.getenv("SCORE_NEXT_ROUND_THRESHOLD", "50"))

@@ -487,6 +487,45 @@ def complete_session(
     db.commit()
     db.refresh(session)
 
+    # Optional: generate polished report card behind feature flag.
+    # Pure addition — does NOT touch any per-answer scoring or recommendation logic.
+    try:
+        import config as _cfg
+        if getattr(_cfg, "USE_REPORT_CARD", False):
+            try:
+                from services.ihire_ai_service import generate_report_card
+                import json as _json
+                _job = session.job
+                _candidate = session.candidate
+                # Build a transcript-like text from Q&A pairs so the report card
+                # can quote actual interview content.
+                transcript_lines = []
+                for ans in valid_answers:
+                    q = ans.question
+                    if q and q.question_text:
+                        transcript_lines.append(f"Interviewer: {q.question_text}")
+                    if ans.answer_text:
+                        transcript_lines.append(f"Candidate: {ans.answer_text}")
+                transcript_text = "\n".join(transcript_lines) if transcript_lines else (session.transcript_text or "")
+
+                report = generate_report_card(
+                    candidate_name=(getattr(_candidate, "full_name", None) or getattr(_candidate, "username", None) or "Candidate"),
+                    job_title=(_job.title if _job else "Interview"),
+                    score_breakdown=[
+                        {"label": "Overall Rating", "score": round((session.overall_score or 0) / 10, 1)},
+                    ],
+                    strengths_context=session.strengths or "",
+                    improvements_context=session.weaknesses or "",
+                    transcript_feedback="",
+                    transcript_text=transcript_text,
+                )
+                session.report_card_json = _json.dumps(report)
+                db.commit()
+            except Exception as rc_err:
+                print(f"[complete-session] ⚠️ Report card generation failed: {rc_err}")
+    except Exception:
+        pass
+
     # Send result email to candidate
     try:
         candidate = session.candidate

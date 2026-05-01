@@ -1655,6 +1655,43 @@ def _bg_scoring_worker(vi_id):
 
         db.commit()
         print(f"[BG Scoring] vi_id={vi_id}: ✅ Scored {blended_count} questions, overall={session.overall_score}")
+
+        # ── Optional: polished report card behind USE_REPORT_CARD flag ──
+        # Pure addition. Failure here MUST NOT affect scoring already committed.
+        try:
+            if getattr(config, "USE_REPORT_CARD", False):
+                from services.ihire_ai_service import generate_report_card
+                import json as _json
+                _job = vi.job if hasattr(vi, "job") else db.query(Job).filter(Job.id == vi.job_id).first()
+                _cand_name = ""
+                try:
+                    if application and application.applicant_name:
+                        _cand_name = application.applicant_name
+                    elif vi.candidate_email:
+                        _cand_name = vi.candidate_email.split("@")[0]
+                except Exception:
+                    _cand_name = "Candidate"
+
+                report = generate_report_card(
+                    candidate_name=_cand_name or "Candidate",
+                    job_title=(_job.title if _job else "Interview"),
+                    score_breakdown=[
+                        {"label": "Overall Rating", "score": round((session.overall_score or 0) / 10, 1)},
+                    ],
+                    strengths_context=session.strengths or "",
+                    improvements_context=session.weaknesses or "",
+                    transcript_feedback="",
+                    transcript_text=vi.transcript or "",
+                )
+                session.report_card_json = _json.dumps(report)
+                db.commit()
+                print(f"[BG Scoring] vi_id={vi_id}: ✅ Report card stored ({len(session.report_card_json)} chars)")
+        except Exception as rc_err:
+            print(f"[BG Scoring] vi_id={vi_id}: ⚠️ Report card generation failed: {rc_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
     except Exception as e:
         print(f"[BG Scoring] vi_id={vi_id}: ❌ Failed: {e}")
         import traceback as _tb
@@ -3532,6 +3569,44 @@ def upload_transcript_and_score(
 
     db.commit()
     db.refresh(vi)
+
+    # ── Optional: polished report card behind USE_REPORT_CARD flag ──
+    # Pure addition. This path is the canonical scoring path (uses vi.session_id),
+    # so the report card stored here lands on the session the recruiter UI reads.
+    if score_result and llm_result and session is not None:
+        try:
+            import config as _cfg
+            if getattr(_cfg, "USE_REPORT_CARD", False):
+                from services.ihire_ai_service import generate_report_card
+                import json as _json
+                _job_for_rc = db.query(Job).filter(Job.id == vi.job_id).first()
+                _cand_name_rc = "Candidate"
+                try:
+                    if vi.candidate and (vi.candidate.full_name or vi.candidate.username):
+                        _cand_name_rc = vi.candidate.full_name or vi.candidate.username
+                except Exception:
+                    pass
+
+                report = generate_report_card(
+                    candidate_name=_cand_name_rc,
+                    job_title=(_job_for_rc.title if _job_for_rc else "Interview"),
+                    score_breakdown=[
+                        {"label": "Overall Rating", "score": round((session.overall_score or 0) / 10, 1)},
+                    ],
+                    strengths_context=session.strengths or "",
+                    improvements_context=session.weaknesses or "",
+                    transcript_feedback="",
+                    transcript_text=vi.transcript or "",
+                )
+                session.report_card_json = _json.dumps(report)
+                db.commit()
+                print(f"[upload-transcript] ✅ Report card stored on session {session.id} ({len(session.report_card_json)} chars)")
+        except Exception as rc_err:
+            print(f"[upload-transcript] ⚠️ Report card generation failed: {rc_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
     # Send result email to candidate if scoring succeeded
     if score_result and llm_result:

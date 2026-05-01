@@ -43,7 +43,8 @@ const InterviewRecorder: React.FC<{
   recordedChunksRef: React.MutableRefObject<Blob[]>;
   onRecordingChange: (recording: boolean) => void;
   onRemoteParticipantJoined?: () => void;
-}> = ({ shouldRecord, mediaRecorderRef, recordedChunksRef, onRecordingChange, onRemoteParticipantJoined }) => {
+  localRole?: string | null;
+}> = ({ shouldRecord, mediaRecorderRef, recordedChunksRef, onRecordingChange, onRemoteParticipantJoined, localRole }) => {
   const remoteParticipants = useRemoteParticipants();
   const remoteJoinedRef = useRef(false);
 
@@ -84,50 +85,83 @@ const InterviewRecorder: React.FC<{
     t => t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
   );
 
-  // Identity suffix is `_<8 hex>` appended by backend to prevent LiveKit identity collisions.
-  // Two sessions for the SAME user (duplicate tab / stale reconnect) share the base identity —
-  // strip the suffix and compare to detect duplicate-self remote participants, so we don't
-  // composite the candidate's own echo as a 2nd pane in the recording.
   const localIdentity =
     localCamTrackRef?.participant?.identity ||
     localMicTrackRef?.participant?.identity ||
     localScreenTrackRef?.participant?.identity ||
     '';
-  const stripIdentitySuffix = (id: string) => id.replace(/_[0-9a-f]{8}$/i, '');
-  const localIdentityBase = stripIdentitySuffix(localIdentity);
-  const isDuplicateSelf = (remoteIdentity: string) =>
-    !!localIdentityBase && stripIdentitySuffix(remoteIdentity) === localIdentityBase;
+  // ALLOW-LIST approach — far safer than deny-list.
+  //
+  // Room identities are ALWAYS one of these (backend: api/video/interviews/app.py):
+  //   - `recruiter_<userId>_<8hex>`
+  //   - `candidate_<userId>_<8hex>`
+  //   - `guest_candidate_<videoId>_<8hex>`
+  //
+  // A duplicate-self pane appears when a remote identity gets composited as PiP
+  // despite belonging to the SAME human as local. Instead of listing every way
+  // that can happen, we flip the test: only accept a remote as "legitimate"
+  // when it is the OPPOSITE role from us. Anything else — duplicate-self in
+  // any form, unknown identity pattern, or an empty identity from a race — is
+  // rejected. No PiP is safer than a duplicate PiP.
+  //
+  // Local role is derived from two independent sources, whichever is available:
+  //   1. `localRole` prop (from AuthContext) — available on mount for authenticated users
+  //   2. `localIdentity` prefix — works for guests (who have no auth user), populated
+  //      after LiveKit publishes local tracks.
+  const localIsCandidate =
+    (localRole === 'candidate') ||
+    localIdentity.startsWith('candidate_') ||
+    localIdentity.startsWith('guest_candidate_');
+  const localIsRecruiter =
+    (localRole === 'recruiter' || localRole === 'admin' || localRole === 'domain_expert') ||
+    localIdentity.startsWith('recruiter_');
 
-  // Find remote tracks (for recording the other participant).
-  // Skip any remote participant whose base identity matches local — that's a duplicate of
-  // the current user (e.g., same candidate in a second tab), not a genuine other party.
+  const isLegitimateRemote = (remoteIdentity: string): boolean => {
+    if (!remoteIdentity) return false; // unknown identity → reject
+    const looksLikeRecruiter = remoteIdentity.startsWith('recruiter_');
+    const looksLikeCandidate =
+      remoteIdentity.startsWith('candidate_') || remoteIdentity.startsWith('guest_candidate_');
+    // Candidate-side recording: accept recruiter only
+    if (localIsCandidate) return looksLikeRecruiter;
+    // Recruiter-side recording: accept candidate only
+    if (localIsRecruiter) return looksLikeCandidate;
+    // Role unknown (localIdentity not populated yet AND no auth role) → reject until known.
+    // Once local publishes tracks, this re-evaluates via React rerender.
+    return false;
+  };
+
+  // Find remote tracks — only accept the ONE legitimate other-role participant.
   const remoteCamTrackRef = allTracks.find(
     t => !t.participant.isLocal && t.source === Track.Source.Camera && t.publication?.track
-      && !isDuplicateSelf(t.participant.identity)
+      && isLegitimateRemote(t.participant.identity)
   );
   const remoteScreenTrackRef = allTracks.find(
     t => !t.participant.isLocal && t.source === Track.Source.ScreenShare && t.publication?.track
-      && !isDuplicateSelf(t.participant.identity)
+      && isLegitimateRemote(t.participant.identity)
   );
 
-  // Track IDs belonging to duplicate-self participants — used to filter DOM-scan fallback
-  // inside drawFrame so the candidate's own echo can't sneak in via a VideoTilesGrid <video>.
+  // Forbidden track IDs = every remote track that is NOT a legitimate other-role.
+  // The DOM-scan fallback inside drawFrame consults this set to stop self-echoes
+  // from sneaking in via a <video> element rendered by VideoTilesGrid.
   const forbiddenTrackIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const ids = new Set<string>();
-    if (localIdentityBase) {
+    for (const t of allTracks) {
+      if (t.participant.isLocal) continue;
+      if (isLegitimateRemote(t.participant.identity)) continue;
+      const tid = t.publication?.track?.mediaStreamTrack?.id;
+      if (tid) ids.add(tid);
+    }
+    if (ids.size > 0) {
+      console.warn(`⚠️ [Recorder] Blocked ${ids.size} non-legitimate remote track(s). localRole=${localRole}, localIdentity=${localIdentity}, isCandidate=${localIsCandidate}, isRecruiter=${localIsRecruiter}`);
       for (const t of allTracks) {
-        if (t.participant.isLocal) continue;
-        if (!isDuplicateSelf(t.participant.identity)) continue;
-        const tid = t.publication?.track?.mediaStreamTrack?.id;
-        if (tid) ids.add(tid);
-      }
-      if (ids.size > 0) {
-        console.warn(`⚠️ [Recorder] Filtering duplicate-self remote tracks (count=${ids.size}, localBase=${localIdentityBase})`);
+        if (!t.participant.isLocal) {
+          console.warn(`  remote: identity=${t.participant.identity}, source=${t.source}, legit=${isLegitimateRemote(t.participant.identity)}`);
+        }
       }
     }
     forbiddenTrackIdsRef.current = ids;
-  }, [allTracks, localIdentityBase]);
+  }, [allTracks, localIdentity, localRole, localIsCandidate, localIsRecruiter]);
 
   const camMediaTrack = localCamTrackRef?.publication?.track?.mediaStreamTrack;
   const micMediaTrack = localMicTrackRef?.publication?.track?.mediaStreamTrack;
@@ -2133,6 +2167,7 @@ const VideoInterviewRoom: React.FC = () => {
                           mediaRecorderRef={mediaRecorderRef}
                           recordedChunksRef={recordedChunksRef}
                           onRecordingChange={setIsRecording}
+                          localRole={user?.role ?? (isGuest ? 'candidate' : null)}
                           onRemoteParticipantJoined={() => {
                             maxParticipantsRef.current = Math.max(maxParticipantsRef.current, 2);
                             console.log('👥 Remote participant joined — maxParticipants updated to 2');

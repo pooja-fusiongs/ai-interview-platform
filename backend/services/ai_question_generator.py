@@ -22,11 +22,12 @@ class AIQuestionGenerator:
         self.openai_client = None  # Will be initialized when switching to live mode
         
     def generate_questions(
-        self, 
-        db: Session, 
-        job_id: int, 
-        candidate_id: int, 
-        total_questions: int = 10
+        self,
+        db: Session,
+        job_id: int,
+        candidate_id: int,
+        total_questions: int = 10,
+        previous_questions: List[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate interview questions based on job description and candidate resume
@@ -73,7 +74,7 @@ class AIQuestionGenerator:
             if self.mode == QuestionGenerationMode.PREVIEW:
                 questions = self._generate_preview_questions(job, candidate, resume, total_questions)
             else:
-                questions = self._generate_live_questions(job, candidate, resume, total_questions)
+                questions = self._generate_live_questions(job, candidate, resume, total_questions, previous_questions=previous_questions)
 
             print(f"[QuestionGenerator] Generated {len(questions)} questions in {self.mode.value} mode")
 
@@ -82,7 +83,7 @@ class AIQuestionGenerator:
 
             # Save questions to database
             saved_questions = []
-            for q_data in questions:
+            for idx, q_data in enumerate(questions):
                 question = InterviewQuestion(
                     job_id=job_id,
                     candidate_id=candidate_id,
@@ -92,7 +93,11 @@ class AIQuestionGenerator:
                     difficulty=q_data["difficulty"],
                     skill_focus=q_data["skill_focus"],
                     generation_mode=self.mode,
-                    is_approved=True
+                    is_approved=True,
+                    # v2 fields (None for legacy chain output — both columns are nullable)
+                    category=q_data.get("category"),
+                    order_number=q_data.get("order_number") or (idx + 1),
+                    suggested_answer=q_data.get("suggested_answer"),
                 )
                 db.add(question)
                 saved_questions.append(question)
@@ -242,11 +247,14 @@ class AIQuestionGenerator:
         job: Job,
         candidate: JobApplication,
         resume: CandidateResume,
-        total_questions: int
+        total_questions: int,
+        previous_questions: List[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Generate questions using LLM APIs.
-        Fallback chain: OpenAI (7-phase framework) -> Groq -> Gemini -> preview mode (last resort).
+        Fallback chain: v2 (ihire-fgs OpenAI prompt engine, when USE_V2_QUESTION_GEN=true)
+                        -> Groq -> OpenAI 7-phase -> Gemini -> preview mode (last resort).
+        v2 path is gated by config.USE_V2_QUESTION_GEN. On any v2 error, falls through to existing chain.
         """
         job_skills = self._parse_skills(job.skills_required or "")
         resume_text = resume.parsed_text if resume else ""
@@ -259,6 +267,35 @@ class AIQuestionGenerator:
                 skill_weights = json.loads(job.skills_weightage_json)
             except (json.JSONDecodeError, TypeError):
                 skill_weights = None
+
+        # ── v2 path (ihire-fgs OpenAI prompt engine) — gated by feature flag ──
+        if getattr(config, "USE_V2_QUESTION_GEN", False):
+            try:
+                from services.question_generator_v2 import (
+                    generate_interview_questions as v2_generate,
+                    adapt_to_our_schema,
+                )
+                duration_minutes = candidate.duration_minutes if candidate and getattr(candidate, "duration_minutes", None) else 30
+                # Job.number_of_questions is the recruiter-set authority; v2 falls back
+                # to its duration formula only when override is None or zero.
+                num_override = total_questions if total_questions and total_questions > 0 else None
+                raw = v2_generate(
+                    job_title=job.title or "",
+                    company=job.company or "",
+                    job_description=job.description or "",
+                    years_experience=experience_years or 0,
+                    duration_minutes=duration_minutes,
+                    candidate_name=candidate.applicant_name if candidate else "",
+                    resume_text=resume_text,
+                    skill_weights=skill_weights,
+                    previous_questions=previous_questions or None,
+                    num_questions_override=num_override,
+                )
+                if raw:
+                    print("[QuestionGenerator] Questions generated via v2 (ihire-fgs OpenAI engine)")
+                    return adapt_to_our_schema(raw)
+            except Exception as e:
+                print(f"[QuestionGenerator] v2 path failed, falling back to legacy chain: {e}")
 
         # Try Groq FIRST (fastest - free, ~2 sec response)
         try:

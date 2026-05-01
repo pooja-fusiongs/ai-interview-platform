@@ -1666,18 +1666,61 @@ def get_candidate_interviews(
         for s in sessions:
             sessions_by_app.setdefault(s.application_id, s)
 
+        # Pull video interviews for the same job/candidate combinations so the UI
+        # can link recording/results from a single Interviews tab.
+        # VideoInterview.candidate_id is a FK to users.id — resolve the candidate's
+        # User row by email first, then match.
+        video_by_app = {}
+        try:
+            from models import VideoInterview, User as _User
+            user_row = db.query(_User).filter(
+                func.lower(_User.email) == candidate_email.lower()
+            ).first() if candidate_email else None
+            user_id = user_row.id if user_row else None
+
+            job_ids = list({a.job_id for a in applications if a.job_id})
+            if job_ids and user_id:
+                vis = db.query(VideoInterview).filter(
+                    VideoInterview.job_id.in_(job_ids),
+                    VideoInterview.candidate_id == user_id,
+                ).order_by(VideoInterview.id.desc()).all()
+                # Most-recent video per job_id wins (already DESC sorted)
+                vi_by_job = {}
+                for vi in vis:
+                    vi_by_job.setdefault(vi.job_id, vi)
+                for a in applications:
+                    if a.job_id in vi_by_job and a.id not in video_by_app:
+                        video_by_app[a.id] = vi_by_job[a.job_id]
+        except Exception as e:
+            print(f"[get_candidate_interviews] video lookup non-fatal: {e}")
+
         result = []
         for app in applications:
             session = sessions_by_app.get(app.id)
+            vi = video_by_app.get(app.id)
+
+            # Only include applications that have an ACTUAL interview artifact:
+            # - a video interview was scheduled (vi exists), OR
+            # - a session has been started/scored (session exists)
+            # An application without either is just an "Applied" row — not an interview.
+            if not vi and not session:
+                continue
+
             result.append({
+                "application_id": app.id,
                 "job_id": app.job_id,
                 "job_title": app.job.title if app.job else "Unknown Job",
                 "status": app.status,
                 "applied_at": app.applied_at.isoformat() if app.applied_at else None,
                 "score": session.overall_score if session else None,
+                "recommendation": (session.recommendation.value if session and session.recommendation else None),
                 "has_transcript": session.transcript_text is not None if session else False,
                 "transcript_preview": session.transcript_text[:100] + "..." if session and session.transcript_text else None,
-                "session_id": session.id if session else None
+                "session_id": session.id if session else None,
+                "video_interview_id": vi.id if vi else None,
+                "video_status": (vi.status if vi else None),
+                "has_recording": bool(vi.recording_url) if vi else False,
+                "has_report_card": (session.report_card_json is not None) if session else False,
             })
 
         return {"success": True, "interviews": result}

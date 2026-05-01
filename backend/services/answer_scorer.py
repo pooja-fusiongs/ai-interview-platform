@@ -122,6 +122,13 @@ SCORING INSTRUCTIONS:
 - score: Weighted overall = relevance*{config.WEIGHT_RELEVANCE} + completeness*{config.WEIGHT_COMPLETENESS} + accuracy*{config.WEIGHT_ACCURACY} + clarity*{config.WEIGHT_CLARITY}
 - feedback: Write 2-3 sentences of specific, actionable feedback. Mention what the candidate did well and what they missed. Be constructive, not generic.
 
+SCORING RUBRIC (apply strictly — DO NOT default to a "neutral" middle score):
+- 1-20  (Very Poor): silence, off-topic, barely participated, no real attempt
+- 21-40 (Poor): one-liners, vague or factually wrong, no concrete examples
+- 41-60 (Fair): okay but shallow, missing depth, lacks concrete examples
+- 61-80 (Good): solid with concrete examples, minor gaps
+- 81-100 (Excellent): specific, deeply technical, with measurable outcomes
+
 IMPORTANT RULES:
 - Be fair but STRICT. A vague or off-topic answer should score low.
 - If the answer is completely unrelated to the question, ALL scores should be below 10.
@@ -251,6 +258,13 @@ For EACH answer, score these dimensions (0.0 to 100.0):
 - clarity_score: How well-structured and coherent? (0-100)
 - score: Weighted = relevance*{config.WEIGHT_RELEVANCE} + completeness*{config.WEIGHT_COMPLETENESS} + accuracy*{config.WEIGHT_ACCURACY} + clarity*{config.WEIGHT_CLARITY}
 - feedback: 2-3 sentences of specific, actionable feedback per answer
+
+SCORING RUBRIC (apply strictly — DO NOT default to a "neutral" middle score):
+- 1-20  (Very Poor): silence, off-topic, barely participated
+- 21-40 (Poor): one-liners, vague or factually wrong
+- 41-60 (Fair): okay but shallow, missing depth, no concrete examples
+- 61-80 (Good): solid with concrete examples, minor gaps
+- 81-100 (Excellent): specific, deeply technical, with measurable outcomes
 
 IMPORTANT RULES:
 - Be fair but critical. Vague or off-topic answers should score LOW.

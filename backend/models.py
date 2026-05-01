@@ -313,6 +313,9 @@ class InterviewSession(Base):
     transcript_text = Column(Text, nullable=True)
     interview_mode = Column(String, default="self_service")  # "self_service" or "recruiter_driven"
 
+    # Polished report card (populated when USE_REPORT_CARD flag is on)
+    report_card_json = Column(Text, nullable=True)
+
     # Relationships
     job = relationship("Job")
     candidate = relationship("User")

@@ -167,6 +167,9 @@ def regenerate_questions(
         InterviewQuestion.candidate_id == request.candidate_id
     ).all()
 
+    # Capture previous question texts for v2 diversity prompt before deletion
+    previous_question_texts = [q.question_text for q in existing_questions if q.question_text]
+
     question_ids = [q.id for q in existing_questions]
     if question_ids:
         db.query(InterviewRating).filter(
@@ -208,6 +211,7 @@ def regenerate_questions(
             job_id=request.job_id,
             candidate_id=request.candidate_id,
             total_questions=request.total_questions,
+            previous_questions=previous_question_texts or None,
         )
         print(f"✅ Regenerated {result.get('total_questions', 0)} questions for candidate {request.candidate_id}")
         return {

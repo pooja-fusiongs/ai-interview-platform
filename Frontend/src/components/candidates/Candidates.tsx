@@ -92,7 +92,7 @@ const Candidates = () => {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', experience_years: '', current_position: '', location: '', linkedin_url: '', notice_period: '', current_ctc: '', expected_ctc: '' })
   const [editSaving, setEditSaving] = useState(false)
-  const [, setCandidateInterviews] = useState<any[]>([])
+  const [candidateInterviews, setCandidateInterviews] = useState<any[]>([])
   const [candidateQuestionSessions, setCandidateQuestionSessions] = useState<Record<number, string>>({})
 
   // Drawer tab & fraud state
@@ -1770,7 +1770,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               {/* Tabs */}
               <Tabs value={drawerTab} onChange={(_, v) => {
                 setDrawerTab(v)
-                if (v === 1 && !fraudData && detailCandidate) fetchFraudForCandidate(detailCandidate)
+                if (v === 2 && !fraudData && detailCandidate) fetchFraudForCandidate(detailCandidate)
               }} sx={{
                 minHeight: 40, px: 2,
                 '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, fontSize: '13px', color: '#64748b', minHeight: 40, py: 1 },
@@ -1778,6 +1778,7 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
                 '& .MuiTabs-indicator': { backgroundColor: '#020291', height: 2.5 },
               }}>
                 <Tab label="Profile" />
+                <Tab label={`Interviews${candidateInterviews?.length ? ` (${candidateInterviews.length})` : ''}`} />
                 <Tab label="Fraud Analysis" icon={<Security sx={{ fontSize: 14 }} />} iconPosition="end" />
               </Tabs>
               <Divider />
@@ -1875,8 +1876,130 @@ Candidate: Absolutely! I've been working with React for the past 3 years..."
               </Box>
               )}
 
-              {/* Tab: Fraud Analysis */}
+              {/* Tab: Interviews — recording, results, fraud links */}
               {drawerTab === 1 && (
+              <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
+                {!candidateInterviews || candidateInterviews.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 6 }}>
+                    <Typography sx={{ fontSize: '13px', color: '#94a3b8' }}>
+                      No interviews yet for this candidate.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    {candidateInterviews.map((iv: any, idx: number) => {
+                      const score10 = (iv.score != null) ? (iv.score / 10).toFixed(1) : null
+                      const scoreColor =
+                        iv.score >= 75 ? '#059669' :
+                        iv.score >= 50 ? '#2563eb' :
+                        iv.score > 0 ? '#dc2626' : '#94a3b8'
+                      return (
+                        <Box key={idx} sx={{
+                          p: 2, border: '1px solid #e2e8f0', borderRadius: '10px',
+                          background: '#fff',
+                          '&:hover': { borderColor: '#020291', background: '#fafbff' }
+                        }}>
+                          {/* Top row: job title + score */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                            <Box>
+                              <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                                {iv.job_title || 'Unknown Job'}
+                              </Typography>
+                              <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>
+                                {iv.applied_at ? `Applied ${new Date(iv.applied_at).toLocaleDateString()}` : ''}
+                                {iv.video_status ? ` • ${iv.video_status}` : ''}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ textAlign: 'right' }}>
+                              <Typography sx={{ fontSize: '18px', fontWeight: 800, color: scoreColor, lineHeight: 1 }}>
+                                {score10 != null ? score10 : '--'}
+                              </Typography>
+                              {iv.recommendation && (
+                                <Typography sx={{ fontSize: '10px', fontWeight: 600, color: scoreColor, textTransform: 'capitalize', mt: 0.3 }}>
+                                  {iv.recommendation.replace('_', ' ')}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+
+                          {/* Status chips */}
+                          <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mb: 1.2 }}>
+                            <Chip size="small" label={iv.status || 'Applied'} sx={{
+                              fontSize: '10px', height: 20, fontWeight: 600,
+                              background: iv.status === 'Hired' ? '#ecfdf5' : iv.status === 'Rejected' ? '#fef2f2' : '#f0f0ff',
+                              color: iv.status === 'Hired' ? '#059669' : iv.status === 'Rejected' ? '#dc2626' : '#020291',
+                            }} />
+                            {iv.has_recording && (
+                              <Chip size="small" label="Recording" sx={{ fontSize: '10px', height: 20, fontWeight: 600, background: '#fef3c7', color: '#92400e' }} />
+                            )}
+                            {iv.has_transcript && (
+                              <Chip size="small" label="Transcript" sx={{ fontSize: '10px', height: 20, fontWeight: 600, background: '#dbeafe', color: '#1e40af' }} />
+                            )}
+                            {iv.has_report_card && (
+                              <Chip size="small" label="Report Card" sx={{ fontSize: '10px', height: 20, fontWeight: 600, background: '#dcfce7', color: '#166534' }} />
+                            )}
+                          </Box>
+
+                          {/* Action buttons */}
+                          <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                            {iv.video_interview_id && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => navigate(`/video-detail/${iv.video_interview_id}`)}
+                                sx={{
+                                  textTransform: 'none', fontSize: '11px', py: 0.4, px: 1.2,
+                                  borderColor: '#cbd5e1', color: '#475569',
+                                  '&:hover': { borderColor: '#020291', color: '#020291', background: '#f8fafc' }
+                                }}
+                              >
+                                Watch Recording
+                              </Button>
+                            )}
+                            {iv.session_id && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => navigate(`/results?session=${iv.session_id}`)}
+                                sx={{
+                                  textTransform: 'none', fontSize: '11px', py: 0.4, px: 1.2,
+                                  background: '#020291', boxShadow: 'none',
+                                  '&:hover': { background: '#0303b8', boxShadow: 'none' }
+                                }}
+                              >
+                                View Results
+                              </Button>
+                            )}
+                            {iv.video_interview_id && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => navigate(`/fraud-analysis/${iv.video_interview_id}`)}
+                                sx={{
+                                  textTransform: 'none', fontSize: '11px', py: 0.4, px: 1.2,
+                                  borderColor: '#fde68a', color: '#92400e',
+                                  '&:hover': { borderColor: '#f59e0b', background: '#fffbeb' }
+                                }}
+                              >
+                                Fraud Report
+                              </Button>
+                            )}
+                            {!iv.video_interview_id && !iv.session_id && (
+                              <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', py: 0.5 }}>
+                                No interview data yet
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      )
+                    })}
+                  </Box>
+                )}
+              </Box>
+              )}
+
+              {/* Tab: Fraud Analysis */}
+              {drawerTab === 2 && (
               <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
                 {fraudLoading ? (
                   <Box sx={{ textAlign: 'center', py: 5 }}>
